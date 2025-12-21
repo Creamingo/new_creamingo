@@ -63,16 +63,41 @@ app.use(helmet({
 }));
 
 // CORS configuration
-const corsOptions = {
-  origin: [
-    process.env.CORS_ORIGIN || 'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:3002',
-    'http://localhost:3003'
-  ],
-  credentials: true,
-  optionsSuccessStatus: 200
+// Parse comma-separated origins from .env
+const parseOrigins = (originsString) => {
+  if (!originsString) {
+    // Default to localhost for development if not set
+    return process.env.NODE_ENV === 'production' 
+      ? [] 
+      : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'];
+  }
+  return originsString.split(',').map(origin => origin.trim()).filter(Boolean);
 };
+
+const allowedOrigins = parseOrigins(process.env.CORS_ORIGIN);
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`CORS: Blocked origin: ${origin}`);
+      console.warn(`Allowed origins: ${allowedOrigins.join(', ')}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+};
+
+// Log CORS configuration on startup
+console.log('🌐 CORS configured for origins:', allowedOrigins.length > 0 ? allowedOrigins.join(', ') : 'None (check CORS_ORIGIN in .env)');
+
 app.use(cors(corsOptions));
 
 // Rate limiting - more lenient for development
