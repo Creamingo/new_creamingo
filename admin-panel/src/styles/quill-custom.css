@@ -1,0 +1,222 @@
+/* Custom styles for Quill editor to match our theme */
+
+/* Dark mode support for Quill editor */
+.dark .ql-toolbar {
+  border-color: #4b5563 !important;
+  background-color: #374151 !important;
+}
+
+.dark .ql-container {
+  border-color: #4b5563 !important;
+  background-color: #1f2937 !important;
+}
+
+.dark .ql-editor {
+  color: #f9fafb !important;
+  background-color: #1f2937 !important;
+}
+
+.dark .ql-editor.ql-blank::before {
+  color: #9ca3af !important;
+  font-style: normal;
+}
+
+/* Light mode styling */
+.ql-toolbar {
+  border-color: #d1d5db !important;
+  background-color: #ffffff !important;
+}
+
+.ql-container {
+  border-color: #d1d5db !important;
+  background-color: #ffffff !important;
+}
+
+.ql-editor {
+  color: #111827 !important;
+  background-color: #ffffff !important;
+}
+
+.ql-editor.ql-blank::before {
+  color: #6b7280 !important;
+  font-style: normal;
+}
+
+/* Toolbar button styling */
+.ql-toolbar .ql-stroke {
+  stroke: currentColor;
+}
+
+.ql-toolbar .ql-fill {
+  fill: currentColor;
+}
+
+.dark .ql-toolbar .ql-stroke {
+  stroke: #f9fafb;
+}
+
+.dark .ql-toolbar .ql-fill {
+  fill: #f9fafb;
+}
+
+/* Hover effects for toolbar buttons */
+.ql-toolbar button:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.dark .ql-toolbar button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Active button styling */
+.ql-toolbar button.ql-active {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.dark .ql-toolbar button.ql-active {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Dropdown styling */
+.ql-toolbar .ql-picker-label {
+  color: inherit;
+}
+
+.dark .ql-toolbar .ql-picker-label {
+  color: #f9fafb;
+}
+
+/* Editor content styling */
+.ql-editor {
+  padding-bottom: 3rem !important; /* Increased bottom padding to prevent content cutoff */
+  padding-top: 1rem !important; /* Add top padding for better spacing */
+  min-height: 200px !important; /* Ensure minimum height for proper scrolling */
+  line-height: 1.6 !important; /* Better line spacing for readability */
+}
+
+.ql-editor h1 {
+  font-size: 2em;
+  font-weight: bold;
+  margin: 0.5em 0;
+}
+
+.ql-editor h2 {
+  font-size: 1.5em;
+  font-weight: bold;
+  margin: 0.4em 0;
+}
+
+.ql-editor h3 {
+  font-size: 1.17em;
+  font-weight: bold;
+  margin: 0.3em 0;
+}
+
+.ql-editor ul, .ql-editor ol {
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.ql-editor li {
+  margin: 0.2em 0;
+}
+
+/* Ensure last elements have proper spacing */
+.ql-editor p:last-child,
+.ql-editor ul:last-child,
+.ql-editor ol:last-child,
+.ql-editor h1:last-child,
+.ql-editor h2:last-child,
+.ql-editor h3:last-child {
+  margin-bottom: 1.5em !important;
+}
+
+/* Better spacing for list items */
+.ql-editor ul li:last-child,
+.ql-editor ol li:last-child {
+  margin-bottom: 0.5em !important;
+}
+
+.ql-editor blockquote {
+  border-left: 4px solid #e5e7eb;
+  padding-left: 1em;
+  margin: 1em 0;
+  font-style: italic;
+}
+
+.dark .ql-editor blockquote {
+  border-left-color: #4b5563;
+}
+
+.ql-editor a {
+  color: #3b82f6;
+  text-decoration: underline;
+}
+
+.dark .ql-editor a {
+  color: #60a5fa;
+}
+
+.ql-editor a:hover {
+  color: #1d4ed8;
+}
+
+.dark .ql-editor a:hover {
+  color: #93c5fd;
+}
+
+/* Additional scrolling improvements for content areas */
+.ql-container {
+  border-radius: 0 0 0.5rem 0.5rem !important;
+}
+
+.ql-toolbar {
+  border-radius: 0.5rem 0.5rem 0 0 !important;
+}
+
+/* Ensure proper scrolling in modal content areas */
+.modal-content {
+  scroll-behavior: smooth;
+}
+
+/* Better scrolling for content boxes */
+.content-box {
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+.dark .content-box {
+  scrollbar-color: #4b5563 #374151;
+}
+
+/* Webkit scrollbar styling for better appearance */
+.content-box::-webkit-scrollbar {
+  width: 6px;
+}
+
+.content-box::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.dark .content-box::-webkit-scrollbar-track {
+  background: #374151;
+}
+
+.content-box::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.dark .content-box::-webkit-scrollbar-thumb {
+  background: #4b5563;
+}
+
+.content-box::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.dark .content-box::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}

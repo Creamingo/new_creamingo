@@ -1,0 +1,11 @@
+PIN Code,Delivery Charge,Locality,Status
+110001,50,"Connaught Place, New Delhi",active
+400001,75,"Fort, Mumbai",active
+560001,60,"Bangalore City, Bangalore",inactive
+700001,55,"BBD Bagh, Kolkata",active
+600001,70,"Chennai Central, Chennai",active
+110002,45,"Karol Bagh, New Delhi",active
+400002,80,"Andheri West, Mumbai",active
+560002,65,"Indiranagar, Bangalore",inactive
+700002,50,"Salt Lake, Kolkata",active
+600002,75,"Anna Nagar, Chennai",active

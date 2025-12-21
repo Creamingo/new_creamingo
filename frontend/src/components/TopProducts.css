@@ -1,0 +1,7 @@
+/* Top Products Section - Content positioning for laptop/desktop */
+@media (min-width: 1024px) {
+  .top-products-content {
+    margin-top: -3rem !important;
+  }
+}
+

@@ -1,0 +1,455 @@
+/* Dynamic Banner Slider Custom Styles */
+
+/* Prevent layout shifts during loading */
+.banner-slider-section {
+  /* Responsive height - removed fixed height to allow content-based sizing */
+  position: relative; /* Ensure proper positioning */
+  z-index: 0;
+  isolation: isolate; /* Create new stacking context */
+}
+
+/* Desktop: Allow content-based height */
+@media (min-width: 1024px) {
+  .banner-slider-section {
+    min-height: auto;
+  }
+}
+
+/* Mobile: Allow content-based height */
+@media (max-width: 1023px) {
+  .banner-slider-section {
+    min-height: auto;
+  }
+}
+
+/* Ensure no grey backgrounds on slick carousel elements */
+.slider-container .slick-slider,
+.slider-container .slick-list,
+.slider-container .slick-track,
+.slider-container .slick-slide,
+.slider-container .slick-slide > div {
+  background: transparent !important;
+}
+
+/* Override any default slick carousel backgrounds */
+.slider-container .slick-slider {
+  background: transparent !important;
+}
+
+.slider-container .slick-list {
+  background: transparent !important;
+}
+
+.slider-container .slick-track {
+  background: transparent !important;
+}
+
+.slider-container .slick-slide {
+  background: transparent !important;
+}
+
+.slider-container .slick-slide > div {
+  background: transparent !important;
+}
+
+/* Ensure banner images have proper styling */
+.slider-container .slick-slide img {
+  background: transparent !important;
+}
+
+/* Override any potential grey backgrounds from parent elements */
+.banner-slider-section {
+  background: white !important;
+}
+
+.dark .banner-slider-section {
+  background: #111827 !important;
+}
+
+.banner-slider-section * {
+  background: transparent !important;
+}
+
+/* Exception for slider indicator - ensure it's visible */
+.slider-indicator {
+  background: transparent !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: absolute !important;
+  z-index: 100 !important;
+}
+
+.slider-indicator > div {
+  background: #e5e7eb !important;
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.dark .slider-indicator > div {
+  background: #374151 !important;
+}
+
+.slider-indicator button {
+  background: transparent !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.slider-indicator button > div {
+  background: #4b5563 !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+}
+
+.dark .slider-indicator button > div {
+  background: #6b7280 !important;
+}
+
+.slider-indicator button > div[style*="ffffff"],
+.slider-indicator button > div[style*="#ffffff"] {
+  background: #ffffff !important;
+}
+
+.dark .slider-indicator button > div.bg-white,
+.dark .slider-indicator button > div[class*="bg-white"] {
+  background: #f59e0b !important;
+}
+
+.banner-slider-section .slider-container {
+  background: transparent !important;
+}
+
+/* Enhanced Fade Transition Effects */
+.slider-container .slick-slide {
+  opacity: 0;
+  transition: opacity 0.8s ease-in-out;
+}
+
+.slider-container .slick-slide.slick-active {
+  opacity: 1;
+}
+
+/* Zoom effect on slide change */
+.banner-image {
+  transform: scale(1);
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), 
+              filter 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Animated Text Entrance - Single animation per slide */
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Reset all slides to initial state - prevent animation during fade transition */
+.slick-slide:not(.slick-active) .banner-content,
+.slick-slide:not(.slick-active) .banner-title,
+.slick-slide:not(.slick-active) .banner-subtitle,
+.slick-slide:not(.slick-active) .banner-button {
+  opacity: 0;
+  transform: translateY(20px);
+  animation: none !important;
+}
+
+/* Initial state for active slide - will animate */
+.slick-slide.slick-active .banner-content,
+.slick-slide.slick-active .banner-title,
+.slick-slide.slick-active .banner-subtitle,
+.slick-slide.slick-active .banner-button {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+/* Animate after fade transition starts (shorter delay to appear faster) */
+.slick-slide.slick-active .banner-content {
+  animation: slideUpFade 0.6s ease-out 0.4s forwards;
+}
+
+.slick-slide.slick-active .banner-title {
+  animation: slideUpFade 0.6s ease-out 0.5s both;
+}
+
+.slick-slide.slick-active .banner-subtitle {
+  animation: slideUpFade 0.6s ease-out 0.6s both;
+}
+
+.slick-slide.slick-active .banner-button {
+  animation: slideUpFade 0.6s ease-out 0.7s both;
+}
+
+/* Subtle hover effects */
+.banner-slide {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.banner-slide:hover {
+  transform: translateY(-1px);
+}
+
+.banner-slide:hover .banner-image {
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.18);
+  filter: brightness(1.02);
+  transform: scale(1.01);
+}
+
+.banner-slide:hover .glassmorphism-overlay {
+  transform: translateY(-1.5px);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Progress bar styling */
+.banner-slider-section .slider-container {
+  position: relative !important;
+  z-index: 0;
+  overflow: visible;
+}
+
+/* Ensure slider counter stays within slider bounds */
+.banner-slider-section > div > div {
+  position: relative !important;
+  overflow: visible;
+}
+
+/* Counter positioning - stays within slider container */
+.slider-counter {
+  position: absolute !important;
+  z-index: 10 !important;
+  pointer-events: auto;
+  /* Positioned relative to nearest positioned ancestor (.slider-container) */
+}
+
+/* Ensure counter doesn't escape slider bounds */
+.banner-slider-section .slider-container {
+  position: relative !important;
+  contain: layout;
+}
+
+/* Ensure smooth transitions for all elements */
+.banner-slide * {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Improved indicator visibility */
+.slider-indicator button:hover {
+  transform: scale(1.1);
+}
+
+/* Smooth fade transitions for slick carousel */
+.slider-container .slick-slide {
+  transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.slider-container .slick-slide:not(.slick-active) {
+  opacity: 0;
+}
+
+.slider-container .slick-slide.slick-active {
+  opacity: 1;
+}
+
+/* Banner container */
+.banner-container {
+  position: relative;
+}
+
+/* Glassmorphism Overlay */
+.glassmorphism-overlay {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.glassmorphism-overlay > div {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.dark .glassmorphism-overlay > div {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Interactive Hotspots */
+.hotspot-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.hotspot-pulse:hover {
+  transform: translate(-50%, -50%) scale(1.2);
+  transition: transform 0.2s ease-out;
+}
+
+.hotspot-pulse > div:first-child {
+  box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7);
+  animation: ripple 2s infinite;
+}
+
+@keyframes ripple {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(255, 255, 255, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
+  }
+}
+
+/* Thumbnail Navigation */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Enhanced Button Styling */
+.banner-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.banner-button::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+
+.banner-button:hover::before {
+  width: 300px;
+  height: 300px;
+}
+
+/* Parallax Effect */
+.banner-image {
+  will-change: transform;
+}
+
+/* Asymmetric Layout Support */
+.banner-content {
+  max-width: 90%;
+}
+
+@media (min-width: 1024px) {
+  .banner-content {
+    max-width: 50%;
+  }
+}
+
+/* Video Banner Styling */
+video.banner-image {
+  object-fit: cover;
+}
+
+/* Smooth transitions for all interactive elements */
+.banner-slide * {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Thumbnail Navigation - Perfectly synchronized with main slider */
+.thumbnail-navigation {
+  /* Container for thumbnails */
+}
+
+.thumbnail-button {
+  /* Exact match to main slider: 800ms, cubic-bezier(0.4, 0, 0.2, 1), no delay */
+  transition: border-color 800ms cubic-bezier(0.4, 0, 0.2, 1) 0ms,
+              opacity 800ms cubic-bezier(0.4, 0, 0.2, 1) 0ms,
+              transform 800ms cubic-bezier(0.4, 0, 0.2, 1) 0ms,
+              box-shadow 800ms cubic-bezier(0.4, 0, 0.2, 1) 0ms !important;
+  transform: scale(1);
+  will-change: border-color, opacity, transform, box-shadow;
+}
+
+.thumbnail-button:hover {
+  transform: translateY(-2px) scale(1.05);
+}
+
+.thumbnail-active {
+  border-color: #6c3e27 !important;
+  opacity: 1 !important;
+  transform: scale(1.05) !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+.dark .thumbnail-active {
+  border-color: #f59e0b !important;
+}
+
+.thumbnail-inactive {
+  border-color: transparent !important;
+  opacity: 0.6 !important;
+  transform: scale(1) !important;
+  box-shadow: none !important;
+}
+
+.thumbnail-overlay {
+  /* Exact match to main slider timing */
+  transition: opacity 800ms cubic-bezier(0.4, 0, 0.2, 1) 0ms !important;
+  pointer-events: none;
+  will-change: opacity;
+}
+
+/* Force exact timing match - override ALL conflicting styles */
+.thumbnail-button,
+.thumbnail-button *,
+.thumbnail-overlay {
+  transition-duration: 800ms !important;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transition-delay: 0ms !important;
+}
+
+/* Ensure no other transitions interfere */
+.thumbnail-button:not(:hover) {
+  transition: border-color 800ms cubic-bezier(0.4, 0, 0.2, 1) 0ms,
+              opacity 800ms cubic-bezier(0.4, 0, 0.2, 1) 0ms,
+              transform 800ms cubic-bezier(0.4, 0, 0.2, 1) 0ms,
+              box-shadow 800ms cubic-bezier(0.4, 0, 0.2, 1) 0ms !important;
+}
+
+/* Removed strong shadow effect - keeping it subtle */
+
+/* Scrollbar hide utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
