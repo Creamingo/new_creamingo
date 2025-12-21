@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Head from 'next/head';
 import { Loader2, AlertCircle, Filter, ChevronDown } from 'lucide-react';
@@ -11,7 +11,7 @@ import { useWishlist } from '../../contexts/WishlistContext';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-const Products = () => {
+const ProductsContent = () => {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -378,6 +378,21 @@ const Products = () => {
         <MobileFooter cartItemCount={3} walletAmount={1250} wishlistCount={5} />
       </div>
     </>
+  );
+};
+
+const Products = () => {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-purple-600 dark:text-purple-400 mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-300 font-inter">Loading products...</p>
+        </div>
+      </div>
+    }>
+      <ProductsContent />
+    </Suspense>
   );
 };
 

@@ -8,14 +8,14 @@
     "dev": "nodemon src/server.js",
     "test": "jest",
     "build": "echo \"Skipping backend build (no compilation needed)\"",
-    "rebuild-native": "pnpm rebuild sqlite3 sharp"
+    "rebuild-native": "pnpm rebuild sharp"
   },
   "keywords": [
     "cake",
     "ordering",
     "api",
     "express",
-    "sqlite"
+    "mysql"
   ],
   "author": "Creamingo Team",
   "license": "MIT",
@@ -29,10 +29,10 @@
     "joi": "^17.11.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.16.0",
     "node-fetch": "^3.3.2",
     "pdfkit": "^0.17.2",
     "sharp": "^0.34.4",
-    "sqlite3": "^5.1.7",
     "uuid": "^9.0.1"
   },
   "devDependencies": {

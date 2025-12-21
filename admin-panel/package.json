@@ -24,17 +24,18 @@
   "devDependencies": {
     "@types/react-router-dom": "^5.3.0",
     "autoprefixer": "^10.4.0",
+    "dotenv-cli": "^7.4.2",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.3.0"
   },
   "scripts": {
-    "start": "set PORT=3001 && react-scripts start",
-    "start:unix": "PORT=3001 react-scripts start",
-    "build": "react-scripts build",
+    "start": "set PORT=3001 && dotenv -e ../.env -- react-scripts start",
+    "start:unix": "PORT=3001 dotenv -e ../.env -- react-scripts start",
+    "build": "dotenv -e ../.env -- react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "dev": "set PORT=3001 && react-scripts start",
-    "dev:unix": "PORT=3001 react-scripts start"
+    "dev": "set PORT=3001 && dotenv -e ../.env -- react-scripts start",
+    "dev:unix": "PORT=3001 dotenv -e ../.env -- react-scripts start"
   },
   "eslintConfig": {
     "extends": [

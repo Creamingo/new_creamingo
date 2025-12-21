@@ -1,3 +1,7 @@
+// Load environment variables from root .env file
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Use default Next.js behavior
@@ -22,6 +26,11 @@ const nextConfig = {
         pathname: '/uploads/**',
       },
     ],
+  },
+  // Expose environment variables to the client
+  env: {
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+    NEXT_PUBLIC_ENVIRONMENT: process.env.NEXT_PUBLIC_ENVIRONMENT,
   },
 }
 

@@ -1,55 +1,60 @@
 const fs = require('fs');
 const path = require('path');
-const { db } = require('../config/db');
+const { query, get } = require('../config/db');
 
 /**
- * Initialize SQLite database with schema and sample data
+ * Initialize MySQL database with schema and sample data
  */
 const initDatabase = async () => {
   try {
-    console.log('🔄 Initializing SQLite database...');
+    console.log('🔄 Initializing MySQL database...');
     
-    // Read the schema file
-    const schemaPath = path.join(__dirname, '../../database/schema.sqlite.sql');
+    // Read the MySQL schema file (prefer MySQL-specific schema if exists)
+    let schemaPath = path.join(__dirname, '../../database/schema.sql');
+    
+    // Check if MySQL-specific schema exists
+    const mysqlSchemaPath = path.join(__dirname, '../../database/schema.mysql.sql');
+    if (fs.existsSync(mysqlSchemaPath)) {
+      schemaPath = mysqlSchemaPath;
+    }
+    
+    if (!fs.existsSync(schemaPath)) {
+      throw new Error(`Schema file not found: ${schemaPath}`);
+    }
+    
     const schema = fs.readFileSync(schemaPath, 'utf8');
     
-    // Execute the entire schema as one statement
-    await new Promise((resolve, reject) => {
-      db.exec(schema, (err) => {
-        if (err) {
-          console.error('Error executing schema:', err.message);
-          reject(err);
-        } else {
-          resolve();
+    // Split schema into individual statements (MySQL requires this)
+    const statements = schema
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0 && !s.startsWith('--') && !s.startsWith('/*'));
+    
+    // Execute each statement
+    for (const statement of statements) {
+      if (statement.trim()) {
+        try {
+          await query(statement);
+        } catch (err) {
+          // Ignore "table already exists" errors
+          if (!err.message.includes('already exists') && !err.message.includes('Duplicate')) {
+            console.warn('Warning executing statement:', err.message);
+          }
         }
-      });
-    });
+      }
+    }
     
     console.log('✅ Database initialized successfully!');
     
     // Verify tables were created
-    const tables = await new Promise((resolve, reject) => {
-      db.all("SELECT name FROM sqlite_master WHERE type='table'", (err, rows) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(rows.map(row => row.name));
-        }
-      });
-    });
+    const { rows: tables } = await query("SELECT TABLE_NAME as name FROM information_schema.TABLES WHERE TABLE_SCHEMA = ?", [process.env.DB_NAME]);
+    const tableNames = tables.map(row => row.name);
     
-    console.log('📊 Created tables:', tables.join(', '));
+    console.log('📊 Created tables:', tableNames.join(', '));
     
     // Check if we have users
-    const userCount = await new Promise((resolve, reject) => {
-      db.get("SELECT COUNT(*) as count FROM users", (err, row) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(row.count);
-        }
-      });
-    });
+    const userResult = await get("SELECT COUNT(*) as count FROM users");
+    const userCount = userResult ? userResult.count : 0;
     
     console.log(`👥 Users in database: ${userCount}`);
     
@@ -70,15 +75,10 @@ const initDatabase = async () => {
  */
 const needsInitialization = async () => {
   try {
-    const result = await new Promise((resolve, reject) => {
-      db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='users'", (err, row) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(row);
-        }
-      });
-    });
+    const result = await get(
+      "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users'",
+      [process.env.DB_NAME]
+    );
     
     return !result; // Return true if users table doesn't exist
   } catch (error) {
