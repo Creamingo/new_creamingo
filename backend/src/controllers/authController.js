@@ -114,7 +114,7 @@ const login = async (req, res) => {
 
     // Update last login
     await query(
-      'UPDATE users SET last_login = datetime(\'now\') WHERE id = ?',
+      'UPDATE users SET last_login = NOW() WHERE id = ?',
       [user.id]
     );
 
@@ -141,9 +141,11 @@ const login = async (req, res) => {
     });
   } catch (error) {
     console.error('Login error:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

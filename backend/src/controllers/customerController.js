@@ -315,7 +315,7 @@ const getCustomerStats = async (req, res) => {
     const newThisMonthResult = await query(`
       SELECT COUNT(*) as new_count
       FROM customers
-      WHERE created_at >= date('now', '-30 days')
+      WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
     `);
     const new_this_month = parseInt(newThisMonthResult.rows[0].new_count);
 
@@ -342,9 +342,11 @@ const getCustomerStats = async (req, res) => {
     });
   } catch (error) {
     console.error('Get customer stats error:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

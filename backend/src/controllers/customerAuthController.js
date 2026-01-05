@@ -165,7 +165,7 @@ const login = async (req, res) => {
 
     // Update last login
     await query(
-      'UPDATE customers SET last_login = datetime(\'now\') WHERE id = ?',
+      'UPDATE customers SET last_login = NOW() WHERE id = ?',
       [customer.id]
     );
 

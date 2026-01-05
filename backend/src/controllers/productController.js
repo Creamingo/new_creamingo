@@ -294,9 +294,11 @@ const getProducts = async (req, res) => {
     });
   } catch (error) {
     console.error('Get products error:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

@@ -1254,7 +1254,7 @@ const getOrderStats = async (req, res) => {
   try {
     const { period = '30' } = req.query; // days
 
-    // SQLite compatible date calculation
+    // MySQL compatible date calculation
     const daysAgo = parseInt(period) || 30;
     const statsQuery = `
       SELECT 
@@ -1269,10 +1269,10 @@ const getOrderStats = async (req, res) => {
         COALESCE(SUM(total_amount), 0) as total_revenue,
         COALESCE(AVG(total_amount), 0) as average_order_value
       FROM orders 
-      WHERE created_at >= datetime('now', '-${daysAgo} days')
+      WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
     `;
 
-    const result = await query(statsQuery);
+    const result = await query(statsQuery, [daysAgo]);
 
     res.json({
       success: true,
@@ -1280,9 +1280,11 @@ const getOrderStats = async (req, res) => {
     });
   } catch (error) {
     console.error('Get order stats error:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

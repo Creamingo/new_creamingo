@@ -23,7 +23,7 @@ const assignProductToCategories = async (productId, categoryIds, primaryCategory
     
     await query(`
       INSERT INTO product_categories (product_id, category_id, is_primary, display_order, created_at, updated_at)
-      VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+      VALUES (?, ?, ?, ?, NOW(), NOW())
     `, [productId, categoryId, isPrimary, i + 1]);
   }
 };
@@ -47,7 +47,7 @@ const assignProductToSubcategories = async (productId, subcategoryIds, primarySu
     
     await query(`
       INSERT INTO product_subcategories (product_id, subcategory_id, is_primary, display_order, created_at, updated_at)
-      VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+      VALUES (?, ?, ?, ?, NOW(), NOW())
     `, [productId, subcategoryId, isPrimary, i + 1]);
   }
 };
