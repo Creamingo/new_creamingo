@@ -688,13 +688,13 @@ export const Dashboard: React.FC = () => {
   const [selectedScenario, setSelectedScenario] = useState<WhatIfScenario | null>(null);
   
   // Phase 3: External Integrations
-  interface Integration {
-    id: string;
-    name: string;
-    type: 'api' | 'webhook' | 'export';
-    status: 'active' | 'inactive';
-    config: Record<string, any>;
-  }
+  // interface Integration {
+  //   id: string;
+  //   name: string;
+  //   type: 'api' | 'webhook' | 'export';
+  //   status: 'active' | 'inactive';
+  //   config: Record<string, any>;
+  // }
   
   // const [integrations, setIntegrations] = useState<Integration[]>([]); // Unused
   const [showIntegrations, setShowIntegrations] = useState(false);
@@ -720,6 +720,7 @@ export const Dashboard: React.FC = () => {
   
   const [okrs, setOkrs] = useState<Objective[]>([]);
   // const [showOKRs, setShowOKRs] = useState(false); // Unused
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [editingOKR, setEditingOKR] = useState<Objective | null>(null);
 
   // Calculate percentage change
