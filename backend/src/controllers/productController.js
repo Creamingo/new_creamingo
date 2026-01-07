@@ -45,10 +45,12 @@ const getProducts = async (req, res) => {
       sort_order = 'DESC'
     } = req.query;
 
-    const offset = (page - 1) * limit;
+    // Convert to integers for MySQL
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
+    const offset = (pageNum - 1) * limitNum;
     let whereConditions = [];
     let queryParams = [];
-    let paramCount = 1;
 
     // Build WHERE conditions
     if (category_id) {
@@ -271,7 +273,7 @@ const getProducts = async (req, res) => {
       LIMIT ? OFFSET ?
     `;
 
-    queryParams.push(limit, offset);
+    queryParams.push(limitNum, offset);
     const productsResult = await query(productsQuery, queryParams);
 
     // Get product IDs for fetching categories and subcategories
@@ -285,10 +287,10 @@ const getProducts = async (req, res) => {
       data: {
         products,
         pagination: {
-          current_page: parseInt(page),
-          per_page: parseInt(limit),
+          current_page: pageNum,
+          per_page: limitNum,
           total,
-          total_pages: Math.ceil(total / limit)
+          total_pages: Math.ceil(total / limitNum)
         }
       }
     });
