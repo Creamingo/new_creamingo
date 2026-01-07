@@ -299,17 +299,41 @@ const getProducts = async (req, res) => {
 
     // Debug: Log query and params count for troubleshooting
     const placeholderCount = (productsQuery.match(/\?/g) || []).length;
-    if (placeholderCount !== productsQueryParams.length) {
+    
+    // Filter out any undefined or null values and ensure all are properly typed
+    const sanitizedParams = productsQueryParams
+      .map((param, index) => {
+        if (param === undefined || param === null) {
+          console.warn(`Parameter at index ${index} is ${param}, replacing with appropriate default`);
+          return null; // MySQL accepts null
+        }
+        return param;
+      });
+    
+    if (placeholderCount !== sanitizedParams.length) {
       console.error('Parameter mismatch detected:', {
         query: productsQuery,
         placeholderCount,
-        paramCount: productsQueryParams.length,
-        params: productsQueryParams,
-        whereClause
+        paramCount: sanitizedParams.length,
+        originalParamCount: productsQueryParams.length,
+        params: sanitizedParams,
+        originalParams: productsQueryParams,
+        whereClause,
+        whereConditions
       });
+      // Don't proceed with mismatched parameters
+      throw new Error(`Parameter count mismatch: expected ${placeholderCount} placeholders but got ${sanitizedParams.length} parameters`);
     }
 
-    const productsResult = await query(productsQuery, productsQueryParams);
+    // Log for debugging (remove in production if too verbose)
+    console.log('Executing products query:', {
+      placeholderCount,
+      paramCount: sanitizedParams.length,
+      params: sanitizedParams.map(p => typeof p === 'string' ? p.substring(0, 50) : p),
+      whereClause: whereClause.substring(0, 200)
+    });
+
+    const productsResult = await query(productsQuery, sanitizedParams);
 
     // Get product IDs for fetching categories and subcategories
     const productIds = productsResult.rows.map(p => p.id);
