@@ -199,7 +199,7 @@ const submitReview = async (req, res) => {
         product_id, customer_name, customer_email, rating,
         review_title, review_text, is_verified_purchase, is_approved,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `, [
       product_id,
       customer_name,
@@ -296,7 +296,7 @@ const updateReview = async (req, res) => {
       });
     }
 
-    updateFields.push('updated_at = datetime(\'now\')');
+    updateFields.push('updated_at = NOW()');
     updateValues.push(id);
 
     await query(`

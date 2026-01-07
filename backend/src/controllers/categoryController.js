@@ -29,8 +29,8 @@ const getCategories = async (req, res) => {
         c.updated_at,
         ${include_subcategories === 'true' ? `
           COALESCE(
-            json_group_array(
-              json_object(
+            JSON_ARRAYAGG(
+              JSON_OBJECT(
                 'id', sc.id,
                 'name', sc.name,
                 'description', sc.description,
@@ -40,7 +40,7 @@ const getCategories = async (req, res) => {
                 'created_at', sc.created_at
               )
             ), 
-            '[]'
+            JSON_ARRAY()
           ) as subcategories
         ` : 'NULL as subcategories'}
       FROM categories c
@@ -74,8 +74,8 @@ const getCategory = async (req, res) => {
       SELECT 
         c.*,
         COALESCE(
-          json_group_array(
-            json_object(
+          JSON_ARRAYAGG(
+            JSON_OBJECT(
               'id', sc.id,
               'name', sc.name,
               'description', sc.description,
@@ -85,7 +85,7 @@ const getCategory = async (req, res) => {
               'created_at', sc.created_at
             )
           ), 
-          '[]'
+          JSON_ARRAY()
         ) as subcategories
       FROM categories c
       LEFT JOIN subcategories sc ON c.id = sc.category_id
@@ -121,7 +121,7 @@ const createCategory = async (req, res) => {
 
     const result = await query(`
       INSERT INTO categories (name, description, image_url, icon, icon_image_url, display_name, is_active, order_index, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `, [name, description, image_url, icon, icon_image_url, display_name, is_active, order_index]);
 
     const categoryId = result.lastID;
@@ -185,7 +185,7 @@ const updateCategory = async (req, res) => {
       });
     }
 
-    updates.push('updated_at = datetime(\'now\')');
+    updates.push('updated_at = NOW()');
     values.push(id);
 
     const queryText = `
@@ -804,7 +804,7 @@ const updateCategoryOrder = async (req, res) => {
     for (const category of categories) {
       if (category.id && category.order_index !== undefined) {
         await query(
-          'UPDATE categories SET order_index = ?, updated_at = datetime(\'now\') WHERE id = ?',
+          'UPDATE categories SET order_index = ?, updated_at = NOW() WHERE id = ?',
           [category.order_index, category.id]
         );
       }

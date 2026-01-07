@@ -8,9 +8,9 @@ const getLeaderboard = async (req, res) => {
 
     let dateFilter = '';
     if (period === 'month') {
-      dateFilter = "AND r.created_at >= datetime('now', '-1 month')";
+      dateFilter = "AND r.created_at >= DATE_SUB(NOW(), INTERVAL 1 MONTH)";
     } else if (period === 'week') {
-      dateFilter = "AND r.created_at >= datetime('now', '-7 days')";
+      dateFilter = "AND r.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)";
     }
 
     // Get top referrers by completed referrals

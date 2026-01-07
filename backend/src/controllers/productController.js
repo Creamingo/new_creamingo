@@ -224,7 +224,7 @@ const getProducts = async (req, res) => {
     const sortField = allowedSortFields.includes(sort_by) ? sort_by : 'created_at';
     const sortDirection = sort_order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
-    // Get total count
+    // Get total count (use a copy of queryParams to avoid modifying the original)
     const countQuery = `
       SELECT COUNT(*) as total
       FROM products p
@@ -233,10 +233,13 @@ const getProducts = async (req, res) => {
       ${whereClause}
     `;
 
-    const countResult = await query(countQuery, queryParams);
+    const countResult = await query(countQuery, [...queryParams]);
     const total = parseInt(countResult.rows[0].total);
 
     // Get products (without variants for now - we'll fetch them separately)
+    // Create a new array with limit and offset for the products query
+    const productsQueryParams = [...queryParams, limitNum, offset];
+    
     const productsQuery = `
       SELECT 
         p.id,
@@ -273,8 +276,7 @@ const getProducts = async (req, res) => {
       LIMIT ? OFFSET ?
     `;
 
-    queryParams.push(limitNum, offset);
-    const productsResult = await query(productsQuery, queryParams);
+    const productsResult = await query(productsQuery, productsQueryParams);
 
     // Get product IDs for fetching categories and subcategories
     const productIds = productsResult.rows.map(p => p.id);
@@ -867,7 +869,7 @@ const createProduct = async (req, res) => {
         name, slug, description, short_description, category_id, subcategory_id, base_price, base_weight, discount_percent, discounted_price,
         image_url, is_active, is_featured, is_top_product, is_bestseller, is_eggless,
         preparation_time, serving_size, care_storage, delivery_guidelines, shape, country_of_origin, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `, [
       name, slug, description, short_description, legacyCategoryId, legacySubcategoryId, base_price, base_weight, discount_percent, discountedPrice,
       image_url, is_active, is_featured, is_top_product, is_bestseller, (req.body.is_eggless ? 1 : 0),
@@ -900,7 +902,7 @@ const createProduct = async (req, res) => {
           INSERT INTO product_variants (
             product_id, name, weight, price, discount_percent, discounted_price, 
             stock_quantity, is_available, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
         `, [
           productId,
           `${req.body.name} - ${weight}`, // Use product name + weight as variant name
@@ -921,7 +923,7 @@ const createProduct = async (req, res) => {
         await query(`
           INSERT INTO product_gallery_images (
             product_id, image_url, display_order, created_at, updated_at
-          ) VALUES (?, ?, ?, datetime('now'), datetime('now'))
+          ) VALUES (?, ?, ?, NOW(), NOW())
         `, [
           productId,
           imageUrl,
@@ -1062,7 +1064,7 @@ const updateProduct = async (req, res) => {
       values.push(discountedPrice);
     }
 
-    updates.push('updated_at = datetime(\'now\')');
+    updates.push('updated_at = NOW()');
     values.push(id);
 
     const queryText = `
@@ -1124,7 +1126,7 @@ const updateProduct = async (req, res) => {
             INSERT INTO product_variants (
               product_id, name, weight, price, discount_percent, discounted_price, 
               stock_quantity, is_available, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
           `, [
             id,
             `${updateData.name || 'Product'} - ${weight}`, // Use updated name or fallback
@@ -1155,7 +1157,7 @@ const updateProduct = async (req, res) => {
           await query(`
             INSERT INTO product_gallery_images (
               product_id, image_url, display_order, created_at, updated_at
-            ) VALUES (?, ?, ?, datetime('now'), datetime('now'))
+            ) VALUES (?, ?, ?, NOW(), NOW())
           `, [
             id,
             imageUrl,
@@ -1351,7 +1353,7 @@ const createProductVariant = async (req, res) => {
     const result = await query(`
       INSERT INTO product_variants (
         product_id, name, weight, price, stock_quantity, is_available, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, datetime(\'now\'), datetime(\'now\'))
+      ) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
     `, [id, name, weight, price, stock_quantity, is_available]);
 
     res.status(201).json({
@@ -1406,7 +1408,7 @@ const updateProductVariant = async (req, res) => {
       });
     }
 
-    updates.push('updated_at = datetime(\'now\')');
+    updates.push('updated_at = NOW()');
     values.push(variantId);
 
     const queryText = `
@@ -1559,7 +1561,7 @@ const toggleTopProduct = async (req, res) => {
 
     // Update the product
     await query(
-      'UPDATE products SET is_top_product = ?, updated_at = datetime(\'now\') WHERE id = ? ',
+      'UPDATE products SET is_top_product = ?, updated_at = NOW() WHERE id = ? ',
       [newStatus, id]
     );
 
@@ -1722,7 +1724,7 @@ const toggleBestseller = async (req, res) => {
 
     // Update the product
     await query(
-      'UPDATE products SET is_bestseller = ?, updated_at = datetime(\'now\') WHERE id = ? ',
+      'UPDATE products SET is_bestseller = ?, updated_at = NOW() WHERE id = ? ',
       [newStatus, id]
     );
 
@@ -1840,7 +1842,7 @@ const toggleFeatured = async (req, res) => {
 
     // Update the product
     await query(
-      'UPDATE products SET is_featured = ?, updated_at = datetime(\'now\') WHERE id = ? ',
+      'UPDATE products SET is_featured = ?, updated_at = NOW() WHERE id = ? ',
       [newStatus, id]
     );
 
@@ -1958,7 +1960,7 @@ const toggleActive = async (req, res) => {
 
     // Update the product
     await query(
-      'UPDATE products SET is_active = ?, updated_at = datetime(\'now\') WHERE id = ? ',
+      'UPDATE products SET is_active = ?, updated_at = NOW() WHERE id = ? ',
       [newStatus, id]
     );
 

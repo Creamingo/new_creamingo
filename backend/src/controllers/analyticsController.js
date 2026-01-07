@@ -26,7 +26,7 @@ const getReferralAnalytics = async (req, res) => {
         COUNT(*) as count,
         COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_count
       FROM referrals
-      WHERE referrer_id = ? AND created_at >= datetime('now', '-' || ? || ' days')
+      WHERE referrer_id = ? AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
       GROUP BY DATE(created_at)
       ORDER BY date ASC`,
       [customerId, period]
@@ -39,7 +39,7 @@ const getReferralAnalytics = async (req, res) => {
         COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed,
         ROUND(COUNT(CASE WHEN status = 'completed' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0), 2) as conversion_rate
       FROM referrals
-      WHERE referrer_id = ? AND created_at >= datetime('now', '-' || ? || ' days')`,
+      WHERE referrer_id = ? AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)`,
       [customerId, period]
     );
 

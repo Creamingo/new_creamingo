@@ -3,10 +3,15 @@ const { query, get } = require('../config/db');
 // Helper function to check if a column exists in a table
 const columnExists = async (tableName, columnName) => {
   try {
-    // Use PRAGMA table_info - table name must be literal, not parameterized
-    const result = await query(`PRAGMA table_info(${tableName})`);
-    const columns = result.rows || (Array.isArray(result) ? result : []);
-    return columns.some(col => col.name === columnName);
+    // MySQL: Use INFORMATION_SCHEMA to check column existence
+    const result = await query(`
+      SELECT COUNT(*) as count
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND COLUMN_NAME = ?
+    `, [tableName, columnName]);
+    return result.rows && result.rows.length > 0 && parseInt(result.rows[0].count) > 0;
   } catch (error) {
     console.error(`Error checking column existence for ${tableName}.${columnName}:`, error);
     return false;
@@ -520,7 +525,7 @@ const createDeliveryWalletEarning = async (deliveryOrderId) => {
     await query(
       `INSERT INTO delivery_wallet_transactions 
         (delivery_boy_id, order_id, type, amount, meta, created_at)
-       VALUES (?, ?, 'earning', ?, ?, datetime('now'))`,
+       VALUES (?, ?, 'earning', ?, ?, NOW())`,
       [deliveryBoyId, deliveryOrderId, totalEarning, meta]
     );
 
@@ -622,7 +627,7 @@ const checkAndCreditTargetBonus = async (deliveryBoyId) => {
     await query(
       `INSERT INTO delivery_wallet_transactions 
         (delivery_boy_id, order_id, type, amount, meta, created_at)
-       VALUES (?, NULL, 'bonus', ?, ?, datetime('now'))`,
+       VALUES (?, NULL, 'bonus', ?, ?, NOW())`,
       [deliveryBoyId, bonusAmount, meta]
     );
 

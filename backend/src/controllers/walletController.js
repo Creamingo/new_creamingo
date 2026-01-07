@@ -180,12 +180,12 @@ const creditWelcomeBonus = async (req, res) => {
     const currentBalance = parseFloat(customerResult.rows[0].wallet_balance) || 0;
     const newBalance = currentBalance + bonusAmount;
 
-      // Create transaction record - SQLite's datetime('now') stores in UTC
+      // Create transaction record - SQLite's NOW() stores in UTC
       // We'll convert to IST when reading, so store in UTC for consistency
       const insertResult = await query(
         `INSERT INTO wallet_transactions 
         (customer_id, type, amount, description, status, transaction_type, created_at, updated_at)
-        VALUES (?, 'credit', ?, ?, 'completed', 'welcome_bonus', datetime('now'), datetime('now'))`,
+        VALUES (?, 'credit', ?, ?, 'completed', 'welcome_bonus', NOW(), NOW())`,
         [customerId, bonusAmount, 'Welcome Bonus']
       );
 

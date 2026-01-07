@@ -11,7 +11,10 @@ const getCustomers = async (req, res) => {
       sort_order = 'DESC'
     } = req.query;
 
-    const offset = (page - 1) * limit;
+    // Convert to integers for MySQL
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
+    const offset = (pageNum - 1) * limitNum;
     let whereConditions = [];
     let queryParams = [];
     let paramCount = 1;
@@ -56,17 +59,17 @@ const getCustomers = async (req, res) => {
       LIMIT ? OFFSET ?
     `;
 
-    queryParams.push(limit, offset);
-    const customersResult = await query(customersQuery, queryParams);
+    const customersQueryParams = [...queryParams, limitNum, offset];
+    const customersResult = await query(customersQuery, customersQueryParams);
 
     res.json({
       success: true,
       data: customersResult.rows,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
-        pages: Math.ceil(total / limit)
+        pages: Math.ceil(total / limitNum)
       }
     });
   } catch (error) {

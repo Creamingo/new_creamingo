@@ -67,7 +67,7 @@ const getPromoCodes = async (req, res) => {
     const params = [];
 
     if (active_only === 'true') {
-      sql += ' AND status = ? AND datetime(valid_from) <= datetime("now") AND datetime(valid_until) >= datetime("now")';
+      sql += ' AND status = ? AND valid_from <= NOW() AND valid_until >= NOW()';
       params.push('active');
     }
 
@@ -495,7 +495,7 @@ const trackPromoCodeEvent = async (promoCodeId, eventType, data = {}) => {
         promo_code_id, event_type, customer_id, order_id, cart_value,
         discount_amount, revenue, validation_result, failure_reason,
         ip_address, user_agent, referrer_url, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     `, [
       promoCodeId, eventType, customer_id, order_id, cart_value,
       discount_amount, revenue, validation_result, failure_reason,
@@ -575,7 +575,7 @@ const updatePromoCodePerformanceCache = async (promoCodeId) => {
           conversion_rate = ?,
           validation_success_rate = ?,
           redemption_rate = ?,
-          last_updated = datetime('now')
+          last_updated = NOW()
         WHERE promo_code_id = ?
       `, [
         totalViews, totalValidations, successfulValidations, failedValidations,
@@ -591,7 +591,7 @@ const updatePromoCodePerformanceCache = async (promoCodeId) => {
           failed_validations, total_applications, total_redemptions, total_abandons,
           total_revenue, total_discount_given, avg_order_value, unique_customers,
           conversion_rate, validation_success_rate, redemption_rate, last_updated
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
       `, [
         promoCodeId, totalViews, totalValidations, successfulValidations, failedValidations,
         totalApplications, totalRedemptions, totalAbandons,

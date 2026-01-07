@@ -54,7 +54,10 @@ const getOrders = async (req, res) => {
       sort_order = 'DESC'
     } = req.query;
 
-    const offset = (page - 1) * limit;
+    // Convert to integers for MySQL
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
+    const offset = (pageNum - 1) * limitNum;
     let whereConditions = [];
     let queryParams = [];
     let paramCount = 1;
@@ -128,8 +131,8 @@ const getOrders = async (req, res) => {
         c.email as customer_email,
         c.phone as customer_phone,
         COALESCE(
-          json_group_array(
-            json_object(
+          JSON_ARRAYAGG(
+            JSON_OBJECT(
               'id', oi.id,
               'product_id', oi.product_id,
               'variant_id', oi.variant_id,
@@ -148,7 +151,7 @@ const getOrders = async (req, res) => {
               'cake_message', oi.cake_message
             )
           ), 
-          '[]'
+          JSON_ARRAY()
         ) as items
       FROM orders o
       LEFT JOIN customers c ON o.customer_id = c.id
@@ -160,14 +163,14 @@ const getOrders = async (req, res) => {
       ${whereClause}
       GROUP BY o.id, c.name, c.email, c.phone
       ORDER BY o.${sortField} ${sortDirection}
-      LIMIT $${paramCount} OFFSET $${paramCount + 1}
+      LIMIT ? OFFSET ?
     `;
 
-    queryParams.push(limit, offset);
+    const ordersQueryParams = [...queryParams, limitNum, offset];
     
     let ordersResult;
     try {
-      ordersResult = await query(ordersQuery, queryParams);
+      ordersResult = await query(ordersQuery, ordersQueryParams);
     } catch (error) {
       // If query fails, try with fallback (handles missing display_name column or other issues)
       console.error('Initial query failed, trying fallback query:', error.message);
@@ -192,8 +195,8 @@ const getOrders = async (req, res) => {
           c.email as customer_email,
           c.phone as customer_phone,
           COALESCE(
-            json_group_array(
-                json_object(
+            JSON_ARRAYAGG(
+                JSON_OBJECT(
                   'id', oi.id,
                   'product_id', oi.product_id,
                   'variant_id', oi.variant_id,
@@ -224,11 +227,12 @@ const getOrders = async (req, res) => {
         ${whereClause}
         GROUP BY o.id, c.name, c.email, c.phone
         ORDER BY o.${sortField} ${sortDirection}
-        LIMIT $${paramCount} OFFSET $${paramCount + 1}
+        LIMIT ? OFFSET ?
       `;
       
+      const fallbackQueryParams = [...queryParams, limitNum, offset];
       try {
-        ordersResult = await query(fallbackQuery, queryParams);
+        ordersResult = await query(fallbackQuery, fallbackQueryParams);
       } catch (fallbackError) {
         // If that also fails, try without subcategory joins
         console.error('Fallback query also failed, trying without subcategory joins:', fallbackError.message);
@@ -251,8 +255,8 @@ const getOrders = async (req, res) => {
             c.email as customer_email,
             c.phone as customer_phone,
             COALESCE(
-              json_group_array(
-                json_object(
+              JSON_ARRAYAGG(
+                JSON_OBJECT(
                   'id', oi.id,
                   'product_id', oi.product_id,
                   'variant_id', oi.variant_id,
@@ -279,9 +283,10 @@ const getOrders = async (req, res) => {
           ${whereClause}
           GROUP BY o.id, c.name, c.email, c.phone
           ORDER BY o.${sortField} ${sortDirection}
-          LIMIT $${paramCount} OFFSET $${paramCount + 1}
+          LIMIT ? OFFSET ?
         `;
-        ordersResult = await query(fallbackQuery, queryParams);
+        const fallbackQueryParams2 = [...queryParams, limitNum, offset];
+        ordersResult = await query(fallbackQuery, fallbackQueryParams2);
       }
     }
 
@@ -389,8 +394,8 @@ const getOrder = async (req, res) => {
         c.phone as customer_phone,
         c.address as customer_address,
         COALESCE(
-          json_group_array(
-            json_object(
+          JSON_ARRAYAGG(
+            JSON_OBJECT(
               'id', oi.id,
               'product_id', oi.product_id,
               'variant_id', oi.variant_id,
@@ -409,7 +414,7 @@ const getOrder = async (req, res) => {
               'cake_message', oi.cake_message
             )
           ), 
-          '[]'
+          JSON_ARRAY()
         ) as items
       FROM orders o
       LEFT JOIN customers c ON o.customer_id = c.id
@@ -676,7 +681,7 @@ const createOrder = async (req, res) => {
         item_count, combo_count, wallet_amount_used, total_item_count,
         subtotal_after_promo, subtotal_after_wallet, final_delivery_charge,
         deal_items_total, regular_items_total, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `, [
       orderNumber, customer_id, 'pending', totalAmount, JSON.stringify(delivery_address),
       delivery_date, delivery_time, special_instructions, payment_method, 'pending',
@@ -728,7 +733,7 @@ const createOrder = async (req, res) => {
     if (actualWalletUsage > 0) {
       // Record wallet usage
       await query(
-        'INSERT INTO wallet_usage (order_id, customer_id, amount_used, created_at) VALUES (?, ?, ?, datetime("now"))',
+        'INSERT INTO wallet_usage (order_id, customer_id, amount_used, created_at) VALUES (?, ?, ?, NOW())',
         [orderId, customer_id, actualWalletUsage]
       );
 
@@ -736,7 +741,7 @@ const createOrder = async (req, res) => {
       await query(
         `INSERT INTO wallet_transactions 
         (customer_id, type, amount, order_id, description, status, transaction_type, created_at, updated_at)
-        VALUES (?, 'debit', ?, ?, ?, 'completed', 'order_redemption', datetime('now'), datetime('now'))`,
+        VALUES (?, 'debit', ?, ?, ?, 'completed', 'order_redemption', NOW(), NOW())`,
         [customer_id, actualWalletUsage, orderId, `Used on Order #${orderNumber}`]
       );
 
@@ -796,7 +801,7 @@ const createOrder = async (req, res) => {
           INSERT INTO order_items (
             order_id, product_id, variant_id, quantity, price, total, 
             flavor_id, tier, cake_message, display_name, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         `, [
           order.id, item.product_id, item.variant_id, item.quantity, item.price, 
           item.price * item.quantity, 
@@ -814,7 +819,7 @@ const createOrder = async (req, res) => {
             INSERT INTO order_items (
               order_id, product_id, variant_id, quantity, price, total, 
               flavor_id, tier, cake_message, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
           `, [
             order.id, item.product_id, item.variant_id, item.quantity, item.price, 
             item.price * item.quantity, 
@@ -887,7 +892,7 @@ const createOrder = async (req, res) => {
             INSERT INTO combo_selections (
               order_item_id, add_on_product_id, quantity, 
               price, discounted_price, total, product_name, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
           `, [
             orderItemId, 
             combo.add_on_product_id || combo.product_id, 
@@ -904,7 +909,7 @@ const createOrder = async (req, res) => {
       if (item.variant_id) {
         await query(`
           UPDATE product_variants 
-          SET stock_quantity = stock_quantity - ?, updated_at = datetime('now')
+          SET stock_quantity = stock_quantity - ?, updated_at = NOW()
           WHERE id = ?
         `, [item.quantity, item.variant_id]);
       }
@@ -1014,7 +1019,7 @@ const updateOrder = async (req, res) => {
       });
     }
 
-    updates.push('updated_at = datetime(\'now\')');
+    updates.push('updated_at = NOW()');
     values.push(id);
 
     const queryText = `
@@ -1089,8 +1094,8 @@ const updateOrder = async (req, res) => {
         c.email as customer_email,
         c.phone as customer_phone,
         COALESCE(
-          json_group_array(
-            json_object(
+          JSON_ARRAYAGG(
+            JSON_OBJECT(
               'id', oi.id,
               'product_id', oi.product_id,
               'variant_id', oi.variant_id,
@@ -1103,7 +1108,7 @@ const updateOrder = async (req, res) => {
               'product_base_weight', p.base_weight
             )
           ), 
-          '[]'
+          JSON_ARRAY()
         ) as items
       FROM orders o
       LEFT JOIN customers c ON o.customer_id = c.id
@@ -1301,7 +1306,10 @@ const getMyOrders = async (req, res) => {
       sort_order = 'DESC'
     } = req.query;
 
-    const offset = (page - 1) * limit;
+    // Convert to integers for MySQL
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
+    const offset = (pageNum - 1) * limitNum;
     let whereConditions = ['o.customer_id = ?'];
     let queryParams = [customerId];
     let paramCount = 2;
@@ -1351,8 +1359,8 @@ const getMyOrders = async (req, res) => {
       LIMIT ? OFFSET ?
     `;
 
-    queryParams.push(limit, offset);
-    const ordersResult = await query(ordersQuery, queryParams);
+    const ordersQueryParams = [...queryParams, limitNum, offset];
+    const ordersResult = await query(ordersQuery, ordersQueryParams);
 
     // Helper function to check if an item is a deal product
     const isDealProduct = async (productId, price) => {

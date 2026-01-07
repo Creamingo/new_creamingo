@@ -44,7 +44,7 @@ const register = async (req, res) => {
     // Create customer
     const result = await query(
       `INSERT INTO customers (name, email, password, phone, address, is_active, created_at, updated_at) 
-       VALUES (?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))`,
+       VALUES (?, ?, ?, ?, ?, 1, NOW(), NOW())`,
       [
         name,
         email,
@@ -294,7 +294,7 @@ const updateProfile = async (req, res) => {
       });
     }
 
-    updates.push('updated_at = datetime(\'now\')');
+    updates.push('updated_at = NOW()');
     values.push(customerId);
 
     const queryStr = `UPDATE customers SET ${updates.join(', ')} WHERE id = ?`;
@@ -382,7 +382,7 @@ const changePassword = async (req, res) => {
 
     // Update password
     await query(
-      'UPDATE customers SET password = ?, updated_at = datetime(\'now\') WHERE id = ?',
+      'UPDATE customers SET password = ?, updated_at = NOW() WHERE id = ?',
       [hashedNewPassword, customerId]
     );
 

@@ -114,7 +114,7 @@ const checkAndAwardMilestones = async (customerId) => {
         await query(
           `INSERT INTO wallet_transactions 
            (customer_id, type, amount, description, status, transaction_type, created_at, updated_at)
-           VALUES (?, 'credit', ?, ?, 'completed', 'referral_bonus', datetime('now'), datetime('now'))`,
+           VALUES (?, 'credit', ?, ?, 'completed', 'referral_bonus', NOW(), NOW())`,
           [customerId, milestone.bonus, `Milestone: ${milestone.name}`]
         );
 

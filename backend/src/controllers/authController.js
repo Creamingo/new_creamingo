@@ -36,7 +36,7 @@ const register = async (req, res) => {
     // Create user
     const result = await query(
       `INSERT INTO users (name, email, password, role, created_at, updated_at) 
-       VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`,
+       VALUES (?, ?, ?, ?, NOW(), NOW())`,
       [name, email, hashedPassword, role]
     );
 
@@ -236,7 +236,7 @@ const updateProfile = async (req, res) => {
       });
     }
 
-    updates.push('updated_at = datetime(\'now\')');
+    updates.push('updated_at = NOW()');
     values.push(userId);
 
     const queryStr = `UPDATE users SET ${updates.join(', ')} WHERE id = ?`;
@@ -311,7 +311,7 @@ const changePassword = async (req, res) => {
 
     // Update password
     await query(
-      'UPDATE users SET password = ?, updated_at = datetime(\'now\') WHERE id = ?',
+      'UPDATE users SET password = ?, updated_at = NOW() WHERE id = ?',
       [hashedNewPassword, userId]
     );
 

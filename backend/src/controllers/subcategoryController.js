@@ -108,7 +108,7 @@ const createSubcategory = async (req, res) => {
 
     const result = await query(`
       INSERT INTO subcategories (name, description, category_id, image_url, is_active, order_index, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
     `, [name, description, category_id, image_url, is_active, order_index]);
 
     const subcategoryId = result.lastID;
@@ -191,7 +191,7 @@ const updateSubcategory = async (req, res) => {
       });
     }
 
-    updates.push('updated_at = datetime(\'now\')');
+    updates.push('updated_at = NOW()');
     values.push(id);
 
     const queryText = `
@@ -290,7 +290,7 @@ const updateSubcategoryOrder = async (req, res) => {
     for (const subcategory of subcategories) {
       if (subcategory.id && subcategory.order_index !== undefined) {
         await query(
-          'UPDATE subcategories SET order_index = ?, updated_at = datetime(\'now\') WHERE id = ?',
+          'UPDATE subcategories SET order_index = ?, updated_at = NOW() WHERE id = ?',
           [subcategory.order_index, subcategory.id]
         );
       }

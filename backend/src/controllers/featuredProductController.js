@@ -213,7 +213,7 @@ const createFeaturedProduct = async (req, res) => {
     // Insert new featured product
     const insertSql = `
       INSERT INTO featured_products (product_id, section, display_order, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))
+      VALUES (?, ?, ?, 1, NOW(), NOW())
     `;
     
     const insertResult = await query(insertSql, [product_id, section, display_order]);
@@ -296,7 +296,7 @@ const updateFeaturedProduct = async (req, res) => {
       });
     }
     
-    updateFields.push('updated_at = datetime(\'now\')');
+    updateFields.push('updated_at = NOW()');
     updateValues.push(id);
     
     const updateSql = `
@@ -451,7 +451,7 @@ const toggleFeaturedProductStatus = async (req, res) => {
     
     // Update status
     await query(
-      'UPDATE featured_products SET is_active = ?, updated_at = datetime(\'now\') WHERE id = ?',
+      'UPDATE featured_products SET is_active = ?, updated_at = NOW() WHERE id = ?',
       [newStatus, id]
     );
     
@@ -489,7 +489,7 @@ const reorderFeaturedProducts = async (req, res) => {
     for (const product of products) {
       if (product.id && product.display_order !== undefined) {
         await query(
-          'UPDATE featured_products SET display_order = ?, updated_at = datetime(\'now\') WHERE id = ?',
+          'UPDATE featured_products SET display_order = ?, updated_at = NOW() WHERE id = ?',
           [product.display_order, product.id]
         );
       }
@@ -575,7 +575,7 @@ const toggleFeaturedStatus = async (req, res) => {
     
     // Update featured_products table
     await query(
-      'UPDATE featured_products SET is_featured = ?, updated_at = datetime(\'now\') WHERE id = ?',
+      'UPDATE featured_products SET is_featured = ?, updated_at = NOW() WHERE id = ?',
       [newStatus, id]
     );
     
@@ -588,7 +588,7 @@ const toggleFeaturedStatus = async (req, res) => {
     if (productCheck.rows.length > 0) {
       const productId = productCheck.rows[0].product_id;
       await query(
-        'UPDATE products SET is_featured = ?, updated_at = datetime(\'now\') WHERE id = ?',
+        'UPDATE products SET is_featured = ?, updated_at = NOW() WHERE id = ?',
         [newStatus, productId]
       );
     }
@@ -634,7 +634,7 @@ const toggleTopProductStatus = async (req, res) => {
     
     // Update featured_products table
     await query(
-      'UPDATE featured_products SET is_top_product = ?, updated_at = datetime(\'now\') WHERE id = ?',
+      'UPDATE featured_products SET is_top_product = ?, updated_at = NOW() WHERE id = ?',
       [newStatus, id]
     );
     
@@ -647,7 +647,7 @@ const toggleTopProductStatus = async (req, res) => {
     if (productCheck.rows.length > 0) {
       const productId = productCheck.rows[0].product_id;
       await query(
-        'UPDATE products SET is_top_product = ?, updated_at = datetime(\'now\') WHERE id = ?',
+        'UPDATE products SET is_top_product = ?, updated_at = NOW() WHERE id = ?',
         [newStatus, productId]
       );
       
@@ -701,7 +701,7 @@ const toggleBestsellerStatus = async (req, res) => {
     
     // Update featured_products table
     await query(
-      'UPDATE featured_products SET is_bestseller = ?, updated_at = datetime(\'now\') WHERE id = ?',
+      'UPDATE featured_products SET is_bestseller = ?, updated_at = NOW() WHERE id = ?',
       [newStatus, id]
     );
     
@@ -714,7 +714,7 @@ const toggleBestsellerStatus = async (req, res) => {
     if (productCheck.rows.length > 0) {
       const productId = productCheck.rows[0].product_id;
       await query(
-        'UPDATE products SET is_bestseller = ?, updated_at = datetime(\'now\') WHERE id = ?',
+        'UPDATE products SET is_bestseller = ?, updated_at = NOW() WHERE id = ?',
         [newStatus, productId]
       );
       
@@ -767,7 +767,7 @@ const toggleActiveStatus = async (req, res) => {
     
     // Update featured_products table
     await query(
-      'UPDATE featured_products SET is_active = ?, updated_at = datetime(\'now\') WHERE id = ?',
+      'UPDATE featured_products SET is_active = ?, updated_at = NOW() WHERE id = ?',
       [newStatus, id]
     );
     

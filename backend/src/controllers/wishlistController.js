@@ -129,7 +129,7 @@ const addToWishlist = async (req, res) => {
     // Add to wishlist
     const result = await query(`
       INSERT INTO wishlist (customer_id, product_id, created_at, updated_at)
-      VALUES (?, ?, datetime('now'), datetime('now'))
+      VALUES (?, ?, NOW(), NOW())
     `, [customer_id, productId]);
 
     console.log('Wishlist insert result:', { lastID: result.lastID, changes: result.rowCount });

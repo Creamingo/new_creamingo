@@ -230,7 +230,7 @@ const createFeaturedCategory = async (req, res) => {
         created_at, 
         updated_at
       )
-      VALUES (?, ?, ?, ?, 1, ?, ?, datetime('now'), datetime('now'))
+      VALUES (?, ?, ?, ?, 1, ?, ?, NOW(), NOW())
     `;
     
     const insertResult = await query(insertSql, [
@@ -336,7 +336,7 @@ const updateFeaturedCategory = async (req, res) => {
       });
     }
     
-    updateFields.push('updated_at = datetime(\'now\')');
+    updateFields.push('updated_at = NOW()');
     updateValues.push(id);
     
     const updateSql = `
@@ -560,7 +560,7 @@ const toggleFeaturedCategoryStatus = async (req, res) => {
     
     // Update status
     await query(
-      'UPDATE featured_categories SET is_active = ?, updated_at = datetime(\'now\') WHERE id = ?',
+      'UPDATE featured_categories SET is_active = ?, updated_at = NOW() WHERE id = ?',
       [newStatus, id]
     );
     
@@ -598,7 +598,7 @@ const reorderFeaturedCategories = async (req, res) => {
     for (const category of categories) {
       if (category.id && category.display_order !== undefined) {
         await query(
-          'UPDATE featured_categories SET display_order = ?, updated_at = datetime(\'now\') WHERE id = ?',
+          'UPDATE featured_categories SET display_order = ?, updated_at = NOW() WHERE id = ?',
           [category.display_order, category.id]
         );
       }
