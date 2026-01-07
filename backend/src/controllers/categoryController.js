@@ -692,6 +692,8 @@ const getSubcategoriesByCategorySlug = async (req, res) => {
 const getSubcategoryBySlugs = async (req, res) => {
   try {
     const { categorySlug, subCategorySlug } = req.params;
+    
+    console.log('getSubcategoryBySlugs called with:', { categorySlug, subCategorySlug });
 
     // Map slugs directly to category IDs
     const slugToCategoryIdMap = {
@@ -740,15 +742,32 @@ const getSubcategoryBySlugs = async (req, res) => {
     const subcategories = subcategoriesResult.rows || [];
     
     // Find the subcategory that matches the slug
+    // First try to match using the slug column if it exists, otherwise generate from name
     const subcategory = subcategories.find(sub => {
-      const subSlug = sub.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and');
-      return subSlug === subCategorySlug;
+      // If slug column exists and is not null, use it
+      if (sub.slug && sub.slug.trim() !== '') {
+        return sub.slug.toLowerCase() === subCategorySlug.toLowerCase();
+      }
+      // Otherwise, generate slug from name
+      const subSlug = sub.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and').replace(/'/g, '');
+      return subSlug === subCategorySlug.toLowerCase();
     });
 
     if (!subcategory) {
+      // Return available subcategories for debugging
+      const availableSlugs = subcategories.map(sub => {
+        if (sub.slug && sub.slug.trim() !== '') {
+          return sub.slug;
+        }
+        return sub.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and').replace(/'/g, '');
+      });
+      
       return res.status(404).json({
         success: false,
-        message: 'Subcategory not found'
+        message: 'Subcategory not found',
+        requestedSlug: subCategorySlug,
+        availableSlugs: availableSlugs,
+        availableSubcategories: subcategories.map(sub => ({ id: sub.id, name: sub.name, slug: sub.slug }))
       });
     }
 

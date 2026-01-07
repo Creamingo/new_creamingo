@@ -19,6 +19,13 @@ const { validateBanner } = require('../middleware/validation');
 // Public routes (for frontend display)
 router.get('/public', getBanners); // Public endpoint for frontend
 
+// Public tracking routes (for frontend analytics)
+// POST /api/banners/:id/track/view - Track banner view (public)
+router.post('/:id/track/view', trackBannerView);
+
+// POST /api/banners/:id/track/click - Track banner click (public)
+router.post('/:id/track/click', trackBannerClick);
+
 // Apply authentication middleware to protected routes
 router.use(authMiddleware);
 
@@ -46,12 +53,6 @@ router.patch('/:id/toggle', toggleBannerStatus);
 // Analytics routes (protected)
 // GET /api/banners/:id/analytics - Get banner analytics
 router.get('/:id/analytics', getBannerAnalytics);
-
-// POST /api/banners/:id/track/view - Track banner view (can be public for frontend)
-router.post('/:id/track/view', trackBannerView);
-
-// POST /api/banners/:id/track/click - Track banner click (can be public for frontend)
-router.post('/:id/track/click', trackBannerClick);
 
 // POST /api/banners/:id/track/conversion - Track banner conversion (protected)
 router.post('/:id/track/conversion', trackBannerConversion);
