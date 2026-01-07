@@ -53,13 +53,14 @@ const getProducts = async (req, res) => {
     let queryParams = [];
 
     // Build WHERE conditions
+    // Use JOIN instead of subquery for MySQL prepared statement compatibility
     if (category_id) {
       const categoryIdInt = parseInt(category_id, 10);
       if (!isNaN(categoryIdInt)) {
-        whereConditions.push(`p.id IN (
-          SELECT DISTINCT product_id 
-          FROM product_categories 
-          WHERE category_id = ?
+        whereConditions.push(`EXISTS (
+          SELECT 1 
+          FROM product_categories pc 
+          WHERE pc.product_id = p.id AND pc.category_id = ?
         )`);
         queryParams.push(categoryIdInt);
       }
@@ -68,10 +69,10 @@ const getProducts = async (req, res) => {
     if (subcategory_id) {
       const subcategoryIdInt = parseInt(subcategory_id, 10);
       if (!isNaN(subcategoryIdInt)) {
-        whereConditions.push(`p.id IN (
-          SELECT DISTINCT product_id 
-          FROM product_subcategories 
-          WHERE subcategory_id = ?
+        whereConditions.push(`EXISTS (
+          SELECT 1 
+          FROM product_subcategories ps 
+          WHERE ps.product_id = p.id AND ps.subcategory_id = ?
         )`);
         queryParams.push(subcategoryIdInt);
       }
@@ -84,10 +85,10 @@ const getProducts = async (req, res) => {
       const categoryIdInts = categoryIdArray.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
       if (categoryIdInts.length > 0) {
         const categoryPlaceholders = categoryIdInts.map(() => '?').join(',');
-        whereConditions.push(`p.id IN (
-          SELECT DISTINCT product_id 
-          FROM product_categories 
-          WHERE category_id IN (${categoryPlaceholders})
+        whereConditions.push(`EXISTS (
+          SELECT 1 
+          FROM product_categories pc 
+          WHERE pc.product_id = p.id AND pc.category_id IN (${categoryPlaceholders})
         )`);
         queryParams.push(...categoryIdInts);
       }
@@ -100,10 +101,10 @@ const getProducts = async (req, res) => {
       const subcategoryIdInts = subcategoryIdArray.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
       if (subcategoryIdInts.length > 0) {
         const subcategoryPlaceholders = subcategoryIdInts.map(() => '?').join(',');
-        whereConditions.push(`p.id IN (
-          SELECT DISTINCT product_id 
-          FROM product_subcategories 
-          WHERE subcategory_id IN (${subcategoryPlaceholders})
+        whereConditions.push(`EXISTS (
+          SELECT 1 
+          FROM product_subcategories ps 
+          WHERE ps.product_id = p.id AND ps.subcategory_id IN (${subcategoryPlaceholders})
         )`);
         queryParams.push(...subcategoryIdInts);
       }
@@ -146,10 +147,10 @@ const getProducts = async (req, res) => {
       
       const categoryId = categorySlugToIdMap[category];
       if (categoryId) {
-        whereConditions.push(`p.id IN (
-          SELECT DISTINCT product_id 
-          FROM product_categories 
-          WHERE category_id = ?
+        whereConditions.push(`EXISTS (
+          SELECT 1 
+          FROM product_categories pc 
+          WHERE pc.product_id = p.id AND pc.category_id = ?
         )`);
         queryParams.push(categoryId);
       }
@@ -226,10 +227,10 @@ const getProducts = async (req, res) => {
       
       const subcategoryId = subcategorySlugToIdMap[subcategory];
       if (subcategoryId) {
-        whereConditions.push(`p.id IN (
-          SELECT DISTINCT product_id 
-          FROM product_subcategories 
-          WHERE subcategory_id = ?
+        whereConditions.push(`EXISTS (
+          SELECT 1 
+          FROM product_subcategories ps 
+          WHERE ps.product_id = p.id AND ps.subcategory_id = ?
         )`);
         queryParams.push(subcategoryId);
       }
