@@ -2,6 +2,26 @@ const path = require('path');
 const fs = require('fs');
 const { resizeIconImage } = require('../utils/imageResize');
 
+// Helper function to get the base URL for file URLs
+const getBaseUrl = (req) => {
+  // Use environment variable if set (for VPS/production)
+  if (process.env.BACKEND_URL) {
+    return process.env.BACKEND_URL;
+  }
+  // Use the request's origin or host header if available
+  const origin = req.get('origin') || req.get('referer');
+  if (origin) {
+    try {
+      const url = new URL(origin);
+      return `${url.protocol}//${url.host}`;
+    } catch (e) {
+      // Fallback to host header
+    }
+  }
+  // Fallback to request host
+  return `${req.protocol}://${req.get('host')}`;
+};
+
 // Upload single file
 const uploadSingle = async (req, res) => {
   try {
@@ -12,7 +32,8 @@ const uploadSingle = async (req, res) => {
       });
     }
 
-    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    const baseUrl = getBaseUrl(req);
+    const fileUrl = `${baseUrl}/uploads/${req.file.filename}`;
 
     res.json({
       success: true,
@@ -43,11 +64,12 @@ const uploadMultiple = async (req, res) => {
       });
     }
 
+    const baseUrl = getBaseUrl(req);
     const files = req.files.map(file => ({
       filename: file.filename,
       originalname: file.originalname,
       size: file.size,
-      url: `${req.protocol}://${req.get('host')}/uploads/${file.filename}`
+      url: `${baseUrl}/uploads/${file.filename}`
     }));
 
     res.json({
@@ -113,7 +135,8 @@ const getFileInfo = async (req, res) => {
     }
 
     const stats = fs.statSync(filePath);
-    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${filename}`;
+    const baseUrl = getBaseUrl(req);
+    const fileUrl = `${baseUrl}/uploads/${filename}`;
 
     res.json({
       success: true,
@@ -162,7 +185,8 @@ const uploadIconImage = async (req, res) => {
     // Delete the original file
     fs.unlinkSync(originalPath);
 
-    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${resizedFilename}`;
+    const baseUrl = getBaseUrl(req);
+    const fileUrl = `${baseUrl}/uploads/${resizedFilename}`;
 
     res.json({
       success: true,
