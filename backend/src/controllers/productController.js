@@ -109,17 +109,17 @@ const getProducts = async (req, res) => {
       }
     }
 
-    if (is_active !== undefined) {
+    if (is_active !== undefined && is_active !== null && is_active !== '') {
       whereConditions.push(`p.is_active = ?`);
       // Convert to integer: 'true', '1', 1 → 1, everything else → 0
-      const isActiveValue = (is_active === 'true' || is_active === '1' || is_active === 1) ? 1 : 0;
+      const isActiveValue = (is_active === 'true' || is_active === '1' || is_active === 1 || is_active === true) ? 1 : 0;
       queryParams.push(isActiveValue);
     }
 
-    if (is_featured !== undefined) {
+    if (is_featured !== undefined && is_featured !== null && is_featured !== '') {
       whereConditions.push(`p.is_featured = ?`);
       // Convert to integer: 'true', '1', 1 → 1, everything else → 0
-      const isFeaturedValue = (is_featured === 'true' || is_featured === '1' || is_featured === 1) ? 1 : 0;
+      const isFeaturedValue = (is_featured === 'true' || is_featured === '1' || is_featured === 1 || is_featured === true) ? 1 : 0;
       queryParams.push(isFeaturedValue);
     }
 
@@ -256,10 +256,44 @@ const getProducts = async (req, res) => {
 
     // Get products (without variants for now - we'll fetch them separately)
     // Create a new array with limit and offset for the products query
-    // Ensure limitNum and offset are integers
-    const finalLimit = Number.isInteger(limitNum) ? limitNum : 10;
-    const finalOffset = Number.isInteger(offset) ? offset : 0;
-    const productsQueryParams = [...queryParams, finalLimit, finalOffset];
+    // Ensure limitNum and offset are integers - convert explicitly
+    const finalLimit = Number.isInteger(limitNum) && limitNum > 0 ? limitNum : 10;
+    const finalOffset = Number.isInteger(offset) && offset >= 0 ? offset : 0;
+    
+    // Ensure all parameters are properly typed (no undefined, null, or NaN)
+    // Filter out undefined and NaN, but keep null (MySQL accepts null)
+    const safeQueryParams = queryParams.filter(p => {
+      if (p === undefined) {
+        console.error('⚠️ Filtering out undefined parameter');
+        return false;
+      }
+      if (typeof p === 'number' && isNaN(p)) {
+        console.error('⚠️ Filtering out NaN parameter');
+        return false;
+      }
+      return true;
+    });
+    
+    // Build final parameter array - ensure limit and offset are numbers
+    const productsQueryParams = [
+      ...safeQueryParams,
+      Number(finalLimit),
+      Number(finalOffset)
+    ];
+    
+    // Log parameter construction
+    console.error('🔍 [DEBUG] Parameter construction:', {
+      queryParamsLength: queryParams.length,
+      queryParams: queryParams,
+      safeQueryParamsLength: safeQueryParams.length,
+      safeQueryParams: safeQueryParams,
+      finalLimit: finalLimit,
+      finalOffset: finalOffset,
+      finalLimitType: typeof finalLimit,
+      finalOffsetType: typeof finalOffset,
+      productsQueryParamsLength: productsQueryParams.length,
+      productsQueryParams: productsQueryParams
+    });
     
     const productsQuery = `
       SELECT 
@@ -302,57 +336,89 @@ const getProducts = async (req, res) => {
     
     // Filter out any undefined or null values and ensure all are properly typed
     const sanitizedParams = productsQueryParams
-      .map((param, index) => {
-        if (param === undefined || param === null) {
-          console.warn(`Parameter at index ${index} is ${param}, replacing with appropriate default`);
-          return null; // MySQL accepts null
+      .filter((param, index) => {
+        // Remove undefined, but keep null (MySQL accepts null)
+        if (param === undefined) {
+          console.error(`⚠️ Removing undefined parameter at index ${index}`);
+          return false;
         }
-        return param;
+        // Check for NaN
+        if (typeof param === 'number' && isNaN(param)) {
+          console.error(`⚠️ Removing NaN parameter at index ${index}`);
+          return false;
+        }
+        return true;
       });
     
+    // Always log query details for debugging - use console.error to ensure it shows in error log
+    console.error('🔍 [DEBUG] Executing products query:', {
+      placeholderCount,
+      paramCount: sanitizedParams.length,
+      params: sanitizedParams,
+      whereClause: whereClause || 'NO WHERE CLAUSE',
+      whereConditionsCount: whereConditions.length,
+      whereConditions: whereConditions,
+      queryParamsLength: queryParams.length,
+      safeQueryParamsLength: safeQueryParams.length,
+      finalLimit,
+      finalOffset,
+      reqQuery: {
+        category_id,
+        is_active,
+        limit,
+        page
+      }
+    });
+    console.error('🔍 [DEBUG] Full query:', productsQuery);
+    console.error('🔍 [DEBUG] All params (JSON):', JSON.stringify(sanitizedParams));
+
     if (placeholderCount !== sanitizedParams.length) {
-      console.error('Parameter mismatch detected:', {
-        query: productsQuery,
+      console.error('❌ Parameter mismatch detected:', {
         placeholderCount,
         paramCount: sanitizedParams.length,
         originalParamCount: productsQueryParams.length,
         params: sanitizedParams,
         originalParams: productsQueryParams,
         whereClause,
-        whereConditions
+        whereConditions,
+        fullQuery: productsQuery
       });
-      // Don't proceed with mismatched parameters
-      throw new Error(`Parameter count mismatch: expected ${placeholderCount} placeholders but got ${sanitizedParams.length} parameters`);
+      return res.status(500).json({
+        success: false,
+        message: 'Internal server error: Parameter count mismatch',
+        error: `Expected ${placeholderCount} placeholders but got ${sanitizedParams.length} parameters`
+      });
     }
 
-    // Log for debugging (remove in production if too verbose)
-    console.log('Executing products query:', {
-      placeholderCount,
-      paramCount: sanitizedParams.length,
-      params: sanitizedParams.map(p => typeof p === 'string' ? p.substring(0, 50) : p),
-      whereClause: whereClause.substring(0, 200)
-    });
+    try {
+      const productsResult = await query(productsQuery, sanitizedParams);
 
-    const productsResult = await query(productsQuery, sanitizedParams);
+      // Get product IDs for fetching categories and subcategories
+      const productIds = productsResult.rows.map(p => p.id);
+      
+      // Fetch products with their categories, subcategories, variants, and gallery images
+      const products = await getProductsWithCategories(productIds);
 
-    // Get product IDs for fetching categories and subcategories
-    const productIds = productsResult.rows.map(p => p.id);
-    
-    // Fetch products with their categories, subcategories, variants, and gallery images
-    const products = await getProductsWithCategories(productIds);
-
-    res.json({
-      success: true,
-      data: {
-        products,
-        pagination: {
-          current_page: pageNum,
-          per_page: limitNum,
-          total,
-          total_pages: Math.ceil(total / limitNum)
+      res.json({
+        success: true,
+        data: {
+          products,
+          pagination: {
+            current_page: pageNum,
+            per_page: limitNum,
+            total,
+            total_pages: Math.ceil(total / limitNum)
+          }
         }
-      }
-    });
+      });
+    } catch (queryError) {
+      console.error('❌ Query execution error:', queryError);
+      console.error('❌ Query:', productsQuery.substring(0, 500));
+      console.error('❌ Params:', sanitizedParams);
+      console.error('❌ Placeholder count:', placeholderCount);
+      console.error('❌ Param count:', sanitizedParams.length);
+      throw queryError; // Re-throw to be caught by outer catch
+    }
   } catch (error) {
     console.error('Get products error:', error);
     console.error('Error stack:', error.stack);
