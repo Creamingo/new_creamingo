@@ -54,55 +54,73 @@ const getProducts = async (req, res) => {
 
     // Build WHERE conditions
     if (category_id) {
-      whereConditions.push(`p.id IN (
-        SELECT DISTINCT product_id 
-        FROM product_categories 
-        WHERE category_id = ?
-      )`);
-      queryParams.push(category_id);
+      const categoryIdInt = parseInt(category_id, 10);
+      if (!isNaN(categoryIdInt)) {
+        whereConditions.push(`p.id IN (
+          SELECT DISTINCT product_id 
+          FROM product_categories 
+          WHERE category_id = ?
+        )`);
+        queryParams.push(categoryIdInt);
+      }
     }
 
     if (subcategory_id) {
-      whereConditions.push(`p.id IN (
-        SELECT DISTINCT product_id 
-        FROM product_subcategories 
-        WHERE subcategory_id = ?
-      )`);
-      queryParams.push(subcategory_id);
+      const subcategoryIdInt = parseInt(subcategory_id, 10);
+      if (!isNaN(subcategoryIdInt)) {
+        whereConditions.push(`p.id IN (
+          SELECT DISTINCT product_id 
+          FROM product_subcategories 
+          WHERE subcategory_id = ?
+        )`);
+        queryParams.push(subcategoryIdInt);
+      }
     }
 
     // Handle multiple categories filter
     if (category_ids) {
       const categoryIdArray = Array.isArray(category_ids) ? category_ids : category_ids.split(',');
-      const categoryPlaceholders = categoryIdArray.map(() => '?').join(',');
-      whereConditions.push(`p.id IN (
-        SELECT DISTINCT product_id 
-        FROM product_categories 
-        WHERE category_id IN (${categoryPlaceholders})
-      )`);
-      queryParams.push(...categoryIdArray);
+      // Convert all to integers for MySQL
+      const categoryIdInts = categoryIdArray.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+      if (categoryIdInts.length > 0) {
+        const categoryPlaceholders = categoryIdInts.map(() => '?').join(',');
+        whereConditions.push(`p.id IN (
+          SELECT DISTINCT product_id 
+          FROM product_categories 
+          WHERE category_id IN (${categoryPlaceholders})
+        )`);
+        queryParams.push(...categoryIdInts);
+      }
     }
 
     // Handle multiple subcategories filter
     if (subcategory_ids) {
       const subcategoryIdArray = Array.isArray(subcategory_ids) ? subcategory_ids : subcategory_ids.split(',');
-      const subcategoryPlaceholders = subcategoryIdArray.map(() => '?').join(',');
-      whereConditions.push(`p.id IN (
-        SELECT DISTINCT product_id 
-        FROM product_subcategories 
-        WHERE subcategory_id IN (${subcategoryPlaceholders})
-      )`);
-      queryParams.push(...subcategoryIdArray);
+      // Convert all to integers for MySQL
+      const subcategoryIdInts = subcategoryIdArray.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+      if (subcategoryIdInts.length > 0) {
+        const subcategoryPlaceholders = subcategoryIdInts.map(() => '?').join(',');
+        whereConditions.push(`p.id IN (
+          SELECT DISTINCT product_id 
+          FROM product_subcategories 
+          WHERE subcategory_id IN (${subcategoryPlaceholders})
+        )`);
+        queryParams.push(...subcategoryIdInts);
+      }
     }
 
     if (is_active !== undefined) {
       whereConditions.push(`p.is_active = ?`);
-      queryParams.push(is_active === 'true' ? 1 : 0);
+      // Convert to integer: 'true', '1', 1 → 1, everything else → 0
+      const isActiveValue = (is_active === 'true' || is_active === '1' || is_active === 1) ? 1 : 0;
+      queryParams.push(isActiveValue);
     }
 
     if (is_featured !== undefined) {
       whereConditions.push(`p.is_featured = ?`);
-      queryParams.push(is_featured === 'true' ? 1 : 0);
+      // Convert to integer: 'true', '1', 1 → 1, everything else → 0
+      const isFeaturedValue = (is_featured === 'true' || is_featured === '1' || is_featured === 1) ? 1 : 0;
+      queryParams.push(isFeaturedValue);
     }
 
     if (search) {
@@ -238,7 +256,10 @@ const getProducts = async (req, res) => {
 
     // Get products (without variants for now - we'll fetch them separately)
     // Create a new array with limit and offset for the products query
-    const productsQueryParams = [...queryParams, limitNum, offset];
+    // Ensure limitNum and offset are integers
+    const finalLimit = Number.isInteger(limitNum) ? limitNum : 10;
+    const finalOffset = Number.isInteger(offset) ? offset : 0;
+    const productsQueryParams = [...queryParams, finalLimit, finalOffset];
     
     const productsQuery = `
       SELECT 
@@ -275,6 +296,18 @@ const getProducts = async (req, res) => {
       ORDER BY p.${sortField} ${sortDirection}
       LIMIT ? OFFSET ?
     `;
+
+    // Debug: Log query and params count for troubleshooting
+    const placeholderCount = (productsQuery.match(/\?/g) || []).length;
+    if (placeholderCount !== productsQueryParams.length) {
+      console.error('Parameter mismatch detected:', {
+        query: productsQuery,
+        placeholderCount,
+        paramCount: productsQueryParams.length,
+        params: productsQueryParams,
+        whereClause
+      });
+    }
 
     const productsResult = await query(productsQuery, productsQueryParams);
 
