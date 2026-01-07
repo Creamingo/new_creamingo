@@ -60,37 +60,34 @@ const getOrders = async (req, res) => {
     const offset = (pageNum - 1) * limitNum;
     let whereConditions = [];
     let queryParams = [];
-    let paramCount = 1;
 
-    // Build WHERE conditions
+    // Build WHERE conditions - use MySQL placeholders (?)
     if (status) {
-      whereConditions.push(`o.status = $${paramCount}`);
+      whereConditions.push(`o.status = ?`);
       queryParams.push(status);
-      paramCount++;
     }
 
     if (customer_id) {
-      whereConditions.push(`o.customer_id = $${paramCount}`);
-      queryParams.push(customer_id);
-      paramCount++;
+      const customerIdInt = parseInt(customer_id, 10);
+      if (!isNaN(customerIdInt)) {
+        whereConditions.push(`o.customer_id = ?`);
+        queryParams.push(customerIdInt);
+      }
     }
 
     if (date_from) {
-      whereConditions.push(`o.created_at >= $${paramCount}`);
+      whereConditions.push(`o.created_at >= ?`);
       queryParams.push(date_from);
-      paramCount++;
     }
 
     if (date_to) {
-      whereConditions.push(`o.created_at <= $${paramCount}`);
+      whereConditions.push(`o.created_at <= ?`);
       queryParams.push(date_to);
-      paramCount++;
     }
 
     if (delivery_date) {
-      whereConditions.push(`o.delivery_date = $${paramCount}`);
+      whereConditions.push(`o.delivery_date = ?`);
       queryParams.push(delivery_date);
-      paramCount++;
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
@@ -166,7 +163,10 @@ const getOrders = async (req, res) => {
       LIMIT ? OFFSET ?
     `;
 
-    const ordersQueryParams = [...queryParams, limitNum, offset];
+    // Ensure limit and offset are integers
+    const finalLimit = Number.isInteger(limitNum) && limitNum > 0 ? limitNum : 10;
+    const finalOffset = Number.isInteger(offset) && offset >= 0 ? offset : 0;
+    const ordersQueryParams = [...queryParams, finalLimit, finalOffset];
     
     let ordersResult;
     try {
@@ -230,7 +230,9 @@ const getOrders = async (req, res) => {
         LIMIT ? OFFSET ?
       `;
       
-      const fallbackQueryParams = [...queryParams, limitNum, offset];
+      const finalLimit = Number.isInteger(limitNum) && limitNum > 0 ? limitNum : 10;
+      const finalOffset = Number.isInteger(offset) && offset >= 0 ? offset : 0;
+      const fallbackQueryParams = [...queryParams, finalLimit, finalOffset];
       try {
         ordersResult = await query(fallbackQuery, fallbackQueryParams);
       } catch (fallbackError) {
@@ -273,7 +275,7 @@ const getOrders = async (req, res) => {
                   'cake_message', oi.cake_message
                 )
               ), 
-              '[]'
+              JSON_ARRAY()
             ) as items
           FROM orders o
           LEFT JOIN customers c ON o.customer_id = c.id
@@ -285,7 +287,7 @@ const getOrders = async (req, res) => {
           ORDER BY o.${sortField} ${sortDirection}
           LIMIT ? OFFSET ?
         `;
-        const fallbackQueryParams2 = [...queryParams, limitNum, offset];
+        const fallbackQueryParams2 = [...queryParams, finalLimit, finalOffset];
         ordersResult = await query(fallbackQuery, fallbackQueryParams2);
       }
     }
@@ -1359,7 +1361,10 @@ const getMyOrders = async (req, res) => {
       LIMIT ? OFFSET ?
     `;
 
-    const ordersQueryParams = [...queryParams, limitNum, offset];
+    // Ensure limit and offset are integers
+    const finalLimit3 = Number.isInteger(limitNum) && limitNum > 0 ? limitNum : 10;
+    const finalOffset3 = Number.isInteger(offset) && offset >= 0 ? offset : 0;
+    const ordersQueryParams = [...queryParams, finalLimit3, finalOffset3];
     const ordersResult = await query(ordersQuery, ordersQueryParams);
 
     // Helper function to check if an item is a deal product
