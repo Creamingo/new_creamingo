@@ -553,7 +553,7 @@ const trackBannerView = async (req, res) => {
     // Insert view event
     await query(
       `INSERT INTO banner_analytics (banner_id, event_type, customer_id, ip_address, user_agent, referrer_url, created_at)
-       VALUES (?, 'view', ?, ?, ?, ?, datetime('now'))`,
+       VALUES (?, 'view', ?, ?, ?, ?, NOW())`,
       [id, customer_id || null, ip_address, user_agent, referrer_url]
     );
 
@@ -596,7 +596,7 @@ const trackBannerClick = async (req, res) => {
     // Insert click event
     await query(
       `INSERT INTO banner_analytics (banner_id, event_type, customer_id, ip_address, user_agent, referrer_url, created_at)
-       VALUES (?, 'click', ?, ?, ?, ?, datetime('now'))`,
+       VALUES (?, 'click', ?, ?, ?, ?, NOW())`,
       [id, customer_id || null, ip_address, user_agent, referrer_url]
     );
 
@@ -642,7 +642,7 @@ const trackBannerConversion = async (req, res) => {
     // Insert conversion event
     await query(
       `INSERT INTO banner_analytics (banner_id, event_type, customer_id, ip_address, user_agent, referrer_url, revenue, created_at)
-       VALUES (?, 'conversion', ?, ?, ?, ?, ?, datetime('now'))`,
+       VALUES (?, 'conversion', ?, ?, ?, ?, ?, NOW())`,
       [id, customer_id || null, ip_address, user_agent, referrer_url, revenue || 0]
     );
 
