@@ -175,6 +175,20 @@ app.use('/uploads', (req, res, next) => {
   }
 }));
 
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Creamingo API',
+    version: '1.0.0',
+    endpoints: {
+      health: '/health',
+      api: '/api'
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
