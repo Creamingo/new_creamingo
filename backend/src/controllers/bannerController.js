@@ -1,4 +1,9 @@
 const { query } = require('../config/db');
+const { mapUploadFields, normalizeUploadUrl } = require('../utils/urlHelpers');
+
+const mapBanner = (req, banner) => (
+  mapUploadFields(req, banner, ['image_url'])
+);
 
 // Get all banners
 const getBanners = async (req, res) => {
@@ -34,7 +39,7 @@ const getBanners = async (req, res) => {
 
     res.json({
       success: true,
-      data: { banners: result.rows }
+      data: { banners: result.rows.map((banner) => mapBanner(req, banner)) }
     });
   } catch (error) {
     console.error('Get banners error:', error);
@@ -75,7 +80,7 @@ const getBanner = async (req, res) => {
 
     res.json({
       success: true,
-      data: { banner: result.rows[0] }
+      data: { banner: mapBanner(req, result.rows[0]) }
     });
   } catch (error) {
     console.error('Get banner error:', error);
@@ -98,6 +103,7 @@ const createBanner = async (req, res) => {
       is_active = true, 
       order_index = 0 
     } = req.body;
+    const normalizedImageUrl = normalizeUploadUrl(image_url);
 
     // Validate required fields
     if (!title || !image_url) {
@@ -110,7 +116,7 @@ const createBanner = async (req, res) => {
     const result = await query(`
       INSERT INTO banners (title, subtitle, button_text, button_url, image_url, is_active, order_index, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-    `, [title, subtitle, button_text, button_url, image_url, is_active ? 1 : 0, order_index]);
+    `, [title, subtitle, button_text, button_url, normalizedImageUrl, is_active ? 1 : 0, order_index]);
 
     const bannerId = result.lastID;
 
@@ -131,7 +137,7 @@ const createBanner = async (req, res) => {
       WHERE id = ?
     `, [bannerId]);
 
-    const banner = bannerResult.rows[0];
+    const banner = mapBanner(req, bannerResult.rows[0]);
 
     res.status(201).json({
       success: true,
@@ -151,7 +157,10 @@ const createBanner = async (req, res) => {
 const updateBanner = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const updateData = { ...req.body };
+    if (updateData.image_url) {
+      updateData.image_url = normalizeUploadUrl(updateData.image_url);
+    }
 
     // Check if banner exists
     const existingBanner = await query(
@@ -217,7 +226,7 @@ const updateBanner = async (req, res) => {
       WHERE id = ?
     `, [id]);
 
-    const banner = bannerResult.rows[0];
+    const banner = mapBanner(req, bannerResult.rows[0]);
 
     res.json({
       success: true,
@@ -309,7 +318,7 @@ const toggleBannerStatus = async (req, res) => {
       WHERE id = ?
     `, [id]);
 
-    const banner = bannerResult.rows[0];
+    const banner = mapBanner(req, bannerResult.rows[0]);
 
     res.json({
       success: true,

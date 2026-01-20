@@ -1,4 +1,19 @@
 const { query } = require('../config/db');
+const { normalizeUploadUrl, buildPublicUrlWithBase } = require('./urlHelpers');
+
+const mapImageUrl = (baseUrl, value) => (
+  buildPublicUrlWithBase(baseUrl, normalizeUploadUrl(value))
+);
+
+const mapCategory = (baseUrl, category) => ({
+  ...category,
+  image_url: mapImageUrl(baseUrl, category.image_url)
+});
+
+const mapSubcategory = (baseUrl, subcategory) => ({
+  ...subcategory,
+  image_url: mapImageUrl(baseUrl, subcategory.image_url)
+});
 
 /**
  * Helper functions for managing product-category relationships
@@ -57,7 +72,7 @@ const assignProductToSubcategories = async (productId, subcategoryIds, primarySu
  * @param {number} productId - Product ID
  * @returns {Object} Product with categories and subcategories arrays
  */
-const getProductWithCategories = async (productId) => {
+const getProductWithCategories = async (productId, baseUrl = '') => {
   // Get product basic info
   const productResult = await query(`
     SELECT 
@@ -177,10 +192,11 @@ const getProductWithCategories = async (productId) => {
 
   return {
     ...product,
-    categories: categoriesResult.rows || [],
-    subcategories: subcategoriesResult.rows || [],
+    image_url: mapImageUrl(baseUrl, product.image_url),
+    categories: (categoriesResult.rows || []).map((category) => mapCategory(baseUrl, category)),
+    subcategories: (subcategoriesResult.rows || []).map((subcategory) => mapSubcategory(baseUrl, subcategory)),
     variants: variantsResult.rows || [],
-    gallery_images: galleryResult.rows.map(row => row.image_url) || []
+    gallery_images: (galleryResult.rows.map(row => row.image_url) || []).map((url) => mapImageUrl(baseUrl, url))
   };
 };
 
@@ -189,7 +205,7 @@ const getProductWithCategories = async (productId) => {
  * @param {Array} productIds - Array of product IDs
  * @returns {Array} Array of products with categories and subcategories
  */
-const getProductsWithCategories = async (productIds) => {
+const getProductsWithCategories = async (productIds, baseUrl = '') => {
   if (!productIds || productIds.length === 0) return [];
 
   const placeholders = productIds.map(() => '?').join(',');
@@ -354,10 +370,11 @@ const getProductsWithCategories = async (productIds) => {
 
     return {
       ...product,
-      categories: categoriesByProduct[product.id] || [],
-      subcategories: subcategoriesByProduct[product.id] || [],
+      image_url: mapImageUrl(baseUrl, product.image_url),
+      categories: (categoriesByProduct[product.id] || []).map((category) => mapCategory(baseUrl, category)),
+      subcategories: (subcategoriesByProduct[product.id] || []).map((subcategory) => mapSubcategory(baseUrl, subcategory)),
       variants: variants,
-      gallery_images: galleryByProduct[product.id] || []
+      gallery_images: (galleryByProduct[product.id] || []).map((url) => mapImageUrl(baseUrl, url))
     };
   });
 };

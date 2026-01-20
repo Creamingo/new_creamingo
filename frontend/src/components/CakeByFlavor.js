@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import cakeFlavorCategoryAPI from '../api/cakeFlavorCategories'
+import logger from '../utils/logger'
 
 export default function CakeByFlavor() {
   const router = useRouter()
@@ -14,12 +15,12 @@ export default function CakeByFlavor() {
     const fetchCakeFlavors = async () => {
       try {
         setLoading(true)
-        console.log('Fetching cake flavor subcategories from database...')
+        logger.log('Fetching cake flavor subcategories from database...')
         const response = await cakeFlavorCategoryAPI.getCakeFlavorCategory()
-        console.log('Cake flavor API response:', response)
+        logger.log('Cake flavor API response:', response)
         
         if (response.success && response.data && response.data.subcategories) {
-          console.log('Setting subcategories from database:', response.data.subcategories)
+          logger.log('Setting subcategories from database:', response.data.subcategories)
           setSubcategories(response.data.subcategories)
         } else {
           setError('Failed to fetch cake flavor subcategories')
@@ -44,21 +45,21 @@ export default function CakeByFlavor() {
     
     // Prevent multiple rapid clicks on the same button
     if (navigatingId === subcategory.id) {
-      console.log('Navigation already in progress for this flavor, ignoring click')
+      logger.log('Navigation already in progress for this flavor, ignoring click')
       return
     }
     
     setNavigatingId(subcategory.id)
-    console.log('Navigating to flavor:', subcategory.name)
+    logger.log('Navigating to flavor:', subcategory.name)
     const slug = subcategory.name.toLowerCase().replace(/\s+/g, '-')
     const targetUrl = `/category/cakes-by-flavor/${slug}`
     
-    console.log('Target URL:', targetUrl)
+    logger.log('Target URL:', targetUrl)
     
     // Use router.push for navigation
     try {
       router.push(targetUrl)
-      console.log('Navigation initiated to:', targetUrl)
+      logger.log('Navigation initiated to:', targetUrl)
     } catch (error) {
       console.error('Navigation failed:', error)
       setNavigatingId(null)

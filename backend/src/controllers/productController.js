@@ -9,6 +9,7 @@ const {
   setPrimaryCategory,
   setPrimarySubcategory
 } = require('../utils/productCategoryHelpers');
+const { getBaseUrl, normalizeUploadUrl, buildPublicUrlWithBase } = require('../utils/urlHelpers');
 
 // Helper function to normalize search terms (remove punctuation)
 const normalizeSearchTerm = (term) => {
@@ -275,11 +276,9 @@ const getProducts = async (req, res) => {
       return true;
     });
     
-    // Build final parameter array - ensure limit and offset are numbers
+    // Build final parameter array (limit/offset are inlined below)
     const productsQueryParams = [
-      ...safeQueryParams,
-      Number(finalLimit),
-      Number(finalOffset)
+      ...safeQueryParams
     ];
     
     // Log parameter construction
@@ -329,7 +328,7 @@ const getProducts = async (req, res) => {
       LEFT JOIN subcategories sc ON p.subcategory_id = sc.id
       ${whereClause}
       ORDER BY p.${sortField} ${sortDirection}
-      LIMIT ? OFFSET ?
+      LIMIT ${finalLimit} OFFSET ${finalOffset}
     `;
 
     // Debug: Log query and params count for troubleshooting
@@ -398,7 +397,7 @@ const getProducts = async (req, res) => {
       const productIds = productsResult.rows.map(p => p.id);
       
       // Fetch products with their categories, subcategories, variants, and gallery images
-      const products = await getProductsWithCategories(productIds);
+      const products = await getProductsWithCategories(productIds, getBaseUrl(req));
 
       res.json({
         success: true,
@@ -436,7 +435,7 @@ const getProduct = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const product = await getProductWithCategories(id);
+    const product = await getProductWithCategories(id, getBaseUrl(req));
 
     if (!product) {
       return res.status(404).json({
@@ -517,7 +516,9 @@ const getProductBySlug = async (req, res) => {
       });
     }
 
+    const baseUrl = getBaseUrl(req);
     const product = productResult.rows[0];
+    product.image_url = buildPublicUrlWithBase(baseUrl, normalizeUploadUrl(product.image_url));
 
     // Get product categories and subcategories
     const categoriesQuery = `
@@ -535,7 +536,10 @@ const getProductBySlug = async (req, res) => {
     `;
     
     const categoriesResult = await query(categoriesQuery, [product.id]);
-    product.categories = categoriesResult.rows || [];
+    product.categories = (categoriesResult.rows || []).map((category) => ({
+      ...category,
+      image_url: buildPublicUrlWithBase(baseUrl, normalizeUploadUrl(category.image_url))
+    }));
 
     // Get product subcategories
     const subcategoriesQuery = `
@@ -554,7 +558,10 @@ const getProductBySlug = async (req, res) => {
     `;
     
     const subcategoriesResult = await query(subcategoriesQuery, [product.id]);
-    product.subcategories = subcategoriesResult.rows || [];
+    product.subcategories = (subcategoriesResult.rows || []).map((subcategory) => ({
+      ...subcategory,
+      image_url: buildPublicUrlWithBase(baseUrl, normalizeUploadUrl(subcategory.image_url))
+    }));
 
     // Get product variants
     const variantsQuery = `
@@ -586,7 +593,8 @@ const getProductBySlug = async (req, res) => {
     `;
     
     const galleryResult = await query(galleryQuery, [product.id]);
-    product.gallery_images = galleryResult.rows.map(row => row.image_url) || [];
+    product.gallery_images = (galleryResult.rows.map(row => row.image_url) || [])
+      .map((url) => buildPublicUrlWithBase(baseUrl, normalizeUploadUrl(url)));
 
     // Get product attributes
     const attributesQuery = `
@@ -777,11 +785,13 @@ const getProductReviews = async (req, res) => {
       reviewImages = imagesResult.rows;
     }
 
+    const baseUrl = getBaseUrl(req);
+
     // Attach images to reviews and parse category data
     const reviewsWithImages = reviewsResult.rows.map(review => {
       review.images = reviewImages
         .filter(img => img.review_id === review.id)
-        .map(img => img.image_url);
+        .map(img => buildPublicUrlWithBase(baseUrl, normalizeUploadUrl(img.image_url)));
       
       // Parse category data if it exists in review_text
       try {
@@ -988,6 +998,11 @@ const createProduct = async (req, res) => {
     const legacyCategoryId = categoriesToUse.length > 0 ? categoriesToUse[0] : null;
     const legacySubcategoryId = subcategoriesToUse.length > 0 ? subcategoriesToUse[0] : null;
 
+    const normalizedImageUrl = normalizeUploadUrl(image_url);
+    const normalizedGalleryImages = Array.isArray(req.body.gallery_images)
+      ? req.body.gallery_images.map((url) => normalizeUploadUrl(url))
+      : [];
+
     const result = await query(`
       INSERT INTO products (
         name, slug, description, short_description, category_id, subcategory_id, base_price, base_weight, discount_percent, discounted_price,
@@ -996,7 +1011,7 @@ const createProduct = async (req, res) => {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `, [
       name, slug, description, short_description, legacyCategoryId, legacySubcategoryId, base_price, base_weight, discount_percent, discountedPrice,
-      image_url, is_active, is_featured, is_top_product, is_bestseller, (req.body.is_eggless ? 1 : 0),
+      normalizedImageUrl, is_active, is_featured, is_top_product, is_bestseller, (req.body.is_eggless ? 1 : 0),
       preparation_time, serving_size, care_storage, delivery_guidelines, req.body.shape || 'Round', req.body.country_of_origin || 'India'
     ]);
 
@@ -1041,9 +1056,9 @@ const createProduct = async (req, res) => {
     }
 
     // Handle product gallery images if provided
-    if (req.body.gallery_images && Array.isArray(req.body.gallery_images) && req.body.gallery_images.length > 0) {
-      for (let i = 0; i < req.body.gallery_images.length; i++) {
-        const imageUrl = req.body.gallery_images[i];
+    if (normalizedGalleryImages.length > 0) {
+      for (let i = 0; i < normalizedGalleryImages.length; i++) {
+        const imageUrl = normalizedGalleryImages[i];
         await query(`
           INSERT INTO product_gallery_images (
             product_id, image_url, display_order, created_at, updated_at
@@ -1057,7 +1072,7 @@ const createProduct = async (req, res) => {
     }
 
     // Fetch the created product with all details including categories, subcategories, variations and gallery images
-    const product = await getProductWithCategories(productId);
+    const product = await getProductWithCategories(productId, getBaseUrl(req));
 
     res.status(201).json({
       success: true,
@@ -1077,7 +1092,13 @@ const createProduct = async (req, res) => {
 const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const updateData = { ...req.body };
+    if (updateData.image_url) {
+      updateData.image_url = normalizeUploadUrl(updateData.image_url);
+    }
+    const normalizedGalleryImages = Array.isArray(updateData.gallery_images)
+      ? updateData.gallery_images.map((url) => normalizeUploadUrl(url))
+      : [];
 
     // Validate discount_percent if provided
     if (updateData.discount_percent !== undefined) {
@@ -1268,16 +1289,16 @@ const updateProduct = async (req, res) => {
     }
 
     // Handle product gallery images if provided
-    if (req.body.gallery_images !== undefined) {
+    if (updateData.gallery_images !== undefined) {
       // Only update gallery images if the array is explicitly provided and not empty
       // This prevents accidental deletion of gallery images when frontend sends empty array
-      if (Array.isArray(req.body.gallery_images) && req.body.gallery_images.length > 0) {
+      if (normalizedGalleryImages.length > 0) {
         // Delete existing gallery images
         await query('DELETE FROM product_gallery_images WHERE product_id = ?', [id]);
         
         // Insert new gallery images
-        for (let i = 0; i < req.body.gallery_images.length; i++) {
-          const imageUrl = req.body.gallery_images[i];
+        for (let i = 0; i < normalizedGalleryImages.length; i++) {
+          const imageUrl = normalizedGalleryImages[i];
           await query(`
             INSERT INTO product_gallery_images (
               product_id, image_url, display_order, created_at, updated_at
@@ -1366,7 +1387,8 @@ const updateProduct = async (req, res) => {
     `;
     
     const galleryResult = await query(galleryQuery, [id]);
-    product.gallery_images = galleryResult.rows.map(row => row.image_url) || [];
+    product.gallery_images = (galleryResult.rows.map(row => row.image_url) || [])
+      .map((url) => buildPublicUrlWithBase(baseUrl, normalizeUploadUrl(url)));
 
     res.json({
       success: true,
@@ -1644,7 +1666,7 @@ const getTopProducts = async (req, res) => {
     const productIds = result.rows.map(p => p.id);
     
     // Fetch products with their categories, subcategories, variants, and gallery images
-    const products = productIds.length > 0 ? await getProductsWithCategories(productIds) : [];
+    const products = productIds.length > 0 ? await getProductsWithCategories(productIds, getBaseUrl(req)) : [];
 
     res.json({
       success: true,
@@ -1807,7 +1829,7 @@ const getBestsellers = async (req, res) => {
     }
 
     // Use getProductsWithCategories to get full product data with variants, ratings, etc.
-    const products = await getProductsWithCategories(productIds);
+    const products = await getProductsWithCategories(productIds, getBaseUrl(req));
 
     res.json({
       success: true,
@@ -2909,7 +2931,7 @@ const addProductToCategories = async (req, res) => {
     await assignProductToCategories(id, category_ids, primary_category_id);
 
     // Fetch updated product
-    const product = await getProductWithCategories(id);
+    const product = await getProductWithCategories(id, getBaseUrl(req));
 
     res.json({
       success: true,
@@ -2943,7 +2965,7 @@ const removeProductFromCategoryController = async (req, res) => {
     await query('DELETE FROM product_categories WHERE product_id = ? AND category_id = ?', [id, categoryId]);
 
     // Fetch updated product
-    const product = await getProductWithCategories(id);
+    const product = await getProductWithCategories(id, getBaseUrl(req));
 
     res.json({
       success: true,
@@ -2998,7 +3020,7 @@ const setPrimaryCategoryController = async (req, res) => {
     await setPrimaryCategory(id, category_id);
 
     // Fetch updated product
-    const product = await getProductWithCategories(id);
+    const product = await getProductWithCategories(id, getBaseUrl(req));
 
     res.json({
       success: true,
@@ -3054,7 +3076,7 @@ const addProductToSubcategories = async (req, res) => {
     await assignProductToSubcategories(id, subcategory_ids, primary_subcategory_id);
 
     // Fetch updated product
-    const product = await getProductWithCategories(id);
+    const product = await getProductWithCategories(id, getBaseUrl(req));
 
     res.json({
       success: true,
@@ -3088,7 +3110,7 @@ const removeProductFromSubcategoryController = async (req, res) => {
     await query('DELETE FROM product_subcategories WHERE product_id = ? AND subcategory_id = ?', [id, subcategoryId]);
 
     // Fetch updated product
-    const product = await getProductWithCategories(id);
+    const product = await getProductWithCategories(id, getBaseUrl(req));
 
     res.json({
       success: true,
@@ -3143,7 +3165,7 @@ const setPrimarySubcategoryController = async (req, res) => {
     await setPrimarySubcategory(id, subcategory_id);
 
     // Fetch updated product
-    const product = await getProductWithCategories(id);
+    const product = await getProductWithCategories(id, getBaseUrl(req));
 
     res.json({
       success: true,
@@ -3219,11 +3241,12 @@ const createReview = async (req, res) => {
     // Insert review images if provided
     if (images && images.length > 0) {
       for (let i = 0; i < images.length; i++) {
+        const normalizedImageUrl = normalizeUploadUrl(images[i]);
         const insertImageQuery = `
           INSERT INTO product_review_images (review_id, image_url, display_order)
           VALUES (?, ?, ?)
         `;
-        await query(insertImageQuery, [reviewId, images[i], i + 1]);
+        await query(insertImageQuery, [reviewId, normalizedImageUrl, i + 1]);
       }
     }
 
@@ -3605,7 +3628,8 @@ module.exports = {
       }
 
       if (image_url) {
-        await query('INSERT INTO product_review_images (review_id, image_url, display_order) VALUES (?, ?, 1)', [reviewId, image_url]);
+        const normalizedImageUrl = normalizeUploadUrl(image_url);
+        await query('INSERT INTO product_review_images (review_id, image_url, display_order) VALUES (?, ?, 1)', [reviewId, normalizedImageUrl]);
       }
 
       return res.status(201).json({ success: true, message: 'Review submitted. Pending approval.', data: { review_id: reviewId } });

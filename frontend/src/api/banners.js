@@ -1,3 +1,5 @@
+import logger from '../utils/logger';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 class BannersAPI {
@@ -15,7 +17,7 @@ class BannersAPI {
         url += `?is_active=true`;
       }
       
-      console.log('Banners API URL:', url);
+      logger.log('Banners API URL:', url);
       
       const response = await fetch(url, {
         method: 'GET',
@@ -24,14 +26,14 @@ class BannersAPI {
         },
       });
 
-      console.log('Banners Response status:', response.status);
+      logger.log('Banners Response status:', response.status);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
-      console.log('Banners API Response:', data);
+      logger.log('Banners API Response:', data);
       
       if (data.success) {
         return data.data.banners || [];

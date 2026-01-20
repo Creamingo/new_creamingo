@@ -6,6 +6,7 @@ import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
 import "./DynamicBannerSlider.css";
 import bannersAPI from '../api/banners';
+import logger from '../utils/logger';
 
 const DynamicBannerSlider = () => {
   const [banners, setBanners] = useState([]);
@@ -32,17 +33,17 @@ const DynamicBannerSlider = () => {
         setLoading(true);
         setError(null);
         
-        console.log('Fetching banners...');
+        logger.log('Fetching banners...');
         
         // Get active banners from database
         const activeBanners = await bannersAPI.getActiveBanners();
         
-        console.log('Fetched banners:', activeBanners);
+        logger.log('Fetched banners:', activeBanners);
         
         // Sort banners by order_index
         const sortedBanners = activeBanners.sort((a, b) => a.order_index - b.order_index);
         
-        console.log('Sorted banners:', sortedBanners);
+        logger.log('Sorted banners:', sortedBanners);
         
         setBanners(sortedBanners);
       } catch (err) {

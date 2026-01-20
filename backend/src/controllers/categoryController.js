@@ -1,4 +1,31 @@
 const { query } = require('../config/db');
+const { mapUploadFields, applyUploadUrl, normalizeUploadUrl } = require('../utils/urlHelpers');
+
+const mapSubcategory = (req, subcategory) => (
+  mapUploadFields(req, subcategory, ['image_url'])
+);
+
+const mapCategory = (req, category) => {
+  if (!category) return category;
+
+  const mapped = mapUploadFields(req, category, ['image_url', 'icon_image_url']);
+
+  if (mapped.subcategories) {
+    let subcategories = mapped.subcategories;
+    if (typeof subcategories === 'string') {
+      try {
+        subcategories = JSON.parse(subcategories);
+      } catch (error) {
+        subcategories = [];
+      }
+    }
+    if (Array.isArray(subcategories)) {
+      mapped.subcategories = subcategories.map((sub) => mapSubcategory(req, sub));
+    }
+  }
+
+  return mapped;
+};
 
 // Get all categories
 const getCategories = async (req, res) => {
@@ -51,10 +78,11 @@ const getCategories = async (req, res) => {
     `;
 
     const result = await query(categoriesQuery, queryParams);
+    const categories = result.rows.map((category) => mapCategory(req, category));
 
     res.json({
       success: true,
-      data: { categories: result.rows }
+      data: { categories }
     });
   } catch (error) {
     console.error('Get categories error:', error);
@@ -102,7 +130,7 @@ const getCategory = async (req, res) => {
 
     res.json({
       success: true,
-      data: { category: result.rows[0] }
+      data: { category: mapCategory(req, result.rows[0]) }
     });
   } catch (error) {
     console.error('Get category error:', error);
@@ -117,12 +145,14 @@ const getCategory = async (req, res) => {
 const createCategory = async (req, res) => {
   try {
     const { name, description, image_url, icon, icon_image_url, display_name, is_active = true, order_index = 0 } = req.body;
+    const normalizedImageUrl = normalizeUploadUrl(image_url);
+    const normalizedIconImageUrl = normalizeUploadUrl(icon_image_url);
     
 
     const result = await query(`
       INSERT INTO categories (name, description, image_url, icon, icon_image_url, display_name, is_active, order_index, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-    `, [name, description, image_url, icon, icon_image_url, display_name, is_active, order_index]);
+    `, [name, description, normalizedImageUrl, icon, normalizedIconImageUrl, display_name, is_active, order_index]);
 
     const categoryId = result.lastID;
 
@@ -131,7 +161,7 @@ const createCategory = async (req, res) => {
       SELECT * FROM categories WHERE id = ?
     `, [categoryId]);
 
-    const category = categoryResult.rows[0];
+    const category = mapCategory(req, categoryResult.rows[0]);
 
     res.status(201).json({
       success: true,
@@ -151,7 +181,13 @@ const createCategory = async (req, res) => {
 const updateCategory = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const updateData = { ...req.body };
+    if (updateData.image_url) {
+      updateData.image_url = normalizeUploadUrl(updateData.image_url);
+    }
+    if (updateData.icon_image_url) {
+      updateData.icon_image_url = normalizeUploadUrl(updateData.icon_image_url);
+    }
     
 
     // Check if category exists
@@ -201,7 +237,7 @@ const updateCategory = async (req, res) => {
       SELECT * FROM categories WHERE id = ?
     `, [id]);
 
-    const category = categoryResult.rows[0];
+    const category = mapCategory(req, categoryResult.rows[0]);
 
     res.json({
       success: true,
@@ -292,7 +328,7 @@ const getCakeFlavorCategory = async (req, res) => {
       });
     }
 
-    const category = categoryResult.rows[0];
+    const category = mapCategory(req, categoryResult.rows[0]);
 
     // Get all subcategories for this category
     const subcategoriesResult = await query(
@@ -300,7 +336,7 @@ const getCakeFlavorCategory = async (req, res) => {
       [category.id]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
 
     res.json({
       success: true,
@@ -335,7 +371,7 @@ const getOccasionCategories = async (req, res) => {
       });
     }
 
-    const occasionCategory = occasionCategoryResult.rows[0];
+    const occasionCategory = mapCategory(req, occasionCategoryResult.rows[0]);
 
     // Get all subcategories for this category - similar to milestone-year-cakes
     const subcategoriesResult = await query(
@@ -343,7 +379,7 @@ const getOccasionCategories = async (req, res) => {
       [occasionCategory.id]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
 
     res.json({
       success: true,
@@ -378,7 +414,7 @@ const getKidsCakeCollection = async (req, res) => {
       });
     }
 
-    const kidsCategory = kidsCategoryResult.rows[0];
+    const kidsCategory = mapCategory(req, kidsCategoryResult.rows[0]);
 
     // Get all subcategories for this category
     const subcategoriesResult = await query(
@@ -386,7 +422,7 @@ const getKidsCakeCollection = async (req, res) => {
       [kidsCategory.id]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
 
     res.json({
       success: true,
@@ -421,7 +457,7 @@ const getCrowdFavoriteCakes = async (req, res) => {
       });
     }
 
-    const crowdFavoriteCategory = crowdFavoriteResult.rows[0];
+    const crowdFavoriteCategory = mapCategory(req, crowdFavoriteResult.rows[0]);
 
     // Get all subcategories for this category
     const subcategoriesResult = await query(
@@ -429,7 +465,7 @@ const getCrowdFavoriteCakes = async (req, res) => {
       [crowdFavoriteCategory.id]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
 
     res.json({
       success: true,
@@ -464,7 +500,7 @@ const getLoveAndRelationshipCakes = async (req, res) => {
       });
     }
 
-    const loveRelationshipCategory = loveRelationshipResult.rows[0];
+    const loveRelationshipCategory = mapCategory(req, loveRelationshipResult.rows[0]);
 
     // Get all subcategories for this category
     const subcategoriesResult = await query(
@@ -472,7 +508,7 @@ const getLoveAndRelationshipCakes = async (req, res) => {
       [loveRelationshipCategory.id]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
 
     res.json({
       success: true,
@@ -507,7 +543,7 @@ const getCakesForEveryMilestoneYear = async (req, res) => {
       });
     }
 
-    const milestoneCategory = milestoneResult.rows[0];
+    const milestoneCategory = mapCategory(req, milestoneResult.rows[0]);
 
     // Get all subcategories for this category
     const subcategoriesResult = await query(
@@ -515,7 +551,7 @@ const getCakesForEveryMilestoneYear = async (req, res) => {
       [milestoneCategory.id]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
 
     res.json({
       success: true,
@@ -550,7 +586,7 @@ const getFlowers = async (req, res) => {
       });
     }
 
-    const flowersCategory = flowersResult.rows[0];
+    const flowersCategory = mapCategory(req, flowersResult.rows[0]);
 
     // Get all subcategories for this category
     const subcategoriesResult = await query(
@@ -558,7 +594,7 @@ const getFlowers = async (req, res) => {
       [flowersCategory.id]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
 
     res.json({
       success: true,
@@ -593,7 +629,7 @@ const getSweetsAndDryFruits = async (req, res) => {
       });
     }
 
-    const sweetsCategory = sweetsResult.rows[0];
+    const sweetsCategory = mapCategory(req, sweetsResult.rows[0]);
 
     // Get all subcategories for this category
     const subcategoriesResult = await query(
@@ -601,7 +637,7 @@ const getSweetsAndDryFruits = async (req, res) => {
       [sweetsCategory.id]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
 
     res.json({
       success: true,
@@ -661,7 +697,7 @@ const getSubcategoriesByCategorySlug = async (req, res) => {
       });
     }
 
-    const category = categoryResult.rows[0];
+    const category = mapCategory(req, categoryResult.rows[0]);
 
     // Get all subcategories for this category
     const subcategoriesResult = await query(
@@ -669,7 +705,7 @@ const getSubcategoriesByCategorySlug = async (req, res) => {
       [categoryId]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
 
     res.json({
       success: true,
@@ -731,7 +767,7 @@ const getSubcategoryBySlugs = async (req, res) => {
       });
     }
 
-    const category = categoryResult.rows[0];
+    const category = mapCategory(req, categoryResult.rows[0]);
 
     // Find the specific subcategory by matching the slug
     const subcategoriesResult = await query(
@@ -739,7 +775,7 @@ const getSubcategoryBySlugs = async (req, res) => {
       [categoryId]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
     
     // Find the subcategory that matches the slug
     // First try to match using the slug column if it exists, otherwise generate from name
@@ -839,7 +875,7 @@ const getSmallTreatsDesserts = async (req, res) => {
       });
     }
 
-    const treatsCategory = treatsResult.rows[0];
+    const treatsCategory = mapCategory(req, treatsResult.rows[0]);
 
     // Get all subcategories for this category
     const subcategoriesResult = await query(
@@ -847,7 +883,7 @@ const getSmallTreatsDesserts = async (req, res) => {
       [treatsCategory.id]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
 
     res.json({
       success: true,
@@ -889,7 +925,7 @@ const getAllMainCategories = async (req, res) => {
 
     res.json({
       success: true,
-      data: { categories: result.rows }
+      data: { categories: result.rows.map((category) => mapCategory(req, category)) }
     });
   } catch (error) {
     console.error('Get all main categories error:', error);

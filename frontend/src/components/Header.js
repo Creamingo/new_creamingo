@@ -35,6 +35,7 @@ import CartDisplay from './CartDisplay'
 import categoryApi from '../api/categoryApi'
 import productApi from '../api/productApi'
 import { formatPrice } from '../utils/priceFormatter'
+import logger from '../utils/logger'
 
 const Header = () => {
   const router = useRouter()
@@ -185,7 +186,7 @@ const Header = () => {
   const fetchCategories = async () => {
     try {
       setCategoriesLoading(true)
-      console.log('Fetching categories from database...')
+      logger.log('Fetching categories from database...')
       
       // Map category IDs to their corresponding API endpoints
       const categoryEndpoints = {
@@ -229,7 +230,7 @@ const Header = () => {
         borderColor: cat.borderColor || getCategoryBorderColor(cat.id),
         color: cat.color || getCategoryColor(cat.id)
       }))
-      console.log('Fetched categories from database:', categoriesWithColors)
+      logger.log('Fetched categories from database:', categoriesWithColors)
       setCategories(categoriesWithColors)
     } catch (error) {
       console.error('Error fetching categories:', error)
@@ -311,7 +312,7 @@ const Header = () => {
   }
 
   const handleSubcategoryClick = useCallback((categoryName, subcategoryName) => {
-    console.log(`Navigating to ${subcategoryName} in ${categoryName}`)
+    logger.log(`Navigating to ${subcategoryName} in ${categoryName}`)
     
     // Get the category slug from the mapping
     const categorySlug = categorySlugMap[categoryName] || createSlug(categoryName)
@@ -319,7 +320,7 @@ const Header = () => {
     
     // Navigate to the subcategory listing page
     const url = `/category/${categorySlug}/${subcategorySlug}`
-    console.log(`Navigating to: ${url}`)
+    logger.log(`Navigating to: ${url}`)
     
     router.push(url)
     setIsMobileMenuOpen(false)
@@ -404,10 +405,10 @@ const Header = () => {
   }
 
   const handleContinueShopping = async () => {
-    console.log('Continue Shopping clicked (Header)');
-    console.log('Current state:', { pincode, tempValidationStatus, tempPinCode });
+    logger.log('Continue Shopping clicked (Header)');
+    logger.log('Current state:', { pincode, tempValidationStatus, tempPinCode });
     const success = await confirmTempPinCode()
-    console.log('Confirmation result:', success);
+    logger.log('Confirmation result:', success);
     if (success) {
       setIsLocationOpen(false)
     }

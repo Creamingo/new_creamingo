@@ -1,4 +1,5 @@
 const { query } = require('../config/db');
+const { applyUploadUrl } = require('../utils/urlHelpers');
 
 /**
  * Get customer's published reviews
@@ -51,7 +52,7 @@ const getMyReviews = async (req, res) => {
           id: review.id,
           product_id: review.product_id,
           product_name: review.product_name,
-          product_image: review.product_image,
+          product_image: applyUploadUrl(req, review.product_image),
           rating: review.rating,
           comment: review.review_text,
           title: review.review_title,
@@ -120,7 +121,7 @@ const getPendingReviews = async (req, res) => {
       id: item.id,
       product_id: item.product_id,
       product_name: item.product_name,
-      product_image: item.product_image,
+      product_image: applyUploadUrl(req, item.product_image),
       order_number: item.order_number,
       order_date: item.order_date,
       quantity: item.quantity

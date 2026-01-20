@@ -39,6 +39,10 @@ const getCustomers = async (req, res) => {
     const total = parseInt(countResult.rows[0].total);
 
     // Get customers with order statistics
+    // Ensure limit/offset are integers (inline to avoid MySQL stmt issues)
+    const finalLimit = Number.isInteger(limitNum) && limitNum > 0 ? limitNum : 10;
+    const finalOffset = Number.isInteger(offset) && offset >= 0 ? offset : 0;
+
     const customersQuery = `
       SELECT 
         c.id,
@@ -56,10 +60,10 @@ const getCustomers = async (req, res) => {
       ${whereClause}
       GROUP BY c.id, c.name, c.email, c.phone, c.address, c.created_at, c.updated_at
       ORDER BY c.${sortField} ${sortDirection}
-      LIMIT ? OFFSET ?
+      LIMIT ${finalLimit} OFFSET ${finalOffset}
     `;
 
-    const customersQueryParams = [...queryParams, limitNum, offset];
+    const customersQueryParams = [...queryParams];
     const customersResult = await query(customersQuery, customersQueryParams);
 
     res.json({

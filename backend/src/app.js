@@ -140,9 +140,8 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Serve static files (uploads) with comprehensive CORS headers
-// Use UPLOAD_PATH environment variable for absolute path support (VPS-ready)
-const uploadDir = process.env.UPLOAD_PATH || path.join(__dirname, '../uploads');
-const staticUploadPath = path.isAbsolute(uploadDir) ? uploadDir : path.resolve(__dirname, '../', uploadDir);
+const { getUploadPath } = require('./utils/uploadPath');
+const staticUploadPath = getUploadPath();
 
 app.use('/uploads', (req, res, next) => {
   // Set comprehensive CORS headers for static files

@@ -1,4 +1,10 @@
 const { query } = require('../config/db');
+const { applyUploadUrl } = require('../utils/urlHelpers');
+
+const mapFeaturedProduct = (req, item) => ({
+  ...item,
+  product_image: applyUploadUrl(req, item.product_image)
+});
 
 // Fixed SQL query to handle missing slug column
 
@@ -78,11 +84,11 @@ const getFeaturedProducts = async (req, res) => {
         ORDER BY display_order ASC
       `, [product.product_id]);
       
-      return {
+      return mapFeaturedProduct(req, {
         ...product,
         variants: variantsResult.rows,
-        gallery_images: galleryResult.rows.map(img => img.image_url)
-      };
+        gallery_images: galleryResult.rows.map(img => img.image_url).map((url) => applyUploadUrl(req, url))
+      });
     }));
     
     res.status(200).json({
@@ -136,7 +142,7 @@ const getFeaturedProduct = async (req, res) => {
     
     res.status(200).json({
       success: true,
-      data: result.rows[0]
+      data: mapFeaturedProduct(req, result.rows[0])
     });
   } catch (error) {
     console.error('Error fetching featured product:', error);
@@ -244,7 +250,7 @@ const createFeaturedProduct = async (req, res) => {
     res.status(201).json({
       success: true,
       message: 'Product added to featured list successfully',
-      data: newFeaturedProduct.rows[0]
+      data: mapFeaturedProduct(req, newFeaturedProduct.rows[0])
     });
   } catch (error) {
     console.error('Error creating featured product:', error);
@@ -333,7 +339,7 @@ const updateFeaturedProduct = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Featured product updated successfully',
-      data: updatedProduct.rows[0]
+      data: mapFeaturedProduct(req, updatedProduct.rows[0])
     });
   } catch (error) {
     console.error('Error updating featured product:', error);
@@ -411,7 +417,12 @@ const getAvailableProducts = async (req, res) => {
     const result = await query(sql, [section]);
     
     // Filter out already featured products
-    const availableProducts = result.rows.filter(product => !product.is_featured);
+    const availableProducts = result.rows
+      .filter(product => !product.is_featured)
+      .map((product) => ({
+        ...product,
+        image_url: applyUploadUrl(req, product.image_url)
+      }));
     
     res.status(200).json({
       success: true,

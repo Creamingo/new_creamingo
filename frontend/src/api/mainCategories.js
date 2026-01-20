@@ -1,3 +1,5 @@
+import logger from '../utils/logger';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 class MainCategoriesAPI {
@@ -11,7 +13,7 @@ class MainCategoriesAPI {
       const timestamp = Date.now();
       const url = `${API_BASE_URL}/categories/all-main?t=${timestamp}`;
       
-      console.log('API URL:', url);
+      logger.log('API URL:', url);
       
       const response = await fetch(url, {
         method: 'GET',
@@ -23,14 +25,14 @@ class MainCategoriesAPI {
         },
       });
 
-      console.log('Response status:', response.status);
+      logger.log('Response status:', response.status);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
-      console.log('API Response:', data);
+      logger.log('API Response:', data);
       
       if (data.success) {
         return data.data.categories;
@@ -58,7 +60,7 @@ class MainCategoriesAPI {
         url += `?device_type=${deviceType}`;
       }
       
-      console.log('API URL:', url);
+      logger.log('API URL:', url);
       
       const response = await fetch(url, {
         method: 'GET',
@@ -67,14 +69,14 @@ class MainCategoriesAPI {
         },
       });
 
-      console.log('Response status:', response.status);
+      logger.log('Response status:', response.status);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
-      console.log('API Response:', data);
+      logger.log('API Response:', data);
       
       if (data.success) {
         return data.data;

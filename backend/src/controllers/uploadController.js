@@ -1,26 +1,8 @@
 const path = require('path');
 const fs = require('fs');
 const { resizeIconImage } = require('../utils/imageResize');
-
-// Helper function to get the base URL for file URLs
-const getBaseUrl = (req) => {
-  // Use environment variable if set (for VPS/production)
-  if (process.env.BACKEND_URL) {
-    return process.env.BACKEND_URL;
-  }
-  // Use the request's origin or host header if available
-  const origin = req.get('origin') || req.get('referer');
-  if (origin) {
-    try {
-      const url = new URL(origin);
-      return `${url.protocol}//${url.host}`;
-    } catch (e) {
-      // Fallback to host header
-    }
-  }
-  // Fallback to request host
-  return `${req.protocol}://${req.get('host')}`;
-};
+const { getUploadPath } = require('../utils/uploadPath');
+const { getBaseUrl } = require('../utils/urlHelpers');
 
 // Upload single file
 const uploadSingle = async (req, res) => {
@@ -90,9 +72,7 @@ const uploadMultiple = async (req, res) => {
 const deleteFile = async (req, res) => {
   try {
     const { filename } = req.params;
-    const uploadDir = process.env.UPLOAD_PATH || './uploads';
-    const resolvedUploadDir = path.isAbsolute(uploadDir) ? uploadDir : path.resolve(__dirname, '../', uploadDir);
-    const filePath = path.join(resolvedUploadDir, filename);
+    const filePath = path.join(getUploadPath(), filename);
 
     // Check if file exists
     if (!fs.existsSync(filePath)) {
@@ -122,9 +102,7 @@ const deleteFile = async (req, res) => {
 const getFileInfo = async (req, res) => {
   try {
     const { filename } = req.params;
-    const uploadDir = process.env.UPLOAD_PATH || './uploads';
-    const resolvedUploadDir = path.isAbsolute(uploadDir) ? uploadDir : path.resolve(__dirname, '../', uploadDir);
-    const filePath = path.join(resolvedUploadDir, filename);
+    const filePath = path.join(getUploadPath(), filename);
 
     // Check if file exists
     if (!fs.existsSync(filePath)) {

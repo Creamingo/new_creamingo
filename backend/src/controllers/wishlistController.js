@@ -1,4 +1,5 @@
 const { query } = require('../config/db');
+const { applyUploadUrl } = require('../utils/urlHelpers');
 
 /**
  * Get customer's wishlist
@@ -38,7 +39,7 @@ const getWishlist = async (req, res) => {
       price: parseFloat(item.base_price || 0),
       discount_percent: parseFloat(item.discount_percent || 0),
       discounted_price: parseFloat(item.discounted_price || item.base_price || 0),
-      image_url: item.image_url,
+      image_url: applyUploadUrl(req, item.image_url),
       slug: item.slug,
       is_active: item.product_active,
       category_name: item.category_name,

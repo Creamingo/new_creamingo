@@ -3,9 +3,8 @@ const path = require('path');
 const fs = require('fs');
 
 // Ensure uploads directory exists
-// Use absolute path if provided, otherwise resolve relative to project root
-const uploadDir = process.env.UPLOAD_PATH || './uploads';
-const resolvedUploadDir = path.isAbsolute(uploadDir) ? uploadDir : path.resolve(__dirname, '../', uploadDir);
+const { getUploadPath } = require('../utils/uploadPath');
+const resolvedUploadDir = getUploadPath();
 
 if (!fs.existsSync(resolvedUploadDir)) {
   fs.mkdirSync(resolvedUploadDir, { recursive: true });

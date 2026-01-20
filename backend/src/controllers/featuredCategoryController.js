@@ -1,4 +1,11 @@
 const { query } = require('../config/db');
+const { applyUploadUrl } = require('../utils/urlHelpers');
+
+const mapFeaturedCategory = (req, item) => ({
+  ...item,
+  category_image: applyUploadUrl(req, item.category_image),
+  subcategory_image: applyUploadUrl(req, item.subcategory_image)
+});
 
 // Get all featured categories with their linked category/subcategory data
 const getFeaturedCategories = async (req, res) => {
@@ -45,10 +52,12 @@ const getFeaturedCategories = async (req, res) => {
     
     const result = await query(sql, params);
     
+    const items = result.rows.map((item) => mapFeaturedCategory(req, item));
+
     res.status(200).json({
       success: true,
-      data: result.rows,
-      count: result.rows.length
+      data: items,
+      count: items.length
     });
   } catch (error) {
     console.error('Error fetching featured categories:', error);
@@ -102,7 +111,7 @@ const getFeaturedCategory = async (req, res) => {
     
     res.status(200).json({
       success: true,
-      data: result.rows[0]
+      data: mapFeaturedCategory(req, result.rows[0])
     });
   } catch (error) {
     console.error('Error fetching featured category:', error);
@@ -274,7 +283,7 @@ const createFeaturedCategory = async (req, res) => {
     res.status(201).json({
       success: true,
       message: `${itemName} added to featured list successfully`,
-      data: newFeaturedItem.rows[0]
+      data: mapFeaturedCategory(req, newFeaturedItem.rows[0])
     });
   } catch (error) {
     console.error('Error creating featured item:', error);
@@ -379,7 +388,7 @@ const updateFeaturedCategory = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Featured category updated successfully',
-      data: updatedCategory.rows[0]
+      data: mapFeaturedCategory(req, updatedCategory.rows[0])
     });
   } catch (error) {
     console.error('Error updating featured category:', error);
@@ -520,7 +529,12 @@ const getAvailableCategories = async (req, res) => {
     }
     
     // Filter out already featured items
-    const availableItems = result.rows.filter(item => !item.is_featured);
+    const availableItems = result.rows
+      .filter(item => !item.is_featured)
+      .map((item) => ({
+        ...item,
+        image_url: applyUploadUrl(req, item.image_url)
+      }));
     
     res.status(200).json({
       success: true,

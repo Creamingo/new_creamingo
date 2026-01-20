@@ -109,6 +109,10 @@ const getOrders = async (req, res) => {
     const total = parseInt(countResult.rows[0].total);
 
     // Get orders (SQLite compatible)
+    // Ensure limit and offset are integers (inline to avoid MySQL stmt issues)
+    const finalLimit = Number.isInteger(limitNum) && limitNum > 0 ? limitNum : 10;
+    const finalOffset = Number.isInteger(offset) && offset >= 0 ? offset : 0;
+
     const ordersQuery = `
       SELECT 
         o.id,
@@ -160,19 +164,46 @@ const getOrders = async (req, res) => {
       ${whereClause}
       GROUP BY o.id, c.name, c.email, c.phone
       ORDER BY o.${sortField} ${sortDirection}
-      LIMIT ? OFFSET ?
+      LIMIT ${finalLimit} OFFSET ${finalOffset}
     `;
 
-    // Ensure limit and offset are integers
-    const finalLimit = Number.isInteger(limitNum) && limitNum > 0 ? limitNum : 10;
-    const finalOffset = Number.isInteger(offset) && offset >= 0 ? offset : 0;
-    const ordersQueryParams = [...queryParams, finalLimit, finalOffset];
+    const ordersQueryParams = [...queryParams];
+    
+    // Debug logging
+    const placeholderCount = (ordersQuery.match(/\?/g) || []).length;
+    console.error('🔍 [DEBUG] Executing orders query:', {
+      placeholderCount,
+      paramCount: ordersQueryParams.length,
+      params: ordersQueryParams,
+      whereClause: whereClause || 'NO WHERE CLAUSE',
+      whereConditionsCount: whereConditions.length,
+      reqQuery: { page, limit, status, customer_id, date_from, date_to, delivery_date }
+    });
+    
+    if (placeholderCount !== ordersQueryParams.length) {
+      console.error('❌ Orders parameter mismatch:', {
+        placeholderCount,
+        paramCount: ordersQueryParams.length,
+        query: ordersQuery.substring(0, 500),
+        params: ordersQueryParams
+      });
+      return res.status(500).json({
+        success: false,
+        message: 'Internal server error: Parameter count mismatch',
+        error: `Expected ${placeholderCount} placeholders but got ${ordersQueryParams.length} parameters`
+      });
+    }
     
     let ordersResult;
     try {
       ordersResult = await query(ordersQuery, ordersQueryParams);
     } catch (error) {
       // If query fails, try with fallback (handles missing display_name column or other issues)
+      console.error('❌ Initial orders query failed:', error);
+      console.error('❌ Query:', ordersQuery.substring(0, 1000));
+      console.error('❌ Params:', ordersQueryParams);
+      console.error('❌ Placeholder count:', placeholderCount);
+      console.error('❌ Param count:', ordersQueryParams.length);
       console.error('Initial query failed, trying fallback query:', error.message);
       
       // First, try without display_name (for pre-migration databases)
@@ -227,12 +258,12 @@ const getOrders = async (req, res) => {
         ${whereClause}
         GROUP BY o.id, c.name, c.email, c.phone
         ORDER BY o.${sortField} ${sortDirection}
-        LIMIT ? OFFSET ?
+        LIMIT ${finalLimit} OFFSET ${finalOffset}
       `;
       
       const finalLimit = Number.isInteger(limitNum) && limitNum > 0 ? limitNum : 10;
       const finalOffset = Number.isInteger(offset) && offset >= 0 ? offset : 0;
-      const fallbackQueryParams = [...queryParams, finalLimit, finalOffset];
+      const fallbackQueryParams = [...queryParams];
       try {
         ordersResult = await query(fallbackQuery, fallbackQueryParams);
       } catch (fallbackError) {
@@ -285,9 +316,9 @@ const getOrders = async (req, res) => {
           ${whereClause}
           GROUP BY o.id, c.name, c.email, c.phone
           ORDER BY o.${sortField} ${sortDirection}
-          LIMIT ? OFFSET ?
+          LIMIT ${finalLimit} OFFSET ${finalOffset}
         `;
-        const fallbackQueryParams2 = [...queryParams, finalLimit, finalOffset];
+        const fallbackQueryParams2 = [...queryParams];
         ordersResult = await query(fallbackQuery, fallbackQueryParams2);
       }
     }
@@ -1340,6 +1371,10 @@ const getMyOrders = async (req, res) => {
     const total = parseInt(countResult.rows[0].total);
 
     // Get orders with items
+    // Ensure limit and offset are integers (inline to avoid MySQL stmt issues)
+    const finalLimit3 = Number.isInteger(limitNum) && limitNum > 0 ? limitNum : 10;
+    const finalOffset3 = Number.isInteger(offset) && offset >= 0 ? offset : 0;
+
     const ordersQuery = `
       SELECT 
         o.id,
@@ -1358,13 +1393,10 @@ const getMyOrders = async (req, res) => {
       FROM orders o
       ${whereClause}
       ORDER BY o.${sortField} ${sortDirection}
-      LIMIT ? OFFSET ?
+      LIMIT ${finalLimit3} OFFSET ${finalOffset3}
     `;
 
-    // Ensure limit and offset are integers
-    const finalLimit3 = Number.isInteger(limitNum) && limitNum > 0 ? limitNum : 10;
-    const finalOffset3 = Number.isInteger(offset) && offset >= 0 ? offset : 0;
-    const ordersQueryParams = [...queryParams, finalLimit3, finalOffset3];
+    const ordersQueryParams = [...queryParams];
     const ordersResult = await query(ordersQuery, ordersQueryParams);
 
     // Helper function to check if an item is a deal product
