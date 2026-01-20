@@ -27,8 +27,8 @@ const requireRole = (roles) => {
 // Check if user is super admin
 const requireSuperAdmin = requireRole('super_admin');
 
-// Check if user is staff or super admin
-const requireStaff = requireRole(['staff', 'super_admin']);
+// Check if user is admin, staff, or super admin
+const requireStaff = requireRole(['admin', 'staff', 'super_admin']);
 
 // Check if user can manage banners (super admin only)
 const canManageBanners = requireRole('super_admin');
