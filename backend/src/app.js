@@ -75,12 +75,17 @@ const parseOrigins = (originsString) => {
 };
 
 const allowedOrigins = parseOrigins(process.env.CORS_ORIGIN);
+const allowAllOrigins = allowedOrigins.length === 0;
 
 const corsOptions = {
   origin: (origin, callback) => {
     // Allow requests with no origin (like mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
-    
+
+    if (allowAllOrigins) {
+      return callback(null, true);
+    }
+
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -96,7 +101,13 @@ const corsOptions = {
 };
 
 // Log CORS configuration on startup
-console.log('🌐 CORS configured for origins:', allowedOrigins.length > 0 ? allowedOrigins.join(', ') : 'None (check CORS_ORIGIN in .env)');
+console.log(
+  '🌐 CORS configured for origins:',
+  allowAllOrigins ? 'All origins (CORS_ORIGIN not set)' : allowedOrigins.join(', ')
+);
+if (allowAllOrigins && process.env.NODE_ENV === 'production') {
+  console.warn('⚠️  CORS_ORIGIN is not set in production; all origins are allowed.');
+}
 
 app.use(cors(corsOptions));
 

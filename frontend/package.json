@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "cross-env NODE_ENV=production NEXT_PUBLIC_API_URL=https://api.creamingo.com/api next build",
-    "start": "cross-env NODE_ENV=production NEXT_PUBLIC_API_URL=https://api.creamingo.com/api next start",
+    "build": "cross-env NODE_ENV=production next build",
+    "start": "cross-env NODE_ENV=production next start",
     "lint": "next lint"
   },
   "dependencies": {
