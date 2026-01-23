@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import kidsCakeCollectionAPI from '../api/kidsCakeCollection'
+import { resolveImageUrl } from '../utils/imageUrl'
 
 export default function KidsCakeCollection() {
   const router = useRouter()
@@ -67,7 +68,7 @@ export default function KidsCakeCollection() {
             id: subcategory.id,
             name: subcategory.name,
             slug: subcategory.name.toLowerCase().replace(/\s+/g, '-'),
-            image: subcategory.image_url || '/Design 1.webp',
+            image: resolveImageUrl(subcategory.image_url) || '/Design 1.webp',
             description: subcategory.description || 'Delicious kids cake collection'
           }))
           setCategories(transformedCategories)

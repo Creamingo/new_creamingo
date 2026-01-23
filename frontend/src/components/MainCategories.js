@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import mainCategoriesAPI from '../api/mainCategories';
+import { resolveImageUrl } from '../utils/imageUrl';
 
 const MainCategories = () => {
   const router = useRouter();
@@ -104,11 +105,12 @@ const MainCategories = () => {
 
   // Function to get category icon from database or fallback to default
   const getCategoryIcon = (category) => {
-    // First try to use uploaded icon image if available
-    if (category.icon_image_url) {
+    // First try to use uploaded icon image if available (fallback to image_url)
+    const iconImageUrl = resolveImageUrl(category.icon_image_url || category.image_url);
+    if (iconImageUrl) {
       return (
         <img 
-          src={category.icon_image_url} 
+          src={iconImageUrl} 
           alt={`${category.name} icon`}
           className="w-8 h-8 lg:w-12 lg:h-12 object-contain"
           style={{ filter: 'opacity(0.8)' }} // Make it slightly transparent to match the light color theme

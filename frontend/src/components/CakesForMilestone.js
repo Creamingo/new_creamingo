@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import milestoneYearCakesAPI from '../api/milestoneYearCakes'
+import { resolveImageUrl } from '../utils/imageUrl'
 
 export default function CakesForMilestone() {
   const router = useRouter()
@@ -130,7 +131,7 @@ export default function CakesForMilestone() {
               year: year,
               label: createLabelFromName(subcategory.name),
               slug: subcategory.name.toLowerCase().replace(/\s+/g, '-').replace(/\//g, '-'),
-              image: subcategory.image_url || '/Design 1.webp',
+              image: resolveImageUrl(subcategory.image_url) || '/Design 1.webp',
               gradient: getGradientForYear(year)
             };
           });

@@ -33,8 +33,8 @@ const requireStaff = requireRole(['admin', 'staff', 'super_admin']);
 // Check if user can manage banners (super admin only)
 const canManageBanners = requireRole('super_admin');
 
-// Check if user can manage categories (super admin only)
-const canManageCategories = requireRole('super_admin');
+// Check if user can manage categories (super admin and admin)
+const canManageCategories = requireRole(['super_admin', 'admin']);
 
 // Check if user can manage settings (admin and super admin only)
 const canManageSettings = requireRole(['admin', 'super_admin']);

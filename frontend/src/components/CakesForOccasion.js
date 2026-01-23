@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 // import { categories as staticCategories } from './cakeData'
 import occasionCategoryAPI from '../api/occasionCategories'
+import { resolveImageUrl } from '../utils/imageUrl'
 
 export default function CakesForOccasion() {
   const router = useRouter()
@@ -18,8 +19,8 @@ export default function CakesForOccasion() {
         if (response.success && response.data && response.data.subcategories) {
           // Transform database categories to use actual database images
           const transformedCategories = response.data.subcategories.map(category => {
-            // Use image_url directly from API (already full URLs)
-            const imageUrl = category.image_url;
+            // Resolve image URL (handles /uploads paths)
+            const imageUrl = resolveImageUrl(category.image_url);
             
             return {
               name: category.name,

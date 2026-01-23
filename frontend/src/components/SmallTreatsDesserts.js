@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import smallTreatsDessertsAPI from '../api/smallTreatsDesserts'
+import { resolveImageUrl } from '../utils/imageUrl'
 
 const SmallTreatsDesserts = () => {
   const router = useRouter()
@@ -50,7 +51,7 @@ const SmallTreatsDesserts = () => {
           const transformedCategories = response.data.subcategories.map(subcategory => ({
             name: subcategory.name,
             slug: subcategory.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and'),
-            image: subcategory.image_url || 'https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=600&h=600&fit=crop',
+            image: resolveImageUrl(subcategory.image_url) || 'https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=600&h=600&fit=crop',
             description: subcategory.description || 'Delicious sweet treat'
           }))
           

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import crowdFavoriteCakesAPI from '../api/crowdFavoriteCakes'
+import { resolveImageUrl } from '../utils/imageUrl'
 
 const CrowdFavoriteCakes = () => {
   const router = useRouter()
@@ -69,7 +70,7 @@ const CrowdFavoriteCakes = () => {
             id: subcategory.id,
             name: subcategory.name,
             slug: subcategory.name.toLowerCase().replace(/\s+/g, '-'),
-            image: subcategory.image_url || '/Design 1.webp',
+            image: resolveImageUrl(subcategory.image_url) || '/Design 1.webp',
             description: subcategory.description || 'Most popular cake categories loved by everyone'
           }))
           setCategories(transformedCategories)

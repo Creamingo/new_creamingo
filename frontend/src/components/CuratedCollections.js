@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import sweetsAndDryFruitsAPI from '../api/sweetsAndDryFruits'
 import flowersAPI from '../api/flowers'
+import { resolveImageUrl } from '../utils/imageUrl'
 
 const CuratedCollections = () => {
   const router = useRouter()
@@ -105,7 +106,7 @@ const CuratedCollections = () => {
                 ? {
                     ...collection,
                     suggestions: flowersSuggestions.length > 0 ? flowersSuggestions : collection.suggestions,
-                    image: flowersResponse.data.category.image_url || collection.image
+                    image: resolveImageUrl(flowersResponse.data.category.image_url) || collection.image
                   }
                 : collection
             )
@@ -125,7 +126,7 @@ const CuratedCollections = () => {
                 ? {
                     ...collection,
                     suggestions: sweetsSuggestions.length > 0 ? sweetsSuggestions : collection.suggestions,
-                    image: sweetsResponse.data.category.image_url || collection.image
+                    image: resolveImageUrl(sweetsResponse.data.category.image_url) || collection.image
                   }
                 : collection
             )
