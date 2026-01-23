@@ -15,6 +15,7 @@ import productApi from '../api/productApi';
 import { useCategoryMenu } from '../contexts/CategoryMenuContext';
 import { useWishlist } from '../contexts/WishlistContext';
 import { formatPrice } from '../utils/priceFormatter';
+import { resolveImageUrl } from '../utils/imageUrl';
 
 const ListingPage = () => {
   const params = useParams();
@@ -164,7 +165,7 @@ const ListingPage = () => {
         id: product.id,
         name: product.name,
         slug: product.slug, // Include the slug field
-        image: product.image_url || product.image,
+        image: resolveImageUrl(product.image_url || product.image),
         originalPrice: product.base_price || product.originalPrice,
         discountedPrice: product.discounted_price || product.discountedPrice,
         rating: product.rating || 4.5, // Default rating if not provided

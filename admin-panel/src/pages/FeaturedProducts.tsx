@@ -32,11 +32,15 @@ const DashboardTooltip: React.FC<{ text: string; children: React.ReactNode }> = 
 
 
 // Helper function to format currency
-const formatCurrency = (amount: number | null | undefined): string => {
-  if (amount === null || amount === undefined || isNaN(amount)) {
+const formatCurrency = (amount: number | string | null | undefined): string => {
+  if (amount === null || amount === undefined || amount === '') {
     return '₹0.00';
   }
-  return `₹${amount.toFixed(2)}`;
+  const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (Number.isNaN(numAmount)) {
+    return '₹0.00';
+  }
+  return `₹${numAmount.toFixed(2)}`;
 };
 
 interface FeaturedProduct {

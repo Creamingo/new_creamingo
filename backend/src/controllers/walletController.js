@@ -82,7 +82,9 @@ const getWalletTransactions = async (req, res) => {
   try {
     const customerId = req.customer.id;
     const { type, page = 1, limit = 20 } = req.query;
-    const offset = (page - 1) * limit;
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = Math.min(parseInt(limit, 10) || 20, 100);
+    const offset = (pageNum - 1) * limitNum;
 
     let whereClause = 'WHERE customer_id = ?';
     let params = [customerId];
@@ -106,8 +108,8 @@ const getWalletTransactions = async (req, res) => {
       FROM wallet_transactions 
       ${whereClause}
       ORDER BY created_at DESC
-      LIMIT ? OFFSET ?`,
-      [...params, parseInt(limit), offset]
+      LIMIT ${limitNum} OFFSET ${offset}`,
+      params
     );
 
     // Get total count
@@ -133,10 +135,10 @@ const getWalletTransactions = async (req, res) => {
       data: {
         transactions,
         pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
+          page: pageNum,
+          limit: limitNum,
           total: countResult.rows[0].total,
-          totalPages: Math.ceil(countResult.rows[0].total / limit)
+          totalPages: Math.ceil(countResult.rows[0].total / limitNum)
         }
       }
     });
@@ -260,7 +262,7 @@ const getWalletStats = async (req, res) => {
       WHERE customer_id = ? 
         AND type = 'credit' 
         AND status = 'completed'
-        AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')`,
+        AND DATE_FORMAT(created_at, '%Y-%m') = DATE_FORMAT(CURRENT_DATE(), '%Y-%m')`,
       [customerId]
     );
 

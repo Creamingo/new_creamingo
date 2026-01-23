@@ -4,7 +4,7 @@ const { query } = require('../config/db');
 const getLeaderboard = async (req, res) => {
   try {
     const { limit = 50, period = 'all' } = req.query; // period: 'all', 'month', 'week'
-    const limitNum = Math.min(parseInt(limit), 100); // Max 100
+    const limitNum = Math.min(parseInt(limit, 10) || 50, 100); // Max 100
 
     let dateFilter = '';
     if (period === 'month') {
@@ -30,8 +30,8 @@ const getLeaderboard = async (req, res) => {
       GROUP BY c.id, c.name, c.email
       HAVING total_referrals > 0
       ORDER BY completed_referrals DESC, total_referrals DESC
-      LIMIT ?`,
-      [limitNum]
+      LIMIT ${limitNum}`,
+      []
     );
 
     // Get current user's rank if authenticated
@@ -52,7 +52,7 @@ const getLeaderboard = async (req, res) => {
       if (userStatsResult.rows.length > 0) {
         const userStats = userStatsResult.rows[0];
         const rankResult = await query(
-          `SELECT COUNT(*) + 1 as rank
+          `SELECT COUNT(*) + 1 as user_rank
            FROM (
              SELECT COUNT(CASE WHEN r.status = 'completed' THEN 1 END) as completed
              FROM customers c
@@ -61,10 +61,10 @@ const getLeaderboard = async (req, res) => {
              ${dateFilter}
              GROUP BY c.id
              HAVING completed > ?
-           )`,
+           ) as ranked`,
           [userStats.completed_referrals || 0]
         );
-        userRank = rankResult.rows[0]?.rank || null;
+        userRank = rankResult.rows[0]?.user_rank || null;
       }
     }
 
@@ -132,7 +132,7 @@ const getUserLeaderboardPosition = async (req, res) => {
 
     // Get rank
     const rankResult = await query(
-      `SELECT COUNT(*) + 1 as rank
+      `SELECT COUNT(*) + 1 as user_rank
        FROM (
          SELECT COUNT(CASE WHEN r.status = 'completed' THEN 1 END) as completed
          FROM customers c
@@ -140,11 +140,11 @@ const getUserLeaderboardPosition = async (req, res) => {
          WHERE c.referral_code IS NOT NULL
          GROUP BY c.id
          HAVING completed > ?
-       )`,
+       ) as ranked`,
       [completedReferrals]
     );
 
-    const rank = rankResult.rows[0]?.rank || null;
+    const rank = rankResult.rows[0]?.user_rank || null;
 
     res.json({
       success: true,

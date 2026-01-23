@@ -8,6 +8,7 @@ import MobileFooter from '../../components/MobileFooter';
 import LocationBar from '../../components/LocationBar';
 import ListingProductCard from '../../components/ListingProductCard';
 import { useWishlist } from '../../contexts/WishlistContext';
+import { resolveImageUrl } from '../../utils/imageUrl';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -55,7 +56,7 @@ const ProductsContent = () => {
             id: product.id,
             name: product.name,
             slug: product.slug,
-            image: product.image_url || product.image,
+            image: resolveImageUrl(product.image_url || product.image),
             originalPrice: product.base_price || product.originalPrice,
             discountedPrice: product.discounted_price || product.discountedPrice,
             rating: product.rating || 4.5,

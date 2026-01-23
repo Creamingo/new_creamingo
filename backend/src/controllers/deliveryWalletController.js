@@ -45,14 +45,11 @@ const getWalletSummary = async (req, res) => {
     const balance = parseFloat(total_credits) - parseFloat(total_debits);
 
     // Today / week / month earnings (only "earning" type)
-    const now = new Date();
-    const todayISO = now.toISOString().split('T')[0]; // YYYY-MM-DD
-
     const earningsResult = await query(
       `SELECT
-        COALESCE(SUM(CASE WHEN date(created_at) = date('now', 'localtime') AND type = 'earning' THEN amount ELSE 0 END), 0) as today_earnings,
+        COALESCE(SUM(CASE WHEN DATE(created_at) = CURDATE() AND type = 'earning' THEN amount ELSE 0 END), 0) as today_earnings,
         COALESCE(SUM(CASE WHEN created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND type = 'earning' THEN amount ELSE 0 END), 0) as week_earnings,
-        COALESCE(SUM(CASE WHEN strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now', 'localtime') AND type = 'earning' THEN amount ELSE 0 END), 0) as month_earnings
+        COALESCE(SUM(CASE WHEN DATE_FORMAT(created_at, '%Y-%m') = DATE_FORMAT(CURRENT_DATE(), '%Y-%m') AND type = 'earning' THEN amount ELSE 0 END), 0) as month_earnings
       FROM delivery_wallet_transactions
       WHERE delivery_boy_id = ?`,
       [deliveryBoyId]

@@ -22,14 +22,27 @@ const getWeightTierMappings = async (req, res) => {
         weight ASC
     `);
 
-    const mappings = result.rows.map(row => ({
-      id: row.id,
-      weight: row.weight,
-      available_tiers: JSON.parse(row.available_tiers),
-      is_active: row.is_active,
-      created_at: row.created_at,
-      updated_at: row.updated_at
-    }));
+    const mappings = result.rows.map(row => {
+      let availableTiers = [];
+      try {
+        availableTiers = row.available_tiers ? JSON.parse(row.available_tiers) : [];
+      } catch (parseError) {
+        console.error('Invalid available_tiers JSON:', {
+          id: row.id,
+          weight: row.weight,
+          value: row.available_tiers
+        });
+      }
+
+      return {
+        id: row.id,
+        weight: row.weight,
+        available_tiers: Array.isArray(availableTiers) ? availableTiers : [],
+        is_active: row.is_active,
+        created_at: row.created_at,
+        updated_at: row.updated_at
+      };
+    });
 
     res.json({
       success: true,
@@ -88,7 +101,16 @@ const getWeightTierMappingByWeight = async (req, res) => {
     }
 
     const mapping = result.rows[0];
-    mapping.available_tiers = JSON.parse(mapping.available_tiers);
+    try {
+      mapping.available_tiers = mapping.available_tiers ? JSON.parse(mapping.available_tiers) : [];
+    } catch (parseError) {
+      console.error('Invalid available_tiers JSON:', {
+        id: mapping.id,
+        weight: mapping.weight,
+        value: mapping.available_tiers
+      });
+      mapping.available_tiers = [];
+    }
 
     res.json({
       success: true,

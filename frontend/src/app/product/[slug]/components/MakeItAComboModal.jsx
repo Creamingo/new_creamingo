@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, ShoppingBag, Plus, Minus, Trash2, Package, Sparkles, ChevronDown, ChevronUp, CheckCircle, ArrowRight, ArrowLeft, Cake, ArrowLeftRight } from 'lucide-react';
 import addOnApi from '../../../../api/addOnApi';
 import { formatPrice } from '../../../../utils/priceFormatter';
+import { resolveImageUrl } from '../../../../utils/imageUrl';
 
 const MakeItAComboModal = ({ 
   isOpen, 
@@ -758,7 +759,7 @@ const MakeItAComboModal = ({
                 >
                   <div className="w-3/4 mx-auto aspect-square overflow-hidden bg-gray-50 dark:bg-gray-700">
                     {p.image_url ? (
-                      <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
+                      <img src={resolveImageUrl(p.image_url)} alt={p.name} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center px-1.5">
                         <p className="text-[8px] font-medium text-gray-500 dark:text-gray-400 leading-tight text-center break-words">{p.name}</p>

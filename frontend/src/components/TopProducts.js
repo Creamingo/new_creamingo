@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Star } from 'lucide-react'
 import './TopProducts.css'
+import { resolveImageUrl } from '../utils/imageUrl'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -147,7 +148,7 @@ export default function TopProducts() {
           const transformedProducts = data.data.products.map(product => ({
             id: product.id,
             name: product.name,
-            image: product.image_url || product.image || '/Design 1.webp',
+            image: resolveImageUrl(product.image_url || product.image || '/Design 1.webp'),
             discount: product.discount_percent > 0 
               ? `${Math.round(product.discount_percent)}% OFF` 
               : null,

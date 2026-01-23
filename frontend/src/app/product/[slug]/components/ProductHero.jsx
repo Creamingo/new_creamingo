@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { resolveImageUrl } from '../../../../utils/imageUrl';
 
 const ProductHero = ({ product, selectedVariant, isFavorite, onFavoriteToggle, onQuickShare }) => {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -15,7 +16,9 @@ const ProductHero = ({ product, selectedVariant, isFavorite, onFavoriteToggle, o
   const allImages = [
     product.image_url,
     ...(product.gallery_images || [])
-  ].filter(Boolean);
+  ]
+    .filter(Boolean)
+    .map((image) => resolveImageUrl(image));
 
   const handleImageSelect = (index) => {
     setSelectedImageIndex(index);
@@ -93,6 +96,7 @@ const ProductHero = ({ product, selectedVariant, isFavorite, onFavoriteToggle, o
                 fill
                 sizes="(max-width: 1024px) 0vw, 96px"
                 className="object-cover"
+                unoptimized
               />
             </button>
           ))}
@@ -114,6 +118,7 @@ const ProductHero = ({ product, selectedVariant, isFavorite, onFavoriteToggle, o
           className="object-cover transition-transform duration-300 group-hover:scale-105"
           onClick={handleImageClick}
           priority
+          unoptimized
         />
 
         {/* Bestseller Badge (overlay on image) */}
@@ -202,6 +207,7 @@ const ProductHero = ({ product, selectedVariant, isFavorite, onFavoriteToggle, o
                   fill
                   sizes="80px"
                   className="object-cover"
+                  unoptimized
                 />
               </button>
             ))}
@@ -234,6 +240,7 @@ const ProductHero = ({ product, selectedVariant, isFavorite, onFavoriteToggle, o
               height={800}
               className="object-contain max-h-[90vh] rounded-lg"
               onClick={(e) => e.stopPropagation()}
+              unoptimized
             />
 
             {/* Navigation in Zoom - Enhanced touch targets and swipe support */}

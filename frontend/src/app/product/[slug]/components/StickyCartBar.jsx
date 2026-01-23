@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { ShoppingCart, Heart } from 'lucide-react';
+import { resolveImageUrl } from '../../../../utils/imageUrl';
 
 const StickyCartBar = ({ 
   product, 
@@ -60,7 +61,7 @@ const StickyCartBar = ({
             <div className="flex items-center space-x-3">
               <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded-lg flex-shrink-0 overflow-hidden">
                 <img
-                  src={product.image_url}
+                  src={resolveImageUrl(product.image_url)}
                   alt={product.name}
                   className="w-full h-full object-cover"
                 />

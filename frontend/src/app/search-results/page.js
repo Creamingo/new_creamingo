@@ -9,6 +9,7 @@ import LocationBar from '../../components/LocationBar';
 import ListingProductCard from '../../components/ListingProductCard';
 import productApi from '../../api/productApi';
 import { useWishlist } from '../../contexts/WishlistContext';
+import { resolveImageUrl } from '../../utils/imageUrl';
 
 const SearchResultsContent = () => {
   const searchParams = useSearchParams();
@@ -51,7 +52,7 @@ const SearchResultsContent = () => {
           id: product.id,
           name: product.name,
           slug: product.slug, // Include the slug field
-          image: product.image_url || product.image,
+          image: resolveImageUrl(product.image_url || product.image),
           originalPrice: product.base_price || product.originalPrice,
           discountedPrice: product.discounted_price || product.discountedPrice,
           rating: product.rating || 4.5,

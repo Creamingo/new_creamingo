@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Star, ThumbsUp, MessageCircle, Camera, Send, Filter, SortAsc, ChevronDown, ChevronUp, X } from 'lucide-react';
 import Image from 'next/image';
 import productApi from '../../../../api/productApi';
+import { resolveImageUrl } from '../../../../utils/imageUrl';
 
 // Modern Category Rating Component - Always Visible Stars
 const CategorySelector = ({ selectedCategories, onCategoryToggle, categories, categoryRatings, onCategoryRatingChange, overallRating = 0 }) => {
@@ -804,12 +805,13 @@ const CustomerReviews = ({ productId }) => {
                   {(review.imageUrl || review.image_url) && (
                     <div className="mt-2">
                       <Image
-                        src={review.imageUrl || review.image_url}
+                        src={resolveImageUrl(review.imageUrl || review.image_url)}
                         alt="Review photo"
                         width={80}
                         height={60}
                         className="rounded object-cover"
                         loading="lazy"
+                        unoptimized
                       />
                     </div>
                   )}
@@ -1165,12 +1167,13 @@ const CustomerReviews = ({ productId }) => {
                   {(review.imageUrl || review.image_url) && (
                     <div className="mb-3">
                       <Image
-                        src={review.imageUrl || review.image_url}
+                        src={resolveImageUrl(review.imageUrl || review.image_url)}
                         alt="Review photo"
                         width={200}
                         height={150}
                         className="rounded-lg object-cover"
                         loading="lazy"
+                        unoptimized
                       />
                     </div>
                   )}
@@ -1347,12 +1350,13 @@ const CustomerReviews = ({ productId }) => {
               {(review.imageUrl || review.image_url) && (
                       <div className="mb-3">
                   <Image
-                    src={review.imageUrl || review.image_url}
+                    src={resolveImageUrl(review.imageUrl || review.image_url)}
                     alt="Review photo"
                     width={200}
                     height={150}
                     className="rounded-lg object-cover"
                     loading="lazy"
+                    unoptimized
                   />
                 </div>
               )}

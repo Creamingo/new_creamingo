@@ -115,7 +115,10 @@ class ApiClient {
 
       // Handle other HTTP errors
       if (!response.ok) {
-        throw new Error(data.message || `HTTP ${response.status}: ${response.statusText}`);
+        const backendError = data?.error ? ` - ${data.error}` : '';
+        const backendDetails = data?.details ? ` (${JSON.stringify(data.details)})` : '';
+        const message = data.message || `HTTP ${response.status}: ${response.statusText}`;
+        throw new Error(`${message}${backendError}${backendDetails}`);
       }
 
       return data;

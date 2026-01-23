@@ -922,6 +922,30 @@ export const Products: React.FC = () => {
     }));
   }, []);
 
+  const handleNewProductDetailsChange = useCallback((details: { version?: string; shape?: string; countryOfOrigin?: string }) => {
+    setNewProductDetails({
+      version: details.version,
+      shape: details.shape,
+      countryOfOrigin: details.countryOfOrigin
+    });
+  }, []);
+
+  const handleEditProductDetailsChange = useCallback((details: { version?: string; shape?: string; countryOfOrigin?: string }) => {
+    setEditProductDetails({
+      version: details.version,
+      shape: details.shape,
+      countryOfOrigin: details.countryOfOrigin
+    });
+  }, []);
+
+  const handleNewShortDescriptionChange = useCallback((shortDescription: string) => {
+    handleInputChange('short_description', shortDescription);
+  }, [handleInputChange]);
+
+  const handleEditShortDescriptionChange = useCallback((shortDescription: string) => {
+    handleEditInputChange('short_description', shortDescription);
+  }, [handleEditInputChange]);
+
   // Handler functions for description editor buttons
   const handleDescriptionPreviewToggle = useCallback(() => {
     setShowDescriptionPreview(!showDescriptionPreview);
@@ -1604,12 +1628,40 @@ export const Products: React.FC = () => {
 
     try {
       setActionLoading('edit-product');
-      
+
+      const toValidNumber = (value: string | number | null | undefined): number | undefined => {
+        if (value === null || value === undefined || value === '') {
+          return undefined;
+        }
+        const parsed = typeof value === 'string' ? parseInt(value, 10) : value;
+        return Number.isFinite(parsed) ? parsed : undefined;
+      };
+
+      const resolvedCategoryIds = (
+        editProduct.category_ids.length > 0
+          ? editProduct.category_ids
+          : (toValidNumber(editProduct.category_id) ? [toValidNumber(editProduct.category_id)!] : [])
+      ).filter((id): id is number => Number.isFinite(id));
+
+      const resolvedSubcategoryIds = Array.from(
+        new Set([
+          ...(editProduct.subcategory_ids.length > 0
+            ? editProduct.subcategory_ids
+            : (toValidNumber(editProduct.subcategory_id) ? [toValidNumber(editProduct.subcategory_id)!] : [])),
+          ...(editProduct.available_flavor_ids || [])
+        ])
+      ).filter((id): id is number => Number.isFinite(id));
+
+      const resolvedCategoryId = resolvedCategoryIds[0];
+      const resolvedSubcategoryId = resolvedSubcategoryIds[0];
+      const resolvedPrimaryCategoryId = toValidNumber(editProduct.primary_category_id);
+      const resolvedPrimarySubcategoryId = toValidNumber(editProduct.primary_subcategory_id || editProduct.primary_flavor_id);
+
       const productData: {
         name: string;
         description: string;
         short_description?: string;
-        category_id: number;
+        category_id?: number;
         subcategory_id?: number;
         category_ids?: number[];
         subcategory_ids?: number[];
@@ -1640,15 +1692,15 @@ export const Products: React.FC = () => {
         description: editProduct.description,
         short_description: editProduct.short_description,
         // Legacy fields for backward compatibility
-        category_id: editProduct.category_ids.length > 0 ? editProduct.category_ids[0] : parseInt(editProduct.category_id),
+        category_id: resolvedCategoryId,
         // Set legacy subcategory_id to first subcategory (can be flavor or non-flavor)
-        subcategory_id: editProduct.subcategory_ids.length > 0 ? editProduct.subcategory_ids[0] : (editProduct.subcategory_id ? parseInt(editProduct.subcategory_id) : undefined),
+        subcategory_id: resolvedSubcategoryId,
         // New multi-category fields
-        category_ids: editProduct.category_ids.length > 0 ? editProduct.category_ids : (editProduct.category_id ? [parseInt(editProduct.category_id)] : []),
+        category_ids: resolvedCategoryIds.length > 0 ? resolvedCategoryIds : undefined,
         // Combine base subcategories with flavor subcategories
-        subcategory_ids: Array.from(new Set([...(editProduct.subcategory_ids.length > 0 ? editProduct.subcategory_ids : (editProduct.subcategory_id ? [parseInt(editProduct.subcategory_id)] : [])), ...(editProduct.available_flavor_ids || [])])),
-        primary_category_id: editProduct.primary_category_id,
-        primary_subcategory_id: editProduct.primary_subcategory_id || editProduct.primary_flavor_id,
+        subcategory_ids: resolvedSubcategoryIds.length > 0 ? resolvedSubcategoryIds : undefined,
+        primary_category_id: resolvedPrimaryCategoryId,
+        primary_subcategory_id: resolvedPrimarySubcategoryId,
         base_price: editProduct.base_price,
         base_weight: editProduct.base_weight,
         discount_percent: editProduct.discount_percent,
@@ -2441,12 +2493,8 @@ export const Products: React.FC = () => {
                   placeholder="Write up to 50 words about the product..."
                   value={newProduct.description}
                   onChange={(value) => handleInputChange('description', value)}
-                  onShortDescriptionChange={(shortDescription) => handleInputChange('short_description', shortDescription)}
-                  onProductDetailsChange={(d) => setNewProductDetails({
-                    version: d.version,
-                    shape: d.shape,
-                    countryOfOrigin: d.countryOfOrigin
-                  })}
+                  onShortDescriptionChange={handleNewShortDescriptionChange}
+                  onProductDetailsChange={handleNewProductDetailsChange}
                   onPreviewToggle={handleDescriptionPreviewToggle}
                   onReset={handleDescriptionReset}
                   onClean={handleDescriptionClean}
@@ -3106,13 +3154,9 @@ export const Products: React.FC = () => {
                   ref={editDescriptionEditorRef}
                   value={editProduct.description}
                   onChange={(value) => handleEditInputChange('description', value)}
-                  onShortDescriptionChange={(shortDescription) => handleEditInputChange('short_description', shortDescription)}
+                  onShortDescriptionChange={handleEditShortDescriptionChange}
                   initialShortDescription={editProduct.short_description}
-                  onProductDetailsChange={(d) => setEditProductDetails({
-                    version: d.version,
-                    shape: d.shape,
-                    countryOfOrigin: d.countryOfOrigin
-                  })}
+                  onProductDetailsChange={handleEditProductDetailsChange}
                   placeholder="Write up to 50 words about the product..."
                   onPreviewToggle={handleEditDescriptionPreviewToggle}
                   onReset={handleEditDescriptionReset}

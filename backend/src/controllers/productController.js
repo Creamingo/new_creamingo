@@ -661,6 +661,7 @@ const getRelatedProducts = async (req, res) => {
   try {
     const { id } = req.params;
     const { limit = 6 } = req.query;
+    const limitNum = Number.isFinite(parseInt(limit, 10)) ? parseInt(limit, 10) : 6;
 
     // First get the product's category and subcategory
     const productQuery = `
@@ -712,10 +713,10 @@ const getRelatedProducts = async (req, res) => {
     `;
 
     const relatedResult = await query(relatedQuery, [
-      id, 
-      product.category_id, 
-      product.subcategory_id, 
-      parseInt(limit)
+      id,
+      product.category_id,
+      product.subcategory_id,
+      limitNum
     ]);
 
     res.json({
@@ -739,7 +740,9 @@ const getProductReviews = async (req, res) => {
   try {
     const { id } = req.params;
     const { page = 1, limit = 10 } = req.query;
-    const offset = (page - 1) * limit;
+    const pageNum = Number.isFinite(parseInt(page, 10)) ? parseInt(page, 10) : 1;
+    const limitNum = Number.isFinite(parseInt(limit, 10)) ? parseInt(limit, 10) : 10;
+    const offset = (pageNum - 1) * limitNum;
 
     // Get reviews with pagination
     const reviewsQuery = `
@@ -757,7 +760,7 @@ const getProductReviews = async (req, res) => {
       LIMIT ? OFFSET ?
     `;
     
-    const reviewsResult = await query(reviewsQuery, [id, parseInt(limit), offset]);
+    const reviewsResult = await query(reviewsQuery, [id, limitNum, offset]);
 
     // Get total count
     const countQuery = `
@@ -1314,6 +1317,8 @@ const updateProduct = async (req, res) => {
       // This preserves existing gallery images when frontend sends empty array
     }
 
+    const baseUrl = getBaseUrl(req);
+
     // Fetch the updated product with all details
     const productResult = await query(`
       SELECT 
@@ -1397,9 +1402,22 @@ const updateProduct = async (req, res) => {
     });
   } catch (error) {
     console.error('Update product error:', error);
+    const isDev = process.env.NODE_ENV !== 'production';
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorDetails = error && typeof error === 'object'
+      ? { code: error.code, errno: error.errno, sqlMessage: error.sqlMessage, sqlState: error.sqlState }
+      : {};
+
+    if (isDev) {
+      console.error('Update product error details:', {
+        message: errorMessage,
+        ...errorDetails
+      });
+    }
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Internal server error',
+      ...(isDev ? { error: errorMessage, details: errorDetails } : {})
     });
   }
 };
