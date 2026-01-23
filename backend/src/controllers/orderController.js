@@ -39,6 +39,25 @@ const generateNextOrderNumber = async () => {
   }
 };
 
+const normalizeDateTime = (value) => {
+  if (!value) {
+    return '';
+  }
+
+  if (typeof value === 'string') {
+    if (value.includes('T') || value.includes('Z')) {
+      return value;
+    }
+    return value.replace(' ', 'T') + 'Z';
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return String(value);
+};
+
 // Get all orders with pagination and filters
 const getOrders = async (req, res) => {
   try {
@@ -372,14 +391,9 @@ const getOrders = async (req, res) => {
         deliveryDate: order.delivery_date || '',
         deliveryTime: order.delivery_time || '',
         notes: order.special_instructions || '',
-        // Convert SQLite datetime to ISO format with UTC timezone indicator for frontend
-        // SQLite format: "2025-11-02 14:20:00" -> ISO UTC: "2025-11-02T14:20:00Z"
-        createdAt: order.created_at ? (order.created_at.includes('T') || order.created_at.includes('Z') 
-          ? order.created_at 
-          : order.created_at.replace(' ', 'T') + 'Z') : '',
-        updatedAt: order.updated_at ? (order.updated_at.includes('T') || order.updated_at.includes('Z')
-          ? order.updated_at
-          : order.updated_at.replace(' ', 'T') + 'Z') : ''
+        // Normalize datetime for frontend (string or Date object).
+        createdAt: normalizeDateTime(order.created_at),
+        updatedAt: normalizeDateTime(order.updated_at)
       };
     });
 
@@ -511,12 +525,8 @@ const getOrder = async (req, res) => {
       deliveryDate: order.delivery_date || '',
       deliveryTime: order.delivery_time || '',
       notes: order.special_instructions || '',
-      createdAt: order.created_at ? (order.created_at.includes('T') || order.created_at.includes('Z') 
-        ? order.created_at 
-        : order.created_at.replace(' ', 'T') + 'Z') : '',
-      updatedAt: order.updated_at ? (order.updated_at.includes('T') || order.updated_at.includes('Z')
-        ? order.updated_at
-        : order.updated_at.replace(' ', 'T') + 'Z') : ''
+      createdAt: normalizeDateTime(order.created_at),
+      updatedAt: normalizeDateTime(order.updated_at)
     };
 
     res.json({
@@ -1217,13 +1227,8 @@ const updateOrder = async (req, res) => {
       deliveryDate: order.delivery_date || '',
       deliveryTime: order.delivery_time || '',
       notes: order.special_instructions || '',
-      // Convert SQLite datetime to ISO format with UTC timezone indicator for frontend
-      createdAt: order.created_at ? (order.created_at.includes('T') || order.created_at.includes('Z') 
-        ? order.created_at 
-        : order.created_at.replace(' ', 'T') + 'Z') : '',
-      updatedAt: order.updated_at ? (order.updated_at.includes('T') || order.updated_at.includes('Z')
-        ? order.updated_at
-        : order.updated_at.replace(' ', 'T') + 'Z') : ''
+      createdAt: normalizeDateTime(order.created_at),
+      updatedAt: normalizeDateTime(order.updated_at)
     };
 
     res.json({

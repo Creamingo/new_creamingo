@@ -123,19 +123,33 @@ const ListingPage = () => {
       const response = await categoryApi.getSubcategories(categorySlug);
       console.log('API response:', response);
       
-      // Transform the API response to match our expected format
-      if (response && response.success && response.data && response.data.subcategories && response.data.subcategories.length > 0) {
-        const transformedData = response.data.subcategories.map(subcategory => ({
-          id: subcategory.id,
-          name: subcategory.name,
-          slug: subcategory.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and'),
-          image: subcategory.image_url,
-          productCount: subcategory.product_count || subcategory.products_count || subcategory.productCount || 0 // Use API count if available
-        }));
-        console.log('Transformed subcategories data:', transformedData);
-        return transformedData;
+      if (!response || !response.success || !response.data) {
+        throw new Error('Invalid API response format');
       }
-      throw new Error('Invalid API response format or empty subcategories');
+
+      const rawSubcategories =
+        response.data.subcategories ||
+        response.data.category?.subcategories ||
+        [];
+
+      if (!Array.isArray(rawSubcategories)) {
+        throw new Error('Invalid API response format');
+      }
+
+      if (rawSubcategories.length === 0) {
+        console.warn('No subcategories found for category:', categorySlug);
+        return [];
+      }
+
+      const transformedData = rawSubcategories.map(subcategory => ({
+        id: subcategory.id,
+        name: subcategory.name,
+        slug: subcategory.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and'),
+        image: subcategory.image_url,
+        productCount: subcategory.product_count || subcategory.products_count || subcategory.productCount || 0 // Use API count if available
+      }));
+      console.log('Transformed subcategories data:', transformedData);
+      return transformedData;
     } catch (error) {
       console.error('Failed to fetch subcategories data:', error);
       throw error; // Don't fall back to mock data, let the error propagate
