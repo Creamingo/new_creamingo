@@ -662,6 +662,7 @@ const getRelatedProducts = async (req, res) => {
     const { id } = req.params;
     const { limit = 6 } = req.query;
     const limitNum = Number.isFinite(parseInt(limit, 10)) ? parseInt(limit, 10) : 6;
+    const safeLimit = Math.max(1, Math.min(limitNum, 50));
 
     // First get the product's category and subcategory
     const productQuery = `
@@ -709,14 +710,13 @@ const getRelatedProducts = async (req, res) => {
         AND p.is_active = 1
         AND (p.category_id = ? OR p.subcategory_id = ?)
       ORDER BY p.rating DESC, p.review_count DESC
-      LIMIT ?
+      LIMIT ${safeLimit}
     `;
 
     const relatedResult = await query(relatedQuery, [
       id,
       product.category_id,
-      product.subcategory_id,
-      limitNum
+      product.subcategory_id
     ]);
 
     res.json({
@@ -728,6 +728,20 @@ const getRelatedProducts = async (req, res) => {
     });
   } catch (error) {
     console.error('Get related products error:', error);
+    const schemaErrorCodes = new Set(['ER_BAD_FIELD_ERROR', 'ER_NO_SUCH_TABLE', 'ER_PARSE_ERROR']);
+    if (schemaErrorCodes.has(error.code)) {
+      console.warn('Related products query failed due to schema mismatch; returning empty list.', {
+        code: error.code,
+        message: error.message
+      });
+      return res.json({
+        success: true,
+        data: {
+          products: [],
+          count: 0
+        }
+      });
+    }
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -742,7 +756,9 @@ const getProductReviews = async (req, res) => {
     const { page = 1, limit = 10 } = req.query;
     const pageNum = Number.isFinite(parseInt(page, 10)) ? parseInt(page, 10) : 1;
     const limitNum = Number.isFinite(parseInt(limit, 10)) ? parseInt(limit, 10) : 10;
-    const offset = (pageNum - 1) * limitNum;
+    const safeLimit = Math.max(1, Math.min(limitNum, 50));
+    const safePage = Math.max(1, pageNum);
+    const offset = (safePage - 1) * safeLimit;
 
     // Get reviews with pagination
     const reviewsQuery = `
@@ -757,10 +773,10 @@ const getProductReviews = async (req, res) => {
       FROM product_reviews 
       WHERE product_id = ? AND is_approved = 1
       ORDER BY created_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT ${safeLimit} OFFSET ${offset}
     `;
     
-    const reviewsResult = await query(reviewsQuery, [id, limitNum, offset]);
+    const reviewsResult = await query(reviewsQuery, [id]);
 
     // Get total count
     const countQuery = `
@@ -906,6 +922,32 @@ const getProductReviews = async (req, res) => {
     });
   } catch (error) {
     console.error('Get product reviews error:', error);
+    const schemaErrorCodes = new Set(['ER_BAD_FIELD_ERROR', 'ER_NO_SUCH_TABLE', 'ER_PARSE_ERROR']);
+    if (schemaErrorCodes.has(error.code)) {
+      console.warn('Product reviews query failed due to schema mismatch; returning empty reviews.', {
+        code: error.code,
+        message: error.message
+      });
+      return res.json({
+        success: true,
+        data: {
+          reviews: [],
+          ratingBreakdown: {
+            taste: 0,
+            presentation: 0,
+            freshness: 0,
+            valueForMoney: 0,
+            deliveryExperience: 0
+          },
+          pagination: {
+            current_page: parseInt(page),
+            per_page: parseInt(limit),
+            total: 0,
+            total_pages: 0
+          }
+        }
+      });
+    }
     res.status(500).json({
       success: false,
       message: 'Internal server error'

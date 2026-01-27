@@ -118,6 +118,8 @@ const ProductHero = ({ product, selectedVariant, isFavorite, onFavoriteToggle, o
           className="object-cover transition-transform duration-300 group-hover:scale-105"
           onClick={handleImageClick}
           priority
+          loading="eager"
+          fetchPriority="high"
           unoptimized
         />
 

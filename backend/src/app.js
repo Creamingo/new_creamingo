@@ -36,6 +36,8 @@ const scratchCardRoutes = require('./routes/scratchCardRoutes');
 const referralRoutes = require('./routes/referralRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const dealRoutes = require('./routes/dealRoutes');
+const schemaHealthRoutes = require('./routes/schemaHealthRoutes');
+const { runSchemaHealthCheck } = require('./controllers/schemaHealthController');
 
 // Import middleware
 const { errorHandler, notFound } = require('./middleware/errorHandler');
@@ -276,6 +278,31 @@ app.use('/api/scratch-cards', scratchCardRoutes);
 app.use('/api/referrals', referralRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/deals', dealRoutes);
+app.use('/api/schema-health', schemaHealthRoutes);
+
+// Run schema diagnostics on startup
+setImmediate(async () => {
+  try {
+    const data = await runSchemaHealthCheck();
+    if (!data.ok) {
+      console.warn('⚠️  Schema health check failed. Missing tables/columns detected.');
+      Object.entries(data.tables).forEach(([tableName, info]) => {
+        if (!info.exists) {
+          console.warn(`- Missing table: ${tableName}`);
+          console.warn(`  Expected columns: ${info.missingColumns.join(', ')}`);
+          return;
+        }
+        if (info.missingColumns.length > 0) {
+          console.warn(`- Missing columns in ${tableName}: ${info.missingColumns.join(', ')}`);
+        }
+      });
+    } else {
+      console.log('✅ Schema health check passed.');
+    }
+  } catch (error) {
+    console.error('Schema health startup check failed:', error);
+  }
+});
 
 // 404 handler
 app.use(notFound);

@@ -56,7 +56,11 @@ const RelatedProducts = ({ products, currentProductId }) => {
   };
 
   const formatPrice = (price) => {
-    return `₹${price % 1 === 0 ? price.toFixed(0) : price.toFixed(2)}`;
+    const numericPrice = typeof price === 'number' ? price : Number(price);
+    if (!Number.isFinite(numericPrice)) {
+      return '₹0';
+    }
+    return `₹${numericPrice % 1 === 0 ? numericPrice.toFixed(0) : numericPrice.toFixed(2)}`;
   };
 
   // Check scroll position for mobile navigation
@@ -201,7 +205,8 @@ const RelatedProducts = ({ products, currentProductId }) => {
                       fill
                       sizes="(max-width: 1024px) 160px, 200px"
                       className="object-cover group-hover:scale-105 transition-transform duration-300"
-                      loading="lazy"
+                      loading={isFirstVisible ? 'eager' : 'lazy'}
+                      priority={isFirstVisible}
                       unoptimized
                     />
                   </Link>
