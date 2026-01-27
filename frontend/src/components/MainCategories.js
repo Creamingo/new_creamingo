@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import mainCategoriesAPI from '../api/mainCategories';
 import { resolveImageUrl } from '../utils/imageUrl';
+import logger from '../utils/logger';
 
 const MainCategories = () => {
   const router = useRouter();
@@ -12,6 +13,8 @@ const MainCategories = () => {
   const [error, setError] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState(null);
 
   // Mount detection
   useEffect(() => {
@@ -48,7 +51,9 @@ const MainCategories = () => {
         setError(null);
         
         // Get all main categories from the database
-        const categories = await mainCategoriesAPI.getMainCategoriesForCurrentDevice();
+        const categories = await mainCategoriesAPI.getMainCategoriesForCurrentDevice({
+          forceRefresh: refreshKey > 0,
+        });
         
         // Transform categories to match the expected format
         const transformedCategories = categories.map(category => {
@@ -73,6 +78,7 @@ const MainCategories = () => {
         
         
         setMainCategories(transformedCategories);
+        setLastRefreshedAt(new Date());
       } catch (err) {
         console.error('Error fetching main categories:', err);
         setError(err.message);
@@ -84,7 +90,7 @@ const MainCategories = () => {
     };
 
     fetchAllMainCategories();
-  }, [mounted]);
+  }, [mounted, refreshKey]);
 
   // Removed automatic refresh mechanism to prevent infinite loading
 
@@ -221,6 +227,7 @@ const MainCategories = () => {
 
   // Force refresh function
   const handleRefresh = () => {
+    logger.log('Forcing main categories refresh');
     setRefreshKey(prev => prev + 1);
   };
 
@@ -291,15 +298,22 @@ const MainCategories = () => {
                 <span className="hidden lg:inline font-light">Most Loved 9 Categories</span>
               </h2>
               {/* Refresh button */}
-              <button
-                onClick={handleRefresh}
-                className="absolute right-0 top-1/2 transform -translate-y-1/2 p-2 text-[#8B7355] dark:text-amber-300 hover:text-[#6c3e27] dark:hover:text-amber-200 transition-colors"
-                title="Refresh categories"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
+              <div className="absolute right-0 top-1/2 transform -translate-y-1/2 flex items-center gap-2">
+                {lastRefreshedAt && (
+                  <span className="hidden sm:inline text-[10px] text-[#8B7355] dark:text-amber-300">
+                    Last refreshed {lastRefreshedAt.toLocaleTimeString()}
+                  </span>
+                )}
+                <button
+                  onClick={handleRefresh}
+                  className="p-2 text-[#8B7355] dark:text-amber-300 hover:text-[#6c3e27] dark:hover:text-amber-200 transition-colors"
+                  title="Refresh categories"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
         </div>

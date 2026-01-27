@@ -1,78 +1,44 @@
 'use client'
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Star } from 'lucide-react'
 import './TopProducts.css'
 import { resolveImageUrl } from '../utils/imageUrl'
+import { formatPrice as formatPriceUtil } from '../utils/priceFormatter'
+import logger from '../utils/logger'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const TOP_PRODUCTS_LIMIT = 10;
+const TOP_PRODUCTS_CACHE_TTL_MS = 2 * 60 * 1000;
+let cachedTopProducts = null;
+let cachedTopProductsAt = 0;
+let inFlightTopProducts = null;
+
+const getAvailableWeights = (product) => {
+  if (!product) return [];
+
+  const weights = [];
+
+  if (product.base_weight && product.base_weight.trim() !== '') {
+    weights.push(product.base_weight);
+  }
+
+  if (product.variants && Array.isArray(product.variants)) {
+    product.variants.forEach((variant) => {
+      if (variant.is_available !== false && variant.weight && !weights.includes(variant.weight)) {
+        weights.push(variant.weight);
+      }
+    });
+  }
+
+  return weights;
+};
 
 export default function TopProducts() {
   const router = useRouter()
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  // Get available weights from product variants and base weight
-  const getAvailableWeights = (product) => {
-    if (!product) return [];
-    
-    const weights = [];
-    
-    // Add base weight if it exists
-    if (product.base_weight && product.base_weight.trim() !== '') {
-      weights.push(product.base_weight);
-    }
-    
-    // Add variant weights
-    if (product.variants && Array.isArray(product.variants)) {
-      product.variants.forEach(variant => {
-        if (variant.is_available !== false && variant.weight) {
-          // Check if weight is not already added (avoid duplicates)
-          if (!weights.includes(variant.weight)) {
-            weights.push(variant.weight);
-          }
-        }
-      });
-    }
-    
-    // Debug logging
-    if (process.env.NODE_ENV === 'development' && product.id) {
-      console.log(`[getAvailableWeights] Product ${product.id} (${product.name}):`, {
-        base_weight: product.base_weight,
-        variants: product.variants,
-        variantsCount: product.variants?.length || 0,
-        availableWeights: weights
-      });
-    }
-    
-    return weights;
-  };
-
-  // Check if product has multiple weight options
-  const hasMultipleWeights = (product) => {
-    if (!product) return false;
-    const availableWeights = getAvailableWeights(product);
-    const hasMultiple = availableWeights.length > 1;
-    
-    // Debug logging
-    if (process.env.NODE_ENV === 'development' && product.id) {
-      console.log(`[hasMultipleWeights] Product ${product.id} (${product.name}):`, {
-        availableWeights: availableWeights,
-        count: availableWeights.length,
-        hasMultiple: hasMultiple
-      });
-    }
-    
-    return hasMultiple;
-  };
-
-  // Get weight count for badge display
-  const getWeightCount = (product) => {
-    if (!product) return 0;
-    const availableWeights = getAvailableWeights(product);
-    return availableWeights.length;
-  };
 
 
 
@@ -122,8 +88,6 @@ export default function TopProducts() {
     }
   };
 
-  // Import formatPrice from utils
-  const { formatPrice: formatPriceUtil } = require('../utils/priceFormatter');
   const formatPrice = (price) => {
     return formatPriceUtil(price);
   };
@@ -131,65 +95,126 @@ export default function TopProducts() {
 
   // Fetch top products from API
   useEffect(() => {
+    let didCancel = false;
+
     const fetchTopProducts = async () => {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetch(`${API_BASE_URL}/products/top?limit=10`);
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+        const now = Date.now();
+        if (cachedTopProducts && now - cachedTopProductsAt < TOP_PRODUCTS_CACHE_TTL_MS) {
+          logger.log('Top products cache hit');
+          if (!didCancel) {
+            setProducts(cachedTopProducts);
+          }
+          return;
         }
-        
-        const data = await response.json();
-        
-        if (data.success && data.data && data.data.products) {
-          // Transform API response to match component format
-          const transformedProducts = data.data.products.map(product => ({
-            id: product.id,
-            name: product.name,
-            image: resolveImageUrl(product.image_url || product.image || '/Design 1.webp'),
-            discount: product.discount_percent > 0 
-              ? `${Math.round(product.discount_percent)}% OFF` 
-              : null,
-            originalPrice: product.base_price 
-              ? `₹${Math.round(product.base_price)}` 
-              : '₹0',
-            discountedPrice: product.discounted_price 
-              ? `₹${Math.round(product.discounted_price)}` 
-              : product.base_price 
-                ? `₹${Math.round(product.base_price)}` 
-                : '₹0',
-            rating: product.rating ?? 0,
-            reviews: product.review_count ?? 0,
-            slug: product.slug || product.name.toLowerCase().replace(/\s+/g, '-'),
-            deliveryTime: "30-60 mins",
-            deliveryDate: "Tomorrow",
-            isBestSeller: product.is_bestseller || false,
-            // Include variants and base weight for badge display
-            variants: product.variants || [],
-            base_weight: product.base_weight || null,
-            is_eggless: product.is_eggless === 1 || product.is_eggless === true || product.is_eggless === '1'
-          }));
-          
-          // Sort by ID in ascending order
-          transformedProducts.sort((a, b) => a.id - b.id);
-          setProducts(transformedProducts);
-        } else {
-          setError('No products found');
-          setProducts([]);
+
+        if (!inFlightTopProducts) {
+          logger.log('Top products cache miss');
+          inFlightTopProducts = fetch(`${API_BASE_URL}/products/top?limit=${TOP_PRODUCTS_LIMIT}`)
+            .then(async (response) => {
+              if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+              }
+              return response.json();
+            })
+            .then((data) => {
+              if (data.success && data.data && data.data.products) {
+                const transformedProducts = data.data.products.map((product) => {
+                  const availableWeights = getAvailableWeights(product);
+                  const weightCount = availableWeights.length;
+                  return {
+                    id: product.id,
+                    name: product.name,
+                    image: resolveImageUrl(product.image_url || product.image || '/Design 1.webp'),
+                    discount: product.discount_percent > 0
+                      ? `${Math.round(product.discount_percent)}% OFF`
+                      : null,
+                    originalPrice: product.base_price
+                      ? `₹${Math.round(product.base_price)}`
+                      : '₹0',
+                    discountedPrice: product.discounted_price
+                      ? `₹${Math.round(product.discounted_price)}`
+                      : product.base_price
+                        ? `₹${Math.round(product.base_price)}`
+                        : '₹0',
+                    rating: product.rating ?? 0,
+                    reviews: product.review_count ?? 0,
+                    slug: product.slug || product.name.toLowerCase().replace(/\s+/g, '-'),
+                    deliveryTime: "30-60 mins",
+                    deliveryDate: "Tomorrow",
+                    isBestSeller: product.is_bestseller || false,
+                    variants: product.variants || [],
+                    base_weight: product.base_weight || null,
+                    is_eggless: product.is_eggless === 1 || product.is_eggless === true || product.is_eggless === '1',
+                    availableWeights,
+                    weightCount,
+                    hasMultipleWeights: weightCount > 1,
+                  };
+                });
+
+                transformedProducts.sort((a, b) => a.id - b.id);
+                cachedTopProducts = transformedProducts;
+                cachedTopProductsAt = Date.now();
+                return transformedProducts;
+              }
+
+              return [];
+            })
+            .finally(() => {
+              inFlightTopProducts = null;
+            });
+        }
+
+        if (inFlightTopProducts) {
+          logger.log('Top products cache in-flight');
+        }
+        const nextProducts = await inFlightTopProducts;
+        if (!didCancel) {
+          if (nextProducts.length === 0) {
+            setError('No products found');
+          }
+          setProducts(nextProducts);
         }
       } catch (err) {
         console.error('Error fetching top products:', err);
-        setError('Failed to load products');
-        setProducts([]);
+        if (!didCancel) {
+          setError('Failed to load products');
+          setProducts([]);
+        }
       } finally {
-        setLoading(false);
+        if (!didCancel) {
+          setLoading(false);
+        }
       }
     };
 
     fetchTopProducts();
+    return () => {
+      didCancel = true;
+    };
   }, []);
+
+  const productsWithWeights = useMemo(() => {
+    return products.map((product) => {
+      if (product.availableWeights && product.weightCount !== undefined && product.hasMultipleWeights !== undefined) {
+        return product;
+      }
+
+      const availableWeights = getAvailableWeights(product);
+      const weightCount = availableWeights.length;
+
+      return {
+        ...product,
+        availableWeights,
+        weightCount,
+        hasMultipleWeights: weightCount > 1,
+      };
+    });
+  }, [products]);
+
+  const visibleProducts = useMemo(() => productsWithWeights.slice(0, TOP_PRODUCTS_LIMIT), [productsWithWeights]);
 
   // Handle product click navigation
   const handleProductClick = (product) => {
@@ -301,7 +326,7 @@ export default function TopProducts() {
                 scrollBehavior: 'smooth'
               }}
             >
-            {products.slice(0, 10).map((product, index) => (
+            {visibleProducts.map((product) => (
               <div 
                 key={product.id} 
                   className="flex-shrink-0 w-[280px] cursor-pointer"
@@ -415,12 +440,12 @@ export default function TopProducts() {
                           )}
                         </div>
                         {/* Multiple Sizes Badge - Mobile (right side of price) */}
-                        {hasMultipleWeights(product) && (
+                        {product.hasMultipleWeights && (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-700/50 shadow-sm">
                             <svg className="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
                             </svg>
-                            <span className="font-poppins whitespace-nowrap">{getWeightCount(product)} sizes available</span>
+                            <span className="font-poppins whitespace-nowrap">{product.weightCount} sizes available</span>
                           </span>
                         )}
                       </div>
@@ -433,7 +458,7 @@ export default function TopProducts() {
             {/* Scroll Indicator Dots */}
             {products.length > 0 && (
               <div className="flex justify-center gap-2 mt-1 mb-2">
-                {products.slice(0, 10).map((_, index) => (
+                {visibleProducts.map((_, index) => (
                   <div
                     key={index}
                     className="w-1.5 h-1.5 rounded-full bg-[#6c3e27]/30 dark:bg-amber-600/40"
@@ -453,7 +478,7 @@ export default function TopProducts() {
                 scrollBehavior: 'smooth'
               }}
             >
-            {products.slice(0, 10).map((product, index) => (
+            {visibleProducts.map((product) => (
               <div 
                 key={product.id} 
                 className="group cursor-pointer flex-shrink-0"
@@ -565,12 +590,12 @@ export default function TopProducts() {
                       )}
                             </div>
                     {/* Multiple Sizes Badge - Desktop */}
-                    {hasMultipleWeights(product) && (
+                    {product.hasMultipleWeights && (
                         <span className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-700/50 shadow-sm transition-all hover:shadow-md hover:scale-105">
                           <svg className="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
                               </svg>
-                          <span className="font-poppins whitespace-nowrap">{getWeightCount(product)} Sizes</span>
+                          <span className="font-poppins whitespace-nowrap">{product.weightCount} Sizes</span>
                         </span>
                       )}
                       </div>

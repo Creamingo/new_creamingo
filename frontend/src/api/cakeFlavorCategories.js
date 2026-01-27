@@ -1,26 +1,51 @@
+import logger from '../utils/logger';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const CAKE_FLAVOR_CACHE_TTL_MS = 10 * 60 * 1000;
+let cachedCakeFlavorCategory = null;
+let cachedCakeFlavorAt = 0;
+let inFlightCakeFlavor = null;
 
 class CakeFlavorCategoryAPI {
   /**
    * Get the "Pick a Cake by Flavor" category with its subcategories
    * @returns {Promise<Object>} Object containing category and subcategories data
    */
-  async getCakeFlavorCategory() {
+  async getCakeFlavorCategory({ forceRefresh = false } = {}) {
     try {
-      const response = await fetch(`${API_BASE_URL}/categories/cakes-by-flavor/subcategories`, {
+      const now = Date.now();
+      if (!forceRefresh && cachedCakeFlavorCategory && now - cachedCakeFlavorAt < CAKE_FLAVOR_CACHE_TTL_MS) {
+        logger.log('Cake flavor cache hit');
+        return cachedCakeFlavorCategory;
+      }
+      if (!forceRefresh && inFlightCakeFlavor) {
+        logger.log('Cake flavor cache in-flight');
+        return inFlightCakeFlavor;
+      }
+      logger.log('Cake flavor cache miss');
+
+      inFlightCakeFlavor = fetch(`${API_BASE_URL}/categories/cakes-by-flavor/subcategories`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
-      });
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+          }
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-      }
+          const data = await response.json();
+          cachedCakeFlavorCategory = data;
+          cachedCakeFlavorAt = Date.now();
+          return cachedCakeFlavorCategory;
+        })
+        .finally(() => {
+          inFlightCakeFlavor = null;
+        });
 
-      const data = await response.json();
-      return data;
+      return inFlightCakeFlavor;
     } catch (error) {
       console.error('Error fetching cake flavor category:', error);
       throw error;

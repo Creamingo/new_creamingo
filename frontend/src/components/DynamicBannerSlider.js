@@ -41,7 +41,7 @@ const DynamicBannerSlider = () => {
         logger.log('Fetched banners:', activeBanners);
         
         // Sort banners by order_index
-        const sortedBanners = activeBanners.sort((a, b) => a.order_index - b.order_index);
+        const sortedBanners = [...activeBanners].sort((a, b) => a.order_index - b.order_index);
         
         logger.log('Sorted banners:', sortedBanners);
         
