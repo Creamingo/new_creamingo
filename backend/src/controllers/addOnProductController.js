@@ -154,7 +154,7 @@ const createAddOnProduct = async (req, res) => {
       FROM add_on_products p 
       JOIN add_on_categories c ON p.category_id = c.id 
       WHERE p.id = ?
-    `, [result.insertId]);
+    `, [result.lastID || result.insertId]);
 
     res.status(201).json({
       success: true,
@@ -222,6 +222,15 @@ const updateAddOnProduct = async (req, res) => {
       }
     }
 
+    const safeCategoryId = typeof category_id === 'undefined' ? null : category_id;
+    const safeDescription = typeof description === 'undefined' ? null : description;
+    const safePrice = typeof price === 'undefined' ? null : price;
+    const safeDiscountPercentage = typeof discount_percentage === 'undefined' ? null : discount_percentage;
+    const safeDiscountedPrice = typeof discounted_price === 'undefined' ? null : discounted_price;
+    const safeImageUrl = typeof normalizedImageUrl === 'undefined' ? null : normalizedImageUrl;
+    const safeDisplayOrder = typeof display_order === 'undefined' ? null : display_order;
+    const safeIsActive = typeof is_active === 'undefined' ? null : is_active;
+
     await query(`
       UPDATE add_on_products 
       SET category_id = COALESCE(?, category_id),
@@ -235,7 +244,7 @@ const updateAddOnProduct = async (req, res) => {
           is_active = COALESCE(?, is_active),
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `, [category_id, name, description, price, discount_percentage, discounted_price, normalizedImageUrl, display_order, is_active, id]);
+    `, [safeCategoryId, name, safeDescription, safePrice, safeDiscountPercentage, safeDiscountedPrice, safeImageUrl, safeDisplayOrder, safeIsActive, id]);
 
     const updatedProduct = await query(`
       SELECT p.*, c.name as category_name 

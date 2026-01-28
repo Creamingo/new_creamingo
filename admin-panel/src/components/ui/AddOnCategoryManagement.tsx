@@ -34,20 +34,23 @@ const AddOnCategoryManagement: React.FC<AddOnCategoryManagementProps> = ({
         (c): c is AddOnCategory => !!c && typeof (c as any).id === 'number'
       );
       setCategories(sanitized);
-      // Auto-select first category by default if none selected
-      if (!selectedCategoryId && onCategorySelect && sanitized.length > 0) {
-        onCategorySelect(sanitized[0]);
-      }
     } catch (error: any) {
       showError(error.message || 'Failed to fetch categories');
     } finally {
       setLoading(false);
     }
-  }, [selectedCategoryId, onCategorySelect, showError]);
+  }, [showError]);
 
   useEffect(() => {
     fetchCategories();
   }, [fetchCategories]);
+
+  useEffect(() => {
+    // Auto-select first category by default if none selected
+    if (!selectedCategoryId && onCategorySelect && categories.length > 0) {
+      onCategorySelect(categories[0]);
+    }
+  }, [categories, selectedCategoryId, onCategorySelect]);
 
   // Handle edit
   const handleEdit = (category: AddOnCategory) => {
@@ -279,7 +282,7 @@ const AddOnCategoryManagement: React.FC<AddOnCategoryManagementProps> = ({
                     ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/30'
                     : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600'
                 }`}
-                onClick={() => handleCategoryClick(category)}
+                onClick={editingId === category.id ? undefined : () => handleCategoryClick(category)}
               >
                 {editingId === category.id ? (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
