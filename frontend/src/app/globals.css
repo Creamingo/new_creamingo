@@ -133,6 +133,12 @@ body {
   min-height: 100%;
 }
 
+@media (max-width: 1023px) {
+  body {
+    padding-top: 3.6rem; /* Mobile header height */
+  }
+}
+
 /* Ensure header is always fixed at the top - Use fixed positioning for reliability */
 header[class*="fixed"],
 header[class*="sticky"],
@@ -185,7 +191,7 @@ body[data-page="product"] header[class*="top-0"] {
     transform: translateZ(0) !important;
     backface-visibility: hidden !important;
     position: fixed !important; /* Use fixed instead of sticky for reliability */
-    top: 4rem !important; /* 64px - directly below fixed header */
+    top: 3.6rem !important; /* Mobile header height */
     left: 0 !important;
     right: 0 !important;
     width: 100% !important;
@@ -203,7 +209,7 @@ body[data-page="product"] header[class*="top-0"] {
   /* Header is 64px (4rem), LocationBar is ~48-56px, so content needs space for LocationBar */
   /* Body already has padding-top: 64px for header, so we only need to account for LocationBar */
   body[data-page="product"] > div[class*="min-h-screen"] > div[class*="w-full"][class*="mx-auto"]:not(.product-location-bar-wrapper) {
-    margin-top: 3rem !important; /* ~48px - space for LocationBar below header */
+    margin-top: 2.7rem !important; /* ~10% reduction to match header height */
   }
   
   /* Ensure parent container doesn't interfere */

@@ -483,7 +483,7 @@ const ListingPage = () => {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <Header />
-        <div className="flex items-center justify-center min-h-[calc(100vh-64px)] pt-16 pb-8">
+        <div className="flex items-center justify-center min-h-[calc(100vh-3.6rem)] lg:min-h-[calc(100vh-64px)] pt-[3.6rem] lg:pt-16 pb-8">
           <div className="text-center px-4 max-w-md">
             <div className="w-20 h-20 bg-gradient-to-br from-red-100 to-pink-100 dark:from-red-900/30 dark:to-pink-900/30 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg dark:shadow-black/20">
               <AlertCircle className="w-10 h-10 text-red-500 dark:text-red-400" />
@@ -662,7 +662,7 @@ const ListingPage = () => {
         )}
 
         {/* Sticky Filter Bar - Mobile Only */}
-        <div ref={filterBarRef} className="lg:hidden sticky top-16 z-40 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm transition-all duration-300">
+        <div ref={filterBarRef} className="lg:hidden sticky top-[3.6rem] z-40 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm transition-all duration-300">
           <div className="px-3 py-1.5">
             <div className="flex items-center justify-between gap-2">
               {/* Quick Filter Chips */}

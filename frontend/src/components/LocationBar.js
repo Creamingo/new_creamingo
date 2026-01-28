@@ -140,7 +140,7 @@ const LocationBar = ({ isSticky = true }) => {
   return (
     <>
       {/* Location Bar - Sticky or scrollable based on prop (mobile only) */}
-      <div className={`lg:hidden ${isSticky ? 'sticky top-16 z-40' : 'relative z-30'} bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm transition-all duration-300 ease-in-out`}>
+      <div className={`lg:hidden ${isSticky ? 'sticky top-[3.6rem] z-40' : 'relative z-30'} bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm transition-all duration-300 ease-in-out`}>
         <div 
           className="flex items-center justify-between px-4 py-1.5 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-200 gap-1"
           onClick={() => setIsExpanded(true)}
@@ -197,14 +197,14 @@ const LocationBar = ({ isSticky = true }) => {
         <>
           {/* Backdrop - Dimmed Background (below header only) */}
           <div 
-            className="fixed top-16 left-0 right-0 bottom-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
+            className="fixed top-[3.6rem] left-0 right-0 bottom-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
             onClick={() => setIsExpanded(false)}
           />
           
           {/* Pincode Modal Container */}
           <div 
-            className="fixed top-16 left-0 right-0 z-50 lg:hidden"
-            style={{ maxHeight: 'calc(100vh - 4rem)' }}
+            className="fixed top-[3.6rem] left-0 right-0 z-50 lg:hidden"
+            style={{ maxHeight: 'calc(100vh - 3.6rem)' }}
           >
             <div className="bg-white dark:bg-gray-800 shadow-2xl dark:shadow-2xl dark:shadow-black/30 mx-0 rounded-b-2xl overflow-hidden">
               {/* Header Section */}

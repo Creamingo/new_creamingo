@@ -646,12 +646,12 @@ const Header = () => {
 
   return (
     <header 
-      className={`fixed top-0 left-0 right-0 z-50 bg-red-800 dark:bg-red-900 transition-all duration-300 ${
-        isScrolled ? 'shadow-lg dark:shadow-lg dark:shadow-black/20' : 'shadow-sm dark:shadow-sm dark:shadow-black/10'
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+        isScrolled ? 'bg-[#E65A5A] dark:bg-[#E65A5A] shadow-lg dark:shadow-lg dark:shadow-black/20' : 'bg-[#E65A5A] dark:bg-[#E65A5A] shadow-sm dark:shadow-sm dark:shadow-black/10'
       }`}
     >
       <div className="w-full px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-[3.6rem] lg:h-16">
           
           {/* Mobile Layout */}
           <div className="lg:hidden flex items-center justify-between w-full">
@@ -662,18 +662,18 @@ const Header = () => {
                   setIsMobileMenuOpen(!isMobileMenuOpen)
                   toggleCategoryMenu()
                 }}
-                className={`p-3 rounded-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 transition-all duration-300 shadow-sm hover:shadow-md active:scale-95 group ${
+                className={`p-2.5 rounded-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 transition-all duration-300 shadow-sm hover:shadow-md active:scale-95 group ${
                   isCategoryMenuOpen ? 'bg-pink-500/20 dark:bg-pink-500/30 shadow-md ring-2 ring-pink-500/30' : ''
                 }`}
               >
-                <div className="relative w-5 h-5 flex items-center justify-center">
+                <div className="relative w-[18px] h-[18px] flex items-center justify-center">
                   <Menu 
-                    className={`w-5 h-5 text-white group-hover:text-pink-200 transition-all duration-300 absolute ${
+                    className={`w-[18px] h-[18px] text-white group-hover:text-pink-200 transition-all duration-300 absolute ${
                       isCategoryMenuOpen ? 'opacity-0 rotate-90 scale-75' : 'opacity-100 rotate-0 scale-100'
                     }`}
                   />
                   <X 
-                    className={`w-5 h-5 text-white group-hover:text-pink-200 transition-all duration-300 absolute ${
+                    className={`w-[18px] h-[18px] text-white group-hover:text-pink-200 transition-all duration-300 absolute ${
                       isCategoryMenuOpen ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 -rotate-90 scale-75'
                     }`}
                   />
@@ -689,7 +689,7 @@ const Header = () => {
                   <img 
                     src="/Creamingo LOGO white.png" 
                     alt="Creamingo" 
-                    className="h-12 sm:h-14 w-auto max-w-[140px] sm:max-w-[160px] transition-all duration-200"
+                    className="h-11 sm:h-[50px] w-auto max-w-[126px] sm:max-w-[144px] transition-all duration-200"
                   />
                 </button>
               </div>
@@ -699,25 +699,25 @@ const Header = () => {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => isSearchOpen ? setIsSearchOpen(false) : setIsSearchOpen(true)}
-                className="p-3 rounded-xl bg-white/10 dark:bg-white/5 backdrop-blur-sm border border-white/20 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 transition-all duration-300 shadow-sm hover:shadow-md active:scale-95"
+                className="p-2.5 rounded-xl bg-white/10 dark:bg-white/5 backdrop-blur-sm border border-white/20 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 transition-all duration-300 shadow-sm hover:shadow-md active:scale-95"
               >
                 {isSearchOpen ? (
-                  <X className="w-5 h-5 text-white" />
+                  <X className="w-[18px] h-[18px] text-white" />
                 ) : (
-                  <Search className="w-5 h-5 text-white" />
+                  <Search className="w-[18px] h-[18px] text-white" />
                 )}
               </button>
               {/* Cart Icon - Always visible on PDP, enhanced when items exist */}
               {mounted && isOnPDP && (
                 <button
                   onClick={() => router.push('/cart')}
-                  className={`relative p-3 rounded-xl bg-white/10 dark:bg-white/5 backdrop-blur-sm border border-white/20 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 transition-all duration-300 shadow-sm hover:shadow-md active:scale-95 ${
+                  className={`relative p-2.5 rounded-xl bg-white/10 dark:bg-white/5 backdrop-blur-sm border border-white/20 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 transition-all duration-300 shadow-sm hover:shadow-md active:scale-95 ${
                     cartItemCount > 0 ? 'bg-white/20 dark:bg-white/10 border-white/30 dark:border-white/20' : ''
                   } ${
                     duplicateDetected ? 'animate-pulse' : ''
                   }`}
                 >
-                  <ShoppingCart className="w-5 h-5 text-white" />
+                  <ShoppingCart className="w-[18px] h-[18px] text-white" />
                   {cartItemCount > 0 && (
                     <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5 flex items-center justify-center bg-yellow-500 dark:bg-yellow-600 text-white text-xs font-bold rounded-full border-2 border-red-800 dark:border-red-900">
                       {cartItemCount > 99 ? '99+' : cartItemCount}
@@ -736,12 +736,12 @@ const Header = () => {
                       router.push('/account')
                     }
                   }}
-                  className="p-3 rounded-xl bg-white/10 dark:bg-white/5 backdrop-blur-sm border border-white/20 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 transition-all duration-300 shadow-sm hover:shadow-md active:scale-95"
+                  className="p-2.5 rounded-xl bg-white/10 dark:bg-white/5 backdrop-blur-sm border border-white/20 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 transition-all duration-300 shadow-sm hover:shadow-md active:scale-95"
                 >
                   {pathname === '/account' ? (
-                    <X className="w-5 h-5 text-white" />
+                    <X className="w-[18px] h-[18px] text-white" />
                   ) : (
-                    <User className="w-5 h-5 text-white" />
+                    <User className="w-[18px] h-[18px] text-white" />
                   )}
                 </button>
               )}
@@ -1556,7 +1556,7 @@ const Header = () => {
           <>
             {/* Backdrop - Dimmed Background (below header only) */}
             <div 
-              className="fixed top-16 left-0 right-0 bottom-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
+              className="fixed top-[3.6rem] left-0 right-0 bottom-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
               onClick={() => {
                 setIsSearchOpen(false)
                 setSearchQuery('')
@@ -1566,8 +1566,8 @@ const Header = () => {
             
             {/* Clean Search Container */}
             <div 
-              className="fixed top-16 left-0 right-0 z-50 lg:hidden"
-              style={{ maxHeight: 'calc(100vh - 4rem)' }}
+              className="fixed top-[3.6rem] left-0 right-0 z-50 lg:hidden"
+              style={{ maxHeight: 'calc(100vh - 3.6rem)' }}
             >
               <div className={`bg-white shadow-2xl mx-0 overflow-hidden ${searchQuery && searchQuery.trim().length >= 2 ? 'rounded-b-xl' : 'rounded-b-xl'}`}>
                 {/* Search Input Section */}
@@ -1811,7 +1811,7 @@ const Header = () => {
         {/* Mobile Backdrop Overlay */}
         {(isCategoryMenuOpen || isMenuClosing) && (
           <div 
-            className="fixed top-16 left-0 right-0 bottom-0 bg-black/50 backdrop-blur-sm z-[45] lg:hidden"
+            className="fixed top-[3.6rem] left-0 right-0 bottom-0 bg-black/50 backdrop-blur-sm z-[45] lg:hidden"
             style={{ 
               animation: isMenuClosing 
                 ? 'fadeOut 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)' 
@@ -1828,7 +1828,7 @@ const Header = () => {
             role="dialog"
             aria-modal="true"
             aria-label="Category menu"
-            className="fixed top-16 bottom-16 left-0 w-[90vw] max-w-sm bg-white dark:bg-gray-800 shadow-2xl dark:shadow-black/50 z-50 lg:hidden overflow-y-auto"
+            className="fixed top-[3.6rem] bottom-16 left-0 w-[90vw] max-w-sm bg-white dark:bg-gray-800 shadow-2xl dark:shadow-black/50 z-50 lg:hidden overflow-y-auto"
             style={{ 
               animation: isMenuClosing 
                 ? 'slideOutLeft 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)' 
