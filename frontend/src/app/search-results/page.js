@@ -191,12 +191,12 @@ const SearchResultsContent = () => {
 
         {/* Header Section */}
         <div className="bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
-          <div className="w-full px-4 sm:px-6 lg:px-12 xl:px-16 py-3">
+          <div className="w-full px-4 sm:px-6 lg:px-12 xl:px-16 py-2.5 lg:py-3">
             {/* Breadcrumb */}
-            <nav className="flex items-center space-x-2 text-xs text-gray-400 dark:text-gray-500 mb-2">
+            <nav className="flex items-center space-x-2 text-[11px] text-gray-400 dark:text-gray-500 mb-2">
               <button
                 onClick={() => router.push('/')}
-                className="hover:text-purple-600 dark:hover:text-purple-400 transition-colors duration-200 font-medium"
+                className="hover:text-pink-600 dark:hover:text-pink-400 transition-colors duration-200 font-medium"
               >
                 Home
               </button>
@@ -211,15 +211,15 @@ const SearchResultsContent = () => {
                 <div className="flex items-start justify-between">
                   {/* Left: Title and Info */}
                   <div className="flex-1">
-                    <h1 className="text-xl lg:text-2xl font-semibold text-gray-800 dark:text-gray-100 font-poppins mb-2">
+                    <h1 className="text-xl lg:text-2xl font-semibold text-gray-800 dark:text-gray-100 font-poppins mb-1.5">
                       {getSearchTitle()}
                     </h1>
                     <div className="flex items-center space-x-4">
-                      <span className="text-lg text-gray-600 dark:text-gray-300 font-inter font-semibold">
+                      <span className="text-base text-gray-600 dark:text-gray-300 font-inter font-semibold">
                         {products.length} Products
                       </span>
-                      <div className="h-5 w-px bg-gray-300 dark:bg-gray-700"></div>
-                      <p className="text-gray-700 dark:text-gray-300 font-inter text-base font-medium">
+                      <div className="h-4 w-px bg-gray-300 dark:bg-gray-700"></div>
+                      <p className="text-gray-700 dark:text-gray-300 font-inter text-sm font-medium">
                         {getSearchSubtitle()}
                       </p>
                     </div>
@@ -230,11 +230,11 @@ const SearchResultsContent = () => {
                     <div className="relative">
                       <button
                         onClick={() => setShowSortDropdown(!showSortDropdown)}
-                        className="flex items-center space-x-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-5 py-3 hover:bg-gray-100 dark:hover:bg-gray-600 hover:border-gray-300 dark:hover:border-gray-500 transition-all duration-200 cursor-pointer group"
+                        className="flex items-center space-x-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-600 hover:border-gray-300 dark:hover:border-gray-500 transition-all duration-200 cursor-pointer group"
                       >
                         <Filter className="w-4 h-4 text-gray-500 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-300" />
-                        <span className="text-xs text-gray-600 dark:text-gray-300 font-inter font-medium">Sort by</span>
-                        <span className="text-xs font-inter font-semibold text-purple-600 dark:text-purple-400">
+                        <span className="text-[11px] text-gray-600 dark:text-gray-300 font-inter font-medium">Sort by</span>
+                        <span className="text-[11px] font-inter font-semibold text-pink-600 dark:text-pink-400">
                           {sortBy === 'popularity' && 'Popularity'}
                           {sortBy === 'price-low' && 'Price: Low to High'}
                           {sortBy === 'price-high' && 'Price: High to Low'}
@@ -246,13 +246,13 @@ const SearchResultsContent = () => {
                     
                       {/* Dropdown Menu */}
                       {showSortDropdown && (
-                        <div className="absolute top-full right-0 mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl dark:shadow-2xl dark:shadow-black/30 z-10 overflow-hidden">
+                        <div className="absolute top-full right-0 mt-2 w-52 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl dark:shadow-2xl dark:shadow-black/30 z-10 overflow-hidden">
                           <div className="py-2">
                             <button
                               onClick={() => handleSortChange('popularity')}
-                              className={`w-full text-left px-4 py-3 text-sm font-inter transition-colors duration-200 ${
+                              className={`w-full text-left px-4 py-2.5 text-sm font-inter transition-colors duration-200 ${
                                 sortBy === 'popularity' 
-                                  ? 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-r-2 border-purple-500 dark:border-purple-400' 
+                                  ? 'bg-pink-50 dark:bg-pink-900/30 text-pink-700 dark:text-pink-300 border-r-2 border-pink-500 dark:border-pink-400' 
                                   : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
                               }`}
                             >
@@ -260,9 +260,9 @@ const SearchResultsContent = () => {
                             </button>
                             <button
                               onClick={() => handleSortChange('newest')}
-                              className={`w-full text-left px-4 py-3 text-sm font-inter transition-colors duration-200 ${
+                              className={`w-full text-left px-4 py-2.5 text-sm font-inter transition-colors duration-200 ${
                                 sortBy === 'newest' 
-                                  ? 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-r-2 border-purple-500 dark:border-purple-400' 
+                                  ? 'bg-pink-50 dark:bg-pink-900/30 text-pink-700 dark:text-pink-300 border-r-2 border-pink-500 dark:border-pink-400' 
                                   : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
                               }`}
                             >
@@ -270,9 +270,9 @@ const SearchResultsContent = () => {
                             </button>
                             <button
                               onClick={() => handleSortChange('price-low')}
-                              className={`w-full text-left px-4 py-3 text-sm font-inter transition-colors duration-200 ${
+                              className={`w-full text-left px-4 py-2.5 text-sm font-inter transition-colors duration-200 ${
                                 sortBy === 'price-low' 
-                                  ? 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-r-2 border-purple-500 dark:border-purple-400' 
+                                  ? 'bg-pink-50 dark:bg-pink-900/30 text-pink-700 dark:text-pink-300 border-r-2 border-pink-500 dark:border-pink-400' 
                                   : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
                               }`}
                             >
@@ -280,9 +280,9 @@ const SearchResultsContent = () => {
                             </button>
                             <button
                               onClick={() => handleSortChange('price-high')}
-                              className={`w-full text-left px-4 py-3 text-sm font-inter transition-colors duration-200 ${
+                              className={`w-full text-left px-4 py-2.5 text-sm font-inter transition-colors duration-200 ${
                                 sortBy === 'price-high' 
-                                  ? 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-r-2 border-purple-500 dark:border-purple-400' 
+                                  ? 'bg-pink-50 dark:bg-pink-900/30 text-pink-700 dark:text-pink-300 border-r-2 border-pink-500 dark:border-pink-400' 
                                   : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
                               }`}
                             >
@@ -298,29 +298,29 @@ const SearchResultsContent = () => {
 
               {/* Mobile Layout */}
               <div className="lg:hidden">
-                <h1 className="text-lg font-semibold text-gray-800 dark:text-gray-100 font-poppins mb-2">
+                <h1 className="text-lg font-semibold text-gray-800 dark:text-gray-100 font-poppins mb-1.5">
                   {getSearchTitle()}
                 </h1>
-                <div className="flex items-center space-x-4 mb-3">
-                  <span className="text-base text-gray-600 dark:text-gray-300 font-inter font-semibold">
+                <div className="flex items-center space-x-3 mb-2.5">
+                  <span className="text-sm text-gray-600 dark:text-gray-300 font-inter font-semibold">
                     {products.length} Products
                   </span>
-                  <div className="h-4 w-px bg-gray-300 dark:bg-gray-700"></div>
-                  <p className="text-gray-700 dark:text-gray-300 font-inter text-sm font-medium flex-1">
+                  <div className="h-3.5 w-px bg-gray-300 dark:bg-gray-700"></div>
+                  <p className="text-gray-700 dark:text-gray-300 font-inter text-[13px] font-medium flex-1">
                     {getSearchSubtitle()}
                   </p>
                 </div>
                 
                 {/* Mobile Sort Options */}
-                <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-700 rounded-xl p-3">
-                  <div className="flex items-center space-x-3">
+                <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-700 rounded-xl p-2.5">
+                  <div className="flex items-center space-x-2">
                     <Filter className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                    <span className="text-xs text-gray-600 dark:text-gray-300 font-inter font-medium">Sort by:</span>
+                    <span className="text-[11px] text-gray-600 dark:text-gray-300 font-inter font-medium">Sort by</span>
                   </div>
                   <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
-                    className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-xs font-inter font-medium text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 focus:border-transparent transition-all duration-200"
+                    className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg px-2.5 py-1.5 text-[11px] font-inter font-medium text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 dark:focus:ring-pink-400 focus:border-transparent transition-all duration-200"
                   >
                     <option value="popularity">Popularity</option>
                     <option value="price-low">Price: Low to High</option>
@@ -335,10 +335,10 @@ const SearchResultsContent = () => {
         </div>
 
         {/* Main Content */}
-        <div className="w-full px-4 sm:px-6 lg:px-12 xl:px-16 pt-4 pb-8">
+        <div className="w-full px-4 sm:px-6 lg:px-12 xl:px-16 pt-3 pb-8">
           {/* Products Grid */}
           {sortedProducts.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 lg:gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
               {sortedProducts.map((product) => (
                 <ListingProductCard
                   key={product.id}

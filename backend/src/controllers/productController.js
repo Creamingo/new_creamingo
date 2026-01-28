@@ -2223,8 +2223,20 @@ const toggleActive = async (req, res) => {
 
 // Search products by query
 const searchProducts = async (req, res) => {
+  const { q, page = 1, limit = 20, sort_by = 'created_at', sort_order = 'DESC' } = req.query;
+  const allowedSortColumns = new Set([
+    'created_at',
+    'updated_at',
+    'name',
+    'base_price',
+    'discounted_price',
+    'rating',
+    'order_index'
+  ]);
+  const safeSortBy = allowedSortColumns.has(sort_by) ? sort_by : 'created_at';
+  const safeSortOrder = String(sort_order).toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
   try {
-    const { q, page = 1, limit = 20, sort_by = 'created_at', sort_order = 'DESC' } = req.query;
 
     if (!q) {
       return res.status(400).json({
@@ -2460,7 +2472,7 @@ const searchProducts = async (req, res) => {
         SELECT DISTINCT p.id
         FROM products p
         WHERE p.is_active = 1 AND (${whereClause})
-        ORDER BY p.${sort_by} ${sort_order}
+        ORDER BY p.${safeSortBy} ${safeSortOrder}
         LIMIT ? OFFSET ?
       `;
       productIdsParams = [...queryParams, limit, offset];
@@ -2498,7 +2510,7 @@ const searchProducts = async (req, res) => {
           (${relevanceCases}) as relevance_score
         FROM products p
         WHERE p.is_active = 1 AND (${whereClause})
-        ORDER BY relevance_score DESC, p.${sort_by} ${sort_order}
+        ORDER BY relevance_score DESC, p.${safeSortBy} ${safeSortOrder}
         LIMIT ? OFFSET ?
       `;
       productIdsParams = [...queryParams, ...relevanceParams, limit, offset];
@@ -2544,7 +2556,7 @@ const searchProducts = async (req, res) => {
            LIMIT 1) as subcategory_name
         FROM products p
         WHERE p.id IN (${placeholders})
-        ORDER BY p.${sort_by} ${sort_order}
+        ORDER BY p.${safeSortBy} ${safeSortOrder}
       `;
     } else {
       // For text searches, maintain relevance order
@@ -2597,10 +2609,72 @@ const searchProducts = async (req, res) => {
     });
   } catch (error) {
     console.error('Search products error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
+    try {
+      const trimmedQuery = (q || '').trim();
+      if (!trimmedQuery) {
+        return res.status(400).json({
+          success: false,
+          message: 'Search query is required'
+        });
+      }
+
+      const pageNum = parseInt(page, 10) || 1;
+      const limitNum = parseInt(limit, 10) || 20;
+      const offset = (pageNum - 1) * limitNum;
+      const fallbackTerm = `%${trimmedQuery}%`;
+
+      const fallbackQuery = `
+        SELECT 
+          p.*,
+          (SELECT c.name FROM product_categories pc 
+           JOIN categories c ON pc.category_id = c.id 
+           WHERE pc.product_id = p.id 
+           ORDER BY pc.is_primary DESC, pc.display_order ASC 
+           LIMIT 1) as category_name,
+          (SELECT sc.name FROM product_subcategories psc 
+           JOIN subcategories sc ON psc.subcategory_id = sc.id 
+           WHERE psc.product_id = p.id 
+           ORDER BY psc.is_primary DESC, psc.display_order ASC 
+           LIMIT 1) as subcategory_name
+        FROM products p
+        WHERE p.is_active = 1 AND (p.name LIKE ? OR p.description LIKE ?)
+        ORDER BY p.${safeSortBy} ${safeSortOrder}
+        LIMIT ? OFFSET ?
+      `;
+
+      const countQuery = `
+        SELECT COUNT(DISTINCT p.id) as total
+        FROM products p
+        WHERE p.is_active = 1 AND (p.name LIKE ? OR p.description LIKE ?)
+      `;
+
+      const [productsResult, countResult] = await Promise.all([
+        query(fallbackQuery, [fallbackTerm, fallbackTerm, limitNum, offset]),
+        query(countQuery, [fallbackTerm, fallbackTerm])
+      ]);
+
+      const total = countResult.rows[0]?.total || 0;
+      const totalPages = Math.ceil(total / limitNum);
+
+      return res.json({
+        success: true,
+        data: {
+          products: productsResult.rows,
+          pagination: {
+            currentPage: pageNum,
+            totalPages,
+            totalItems: total,
+            itemsPerPage: limitNum
+          }
+        }
+      });
+    } catch (fallbackError) {
+      console.error('Search fallback error:', fallbackError);
+      return res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
   }
 };
 

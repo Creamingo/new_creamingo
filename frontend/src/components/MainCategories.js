@@ -14,6 +14,7 @@ const MainCategories = () => {
   const [isMobile, setIsMobile] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [imageErrors, setImageErrors] = useState({});
   const [lastRefreshedAt, setLastRefreshedAt] = useState(null);
 
   // Mount detection
@@ -184,9 +185,22 @@ const MainCategories = () => {
 
   // Get category display name
   const getCategoryDisplayName = (category) => {
+    const labelMap = {
+      'Pick a Cake by Flavor': 'By Flavor',
+      'Cakes for Any Occasion': 'Occasions',
+      "Kid's Cake Collection": 'Kids Cakes',
+      'Crowd-Favorite Cakes': 'Top Picks',
+      'Love and Relationship Cakes': 'Love Cakes',
+      'Cakes for Every Milestone Year': 'Milestone',
+      'Flowers': 'Flowers',
+      'Sweets and Dry Fruits': 'Sweets',
+      'Small Treats Desserts': 'Treats'
+    };
+
     if (category.item_type === 'category') {
       // Use display_name if available, otherwise fall back to category_name
-      return category.display_name || category.category_name;
+      const baseName = category.display_name || category.category_name;
+      return labelMap[baseName] || baseName;
     } else if (category.item_type === 'subcategory') {
       return category.subcategory_name;
     }
@@ -289,24 +303,32 @@ const MainCategories = () => {
   return (
     <>
       {/* Header Section */}
-      <section className="bg-gradient-to-b from-pink-50 to-orange-50 dark:from-gray-800 dark:to-gray-900 pt-4 lg:pt-8 pb-2 lg:pb-3">
+      <section className="bg-[#FFF5F8] dark:bg-gray-900 pt-5 lg:pt-10 pb-3 lg:pb-4">
         <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="max-w-7xl mx-auto">
             <div className="text-center relative">
-              <h2 className="font-poppins text-xl lg:text-2xl text-[#6c3e27] dark:text-amber-200">
-                <span className="lg:hidden font-normal">Most Loved 9 Categories</span>
-                <span className="hidden lg:inline font-light">Most Loved 9 Categories</span>
+              <div className="inline-flex items-center gap-2 rounded-full bg-pink-100/70 dark:bg-pink-900/30 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-pink-700 dark:text-pink-300">
+                Most Loved
+              </div>
+              <h2 className="mt-2 font-poppins text-2xl lg:text-3xl text-gray-900 dark:text-gray-100 font-semibold tracking-tight">
+                Most Loved Categories
               </h2>
+              <p className="mt-1 text-[12px] lg:text-sm text-gray-600 dark:text-gray-400 font-inter font-normal">
+                Curated picks that customers order the most.
+              </p>
+              <div className="mt-2 flex justify-center">
+                <div className="h-1 w-16 rounded-full bg-gradient-to-r from-pink-400 via-rose-400 to-orange-300"></div>
+              </div>
               {/* Refresh button */}
               <div className="absolute right-0 top-1/2 transform -translate-y-1/2 flex items-center gap-2">
                 {lastRefreshedAt && (
-                  <span className="hidden sm:inline text-[10px] text-[#8B7355] dark:text-amber-300">
+                  <span className="hidden sm:inline text-[10px] text-gray-500 dark:text-gray-400">
                     Last refreshed {lastRefreshedAt.toLocaleTimeString()}
                   </span>
                 )}
                 <button
                   onClick={handleRefresh}
-                  className="p-2 text-[#8B7355] dark:text-amber-300 hover:text-[#6c3e27] dark:hover:text-amber-200 transition-colors"
+                  className="p-2 text-gray-500 dark:text-gray-400 hover:text-pink-600 dark:hover:text-pink-300 transition-colors"
                   title="Refresh categories"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -319,73 +341,69 @@ const MainCategories = () => {
         </div>
       </section>
 
-        {/* Categories Grid */}
-        <section className="bg-gradient-to-b from-pink-50 to-orange-50 dark:from-gray-800 dark:to-gray-900 py-2 lg:py-3 pb-8 lg:pb-12">
-          <div className="w-full px-3 sm:px-6 lg:px-8">
-            <div className="max-w-7xl mx-auto">
-              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg dark:shadow-xl dark:shadow-black/20 overflow-hidden border border-[#E6D7C3] dark:border-gray-700">
+      {/* Categories Grid */}
+      <section className="bg-[#FFF5F8] dark:bg-gray-900 py-3 lg:py-4 pb-8 lg:pb-12">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
+          <div className="max-w-7xl mx-auto">
+            <div className="relative">
+              {!isMobile && (
+                <>
+                  <div className="pointer-events-none absolute left-0 top-0 h-full w-8 bg-gradient-to-r from-[#FFF5F8] dark:from-gray-900 to-transparent"></div>
+                  <div className="pointer-events-none absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-[#FFF5F8] dark:from-gray-900 to-transparent"></div>
+                </>
+              )}
               <div className={`${
-                isMobile 
-                  ? 'grid grid-cols-3 gap-1 p-2' 
-                  : 'flex overflow-x-auto gap-2 w-full px-3 py-3 scrollbar-thin scrollbar-thumb-[#D2B48C] scrollbar-track-[#F5F5DC] hover:scrollbar-thumb-[#8B4513]'
+                isMobile
+                  ? 'grid grid-cols-3 gap-3'
+                  : 'flex gap-3 overflow-x-auto pb-3 pt-2 px-2 -mx-2 scroll-smooth scrollbar-thin scrollbar-thumb-pink-200/70 scrollbar-track-transparent'
               }`}>
-                {mainCategories.map((category, index) => {
-                  const displayName = getCategoryDisplayName(category);
-                  const isFirst = index === 0;
-                  const isLast = index === mainCategories.length - 1;
-                  const isFirstRow = index < 3;
-                  const isLastRow = index >= mainCategories.length - 3;
-                  
-                  // Determine border radius classes
-                  let borderRadiusClasses = '';
-                  if (isMobile) {
-                    // Mobile: 3x3 grid - first row, first column, last row, last column
-                    const isFirstRow = index < 3;
-                    const isLastRow = index >= 6;
-                    const isFirstCol = index % 3 === 0;
-                    const isLastCol = index % 3 === 2;
-                    
-                    if (isFirstRow && isFirstCol) borderRadiusClasses = 'rounded-tl-lg';
-                    if (isFirstRow && isLastCol) borderRadiusClasses = 'rounded-tr-lg';
-                    if (isLastRow && isFirstCol) borderRadiusClasses = 'rounded-bl-lg';
-                    if (isLastRow && isLastCol) borderRadiusClasses = 'rounded-br-lg';
-                  } else {
-                    // Desktop: single row - first and last items get rounded corners
-                    if (isFirst) borderRadiusClasses = 'rounded-tl-lg rounded-bl-lg';
-                    if (isLast) borderRadiusClasses = 'rounded-tr-lg rounded-br-lg';
-                  }
+              {mainCategories.map((category, index) => {
+                const displayName = getCategoryDisplayName(category);
+                const imageUrl = resolveImageUrl(category.image_url || category.icon_image_url);
+                const categoryKey = `${category.item_type}-${category.item_type === 'category' ? category.category_id : category.subcategory_id}`;
+                const isFeatured = index === 0;
+                const isSecondary = index === 1;
 
-                  return (
-                    <div
-                      key={`${category.item_type}-${category.item_type === 'category' ? category.category_id : category.subcategory_id}`}
-                      className={`border border-[#6c3e27] dark:border-amber-700 ${borderRadiusClasses} p-3 sm:p-4 lg:p-5 flex flex-col items-center hover:bg-gradient-to-br hover:from-[#FEFCFB] hover:to-[#F5F5DC] dark:hover:from-gray-700/50 dark:hover:to-gray-600/50 hover:shadow-lg hover:border-[#8B4513] dark:hover:border-amber-600 transition-all duration-300 cursor-pointer group ${
-                        isMobile
-                          ? 'min-h-[120px] rounded-lg shadow-sm active:scale-95 active:shadow-md bg-white dark:bg-gray-700/30 hover:bg-gradient-to-br hover:from-[#FEFCFB] hover:to-[#F5F5DC] dark:hover:from-gray-700/50 dark:hover:to-gray-600/50'
-                          : displayName === 'Love and Relationship Cakes'
-                            ? 'min-h-[110px] min-w-[160px] flex-shrink-0'
-                            : 'min-h-[110px] min-w-[140px] flex-shrink-0'
-                      }`}
-                      onClick={() => handleCategoryClick(category)}
-                    >
-            <div className={`${isMobile ? 'w-16 h-16 mb-2' : 'w-10 h-10 lg:w-12 lg:h-12 mb-3'} flex items-center justify-center relative group p-0`}>
-              {/* Background circle with subtle gradient */}
-              <div className="absolute inset-0 bg-gradient-to-br from-[#F5F5DC] to-[#E6D7C3] dark:from-amber-900/20 dark:to-amber-800/20 rounded-full opacity-20 group-hover:opacity-30 dark:group-hover:opacity-40 transition-opacity duration-300" />
-              
-              {/* Icon with enhanced styling */}
-              <div className="relative z-10 transform group-hover:scale-110 transition-transform duration-300 w-full h-full flex items-center justify-center">
-                {getCategoryIcon(category)}
-              </div>
-            </div>
-                      <span className={`font-inter text-[#6c3e27] dark:text-amber-200 text-center leading-tight group-hover:text-[#8B4513] dark:group-hover:text-amber-100 transition-colors duration-300 ${
-                        isMobile 
-                          ? 'text-sm font-light px-1 select-none' 
-                          : 'text-xs sm:text-sm lg:text-sm xl:text-sm font-light'
+                return (
+                  <div
+                    key={categoryKey}
+                    className={`group rounded-2xl bg-white/80 dark:bg-gray-800/70 backdrop-blur border border-white/60 dark:border-gray-700 shadow-[0_8px_20px_rgba(0,0,0,0.10)] hover:shadow-[0_12px_28px_rgba(0,0,0,0.14)] hover:-translate-y-0.5 hover:scale-[1.02] transition-all duration-300 cursor-pointer overflow-hidden ${
+                      isFeatured ? 'ring-2 ring-pink-300/60 dark:ring-pink-500/40' : ''
+                    } ${isMobile ? 'active:scale-[0.98]' : 'min-w-[140px] flex-shrink-0 h-[140px] hover:border-[#E65A5A]/60'}`}
+                    onClick={() => handleCategoryClick(category)}
+                  >
+                    <div className={`relative ${isMobile ? 'aspect-[4/3]' : 'h-[98px]'} w-full overflow-hidden ${
+                      imageUrl ? 'bg-white' : 'bg-white'
+                    } border-b border-pink-100/60`}>
+                      {imageUrl && !imageErrors[categoryKey] ? (
+                        <img
+                          src={imageUrl}
+                          alt={displayName}
+                          className="h-full w-full object-cover object-center transition-transform duration-500 group-hover:scale-[1.02]"
+                          onError={() => setImageErrors((prev) => ({ ...prev, [categoryKey]: true }))}
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          {getCategoryIcon(category)}
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-black/10 to-transparent"></div>
+                      {(isFeatured || isSecondary) && (
+                        <div className="absolute top-2 left-2 rounded-full bg-white/90 text-[10px] font-semibold uppercase tracking-wide text-gray-800 px-2 py-0.5 shadow-sm">
+                          {isFeatured ? 'Trending' : 'Best Seller'}
+                        </div>
+                      )}
+                    </div>
+                    <div className={`${isMobile ? 'px-3 py-2' : 'px-2.5 py-1.5'}`}>
+                      <span className={`block font-inter text-gray-900 dark:text-gray-100 text-center leading-snug ${
+                        isMobile ? 'text-[12px] font-semibold tracking-wide' : 'text-xs font-semibold tracking-wide leading-snug'
                       }`}>
                         {wrapCategoryName(displayName)}
                       </span>
                     </div>
-                  );
-                })}
+                  </div>
+                );
+              })}
               </div>
             </div>
           </div>

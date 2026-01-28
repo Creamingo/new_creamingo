@@ -12,5 +12,9 @@ export const resolveImageUrl = (value) => {
     return `${BACKEND_BASE_URL}${value}`;
   }
 
+  if (value.startsWith('uploads/')) {
+    return `${BACKEND_BASE_URL}/${value}`;
+  }
+
   return value;
 };

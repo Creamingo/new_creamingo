@@ -35,6 +35,7 @@ import CartDisplay from './CartDisplay'
 import categoryApi from '../api/categoryApi'
 import productApi from '../api/productApi'
 import { formatPrice } from '../utils/priceFormatter'
+import { resolveImageUrl } from '../utils/imageUrl'
 import logger from '../utils/logger'
 
 const Header = () => {
@@ -49,6 +50,7 @@ const Header = () => {
   const [autocompleteData, setAutocompleteData] = useState({ products: [], flavors: [], categories: [] })
   const [isSearchLoading, setIsSearchLoading] = useState(false)
   const [recentSearches, setRecentSearches] = useState([])
+  const [showAllTrending, setShowAllTrending] = useState(false)
   const [pincode, setPincode] = useState('')
   const [isCartOpen, setIsCartOpen] = useState(false)
   const { getItemCount, duplicateDetected } = useCart()
@@ -1134,7 +1136,7 @@ const Header = () => {
                     }
                   }}
                   placeholder="Search cakes, pastries, gifts..."
-                  className="w-full pl-4 pr-20 py-3 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-500 dark:focus:ring-pink-600 focus:border-transparent font-inter text-sm bg-gray-50 dark:bg-gray-700 hover:bg-white dark:hover:bg-gray-600 transition-colors text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 leading-relaxed"
+                  className="w-full pl-4 pr-20 py-3 border border-pink-500 dark:border-pink-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-500 dark:focus:ring-pink-600 focus:border-pink-500 dark:focus:border-pink-600 font-inter text-sm bg-gray-50 dark:bg-gray-700 hover:bg-white dark:hover:bg-gray-600 transition-colors text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 leading-relaxed"
                 />
                 {searchQuery && (
                   <button
@@ -1201,7 +1203,7 @@ const Header = () => {
                                         <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 flex-shrink-0">
                                           {product.image_url || product.image ? (
                                             <img 
-                                              src={product.image_url || product.image} 
+                                              src={resolveImageUrl(product.image_url || product.image)} 
                                               alt={product.name}
                                               className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-200"
                                             />
@@ -1333,12 +1335,12 @@ const Header = () => {
                             <X className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                           </button>
                         </div>
-                        <div className="grid grid-cols-4 gap-2">
+                        <div className="flex flex-wrap gap-2">
                           {trendingSearches.map((search, index) => (
                             <button
                               key={index}
                               onClick={() => handleSearchSubmit(search)}
-                              className="px-3 py-2 bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 text-sm font-inter hover:bg-pink-50 dark:hover:bg-pink-900/30 hover:border-pink-300 dark:hover:border-pink-700 hover:text-pink-700 dark:hover:text-pink-400 transition-all duration-200 text-center whitespace-nowrap leading-relaxed"
+                              className="px-3 py-2 bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 text-sm font-inter hover:bg-pink-50 dark:hover:bg-pink-900/30 hover:border-pink-300 dark:hover:border-pink-700 hover:text-pink-700 dark:hover:text-pink-400 transition-all duration-200 text-center whitespace-normal leading-snug"
                             >
                               {search}
                             </button>
@@ -1571,10 +1573,10 @@ const Header = () => {
             >
               <div className={`bg-white shadow-2xl mx-0 overflow-hidden ${searchQuery && searchQuery.trim().length >= 2 ? 'rounded-b-xl' : 'rounded-b-xl'}`}>
                 {/* Search Input Section */}
-                <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+                <div className="px-4 pt-3 pb-2 border-b border-gray-100">
                   <div className="relative">
                     <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
-                      <Search className="w-5 h-5 text-gray-400" />
+                      <Search className="w-4 h-4 text-gray-500" />
                     </div>
                     <input
                       type="text"
@@ -1586,7 +1588,7 @@ const Header = () => {
                         }
                       }}
                       placeholder="Search for gifts..."
-                      className="w-full pl-12 pr-20 py-3.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 font-inter text-base bg-gray-50 focus:bg-white transition-colors leading-relaxed"
+                      className="w-full pl-12 pr-20 py-2 border border-pink-500 dark:border-pink-600 rounded-xl focus:outline-none focus:ring-1 focus:ring-pink-500 dark:focus:ring-pink-600 focus:border-pink-500 dark:focus:border-pink-600 font-inter text-sm font-medium bg-gray-50 focus:bg-white transition-colors leading-relaxed placeholder-gray-500"
                       autoFocus
                     />
                     {searchQuery && (
@@ -1598,7 +1600,7 @@ const Header = () => {
                         }}
                         className="absolute right-12 top-1/2 transform -translate-y-1/2 p-1.5 rounded-xl hover:bg-gray-100 transition-colors duration-200"
                       >
-                        <X className="w-4 h-4 text-gray-400" />
+                        <X className="w-4 h-4 text-gray-500" />
                       </button>
                     )}
                     <button
@@ -1610,7 +1612,7 @@ const Header = () => {
                       className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 rounded-xl hover:bg-gray-100 transition-colors duration-200"
                       title="Close"
                     >
-                      <X className="w-5 h-5 text-gray-500" />
+                      <X className="w-4 h-4 text-gray-500" />
                     </button>
                   </div>
                 </div>
@@ -1660,7 +1662,7 @@ const Header = () => {
                                         <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0 shadow-sm group-hover:scale-105 transition-transform">
                                           {product.image_url ? (
                                             <img 
-                                              src={product.image_url} 
+                                              src={resolveImageUrl(product.image_url)} 
                                               alt={product.name}
                                               className="w-full h-full object-cover"
                                             />
@@ -1756,21 +1758,31 @@ const Header = () => {
                 {(!searchQuery || searchQuery.trim() === '') && (
                   <div className="max-h-[calc(100vh-12rem)] overflow-y-auto">
                     <div className="px-4 pt-4 pb-12">
-                      <div className="flex items-center space-x-2 mb-5">
+                        <div className="flex items-center space-x-2 mb-3">
                         <span className="text-lg">🔥</span>
-                        <h3 className="font-poppins font-semibold text-gray-700 text-sm uppercase tracking-wider">TRENDING SEARCHES</h3>
+                          <h3 className="font-poppins font-semibold text-gray-500 text-[11px] uppercase tracking-wider">TRENDING SEARCHES</h3>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className={`flex flex-wrap gap-2 ${showAllTrending ? '' : 'max-h-[4.5rem] overflow-hidden'}`}>
                         {trendingSearches.map((search, index) => (
                           <button
                             key={index}
                             onClick={() => handleSearchSubmit(search)}
-                            className="px-4 py-2 bg-gray-50 rounded-xl text-gray-700 text-sm font-inter font-medium hover:bg-gray-100 transition-colors border border-gray-200 leading-relaxed"
+                            className="px-3 py-1.5 bg-pink-50 dark:bg-pink-900/20 rounded-full text-gray-700 dark:text-gray-200 text-[12px] font-inter font-medium tracking-tight hover:bg-pink-100 dark:hover:bg-pink-900/30 transition-colors border border-pink-200 dark:border-pink-700/40 leading-snug text-center whitespace-normal"
                           >
                             {search}
                           </button>
                         ))}
                       </div>
+                      {trendingSearches.length > 0 && (
+                        <div className="mt-2">
+                          <button
+                            onClick={() => setShowAllTrending((prev) => !prev)}
+                            className="text-xs font-medium text-pink-600 dark:text-pink-400 hover:text-pink-700 dark:hover:text-pink-300 transition-colors"
+                          >
+                            {showAllTrending ? 'Show less' : 'More'}
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Recent Searches */}

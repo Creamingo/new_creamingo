@@ -355,7 +355,44 @@ class ProductAPI {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        let errorData = {};
+        try {
+          errorData = await response.json();
+        } catch (parseError) {
+          errorData = { message: `HTTP error! status: ${response.status}` };
+        }
+
+        // Fallback to basic search endpoint if advanced search fails
+        if (response.status >= 500) {
+          const fallbackParams = new URLSearchParams();
+          fallbackParams.append('search', query);
+
+          Object.keys(options).forEach(key => {
+            if (options[key] !== undefined && options[key] !== null) {
+              fallbackParams.append(key, options[key]);
+            }
+          });
+
+          const fallbackResponse = await fetch(`${API_BASE_URL}/products?${fallbackParams.toString()}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+
+          if (!fallbackResponse.ok) {
+            let fallbackErrorData = {};
+            try {
+              fallbackErrorData = await fallbackResponse.json();
+            } catch (fallbackParseError) {
+              fallbackErrorData = { message: `HTTP error! status: ${fallbackResponse.status}` };
+            }
+            throw new Error(fallbackErrorData.message || `HTTP error! status: ${fallbackResponse.status}`);
+          }
+
+          return await fallbackResponse.json();
+        }
+
         throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
