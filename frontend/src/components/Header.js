@@ -647,7 +647,7 @@ const Header = () => {
   return (
     <header 
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        isScrolled ? 'bg-[#E65A5A] dark:bg-[#E65A5A] shadow-lg dark:shadow-lg dark:shadow-black/20' : 'bg-[#E65A5A] dark:bg-[#E65A5A] shadow-sm dark:shadow-sm dark:shadow-black/10'
+        isScrolled ? 'bg-pink-500 dark:bg-pink-600 shadow-lg dark:shadow-lg dark:shadow-black/20' : 'bg-pink-500 dark:bg-pink-600 shadow-sm dark:shadow-sm dark:shadow-black/10'
       }`}
     >
       <div className="w-full px-4 sm:px-6 lg:px-8">
