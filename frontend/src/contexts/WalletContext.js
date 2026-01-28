@@ -23,6 +23,11 @@ export const WalletProvider = ({ children }) => {
   const [error, setError] = useState(null);
   const [showWelcomeBonus, setShowWelcomeBonus] = useState(false);
 
+  const getWelcomeBonusSeenKey = useCallback((customerId) => {
+    if (!customerId) return null;
+    return `welcome_bonus_seen_${customerId}`;
+  }, []);
+
   // Fetch wallet balance
   const fetchBalance = useCallback(async () => {
     if (!isAuthenticated || !customer) {
@@ -59,9 +64,18 @@ export const WalletProvider = ({ children }) => {
       // This is more reliable than checking transactions
       const welcomeBonusCredited = customer.welcome_bonus_credited;
       
-      // Show welcome bonus modal only if not credited yet
+      // Show welcome bonus modal only if not credited yet and not already shown
       // Check for false, 0, null, or undefined (all mean not credited)
-      if (welcomeBonusCredited === false || welcomeBonusCredited === 0 || welcomeBonusCredited === null || welcomeBonusCredited === undefined) {
+      const hasNotBeenCredited = (
+        welcomeBonusCredited === false ||
+        welcomeBonusCredited === 0 ||
+        welcomeBonusCredited === null ||
+        welcomeBonusCredited === undefined
+      );
+      const seenKey = getWelcomeBonusSeenKey(customer.id);
+      const hasSeen = seenKey ? sessionStorage.getItem(seenKey) === 'true' : false;
+
+      if (hasNotBeenCredited && !hasSeen) {
         setShowWelcomeBonus(true);
       } else {
         // Already credited, don't show modal
@@ -71,7 +85,15 @@ export const WalletProvider = ({ children }) => {
       console.error('Check welcome bonus error:', err);
       setShowWelcomeBonus(false);
     }
-  }, [isAuthenticated, customer]);
+  }, [isAuthenticated, customer, getWelcomeBonusSeenKey]);
+
+  const markWelcomeBonusSeen = useCallback(() => {
+    if (!customer) return;
+    const seenKey = getWelcomeBonusSeenKey(customer.id);
+    if (seenKey) {
+      sessionStorage.setItem(seenKey, 'true');
+    }
+  }, [customer, getWelcomeBonusSeenKey]);
 
   // Credit welcome bonus
   const creditWelcomeBonus = useCallback(async () => {
@@ -79,6 +101,7 @@ export const WalletProvider = ({ children }) => {
       const response = await walletApi.creditWelcomeBonus();
       if (response.success) {
         await fetchBalance(); // Refresh balance
+        markWelcomeBonusSeen();
         setShowWelcomeBonus(false);
         return { success: true, amount: response.data.amount };
       }
@@ -87,7 +110,7 @@ export const WalletProvider = ({ children }) => {
       console.error('Credit welcome bonus error:', err);
       return { success: false, message: err.message || 'Failed to credit welcome bonus' };
     }
-  }, [fetchBalance]);
+  }, [fetchBalance, markWelcomeBonusSeen]);
 
   // Initialize wallet on mount and when auth state changes
   useEffect(() => {
@@ -111,6 +134,7 @@ export const WalletProvider = ({ children }) => {
     error,
     showWelcomeBonus,
     setShowWelcomeBonus,
+    markWelcomeBonusSeen,
     fetchBalance,
     creditWelcomeBonus,
   };

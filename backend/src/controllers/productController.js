@@ -2880,7 +2880,14 @@ const searchProductsByOccasionAndFlavor = async (req, res) => {
       });
     }
 
-    const offset = (page - 1) * limit;
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 20;
+    const safeLimit = Math.max(1, Math.min(limitNum, 100));
+    const offset = (pageNum - 1) * safeLimit;
+
+    const allowedSortFields = ['name', 'base_price', 'created_at', 'updated_at'];
+    const sortField = allowedSortFields.includes(sort_by) ? sort_by : 'created_at';
+    const sortDirection = sort_order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
     const searchQuery = `
       SELECT 
@@ -2899,8 +2906,8 @@ const searchProductsByOccasionAndFlavor = async (req, res) => {
           p.description LIKE ? OR
           p.description LIKE ?
         )
-      ORDER BY p.${sort_by} ${sort_order}
-      LIMIT ? OFFSET ?
+      ORDER BY p.${sortField} ${sortDirection}
+      LIMIT ${safeLimit} OFFSET ${offset}
     `;
 
     const countQuery = `
@@ -2923,7 +2930,7 @@ const searchProductsByOccasionAndFlavor = async (req, res) => {
     const flavorTerm = `%${flavor}%`;
 
     const [productsResult, countResult] = await Promise.all([
-      query(searchQuery, [occasionTerm, flavorTerm, occasionTerm, flavorTerm, occasionTerm, flavorTerm, limit, offset]),
+      query(searchQuery, [occasionTerm, flavorTerm, occasionTerm, flavorTerm, occasionTerm, flavorTerm]),
       query(countQuery, [occasionTerm, flavorTerm, occasionTerm, flavorTerm, occasionTerm, flavorTerm])
     ]);
 
@@ -2935,10 +2942,10 @@ const searchProductsByOccasionAndFlavor = async (req, res) => {
       data: {
         products: productsResult.rows,
         pagination: {
-          currentPage: parseInt(page),
+          currentPage: pageNum,
           totalPages,
           totalItems: total,
-          itemsPerPage: parseInt(limit)
+          itemsPerPage: safeLimit
         }
       }
     });

@@ -1,16 +1,28 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Wallet, X, Sparkles, Gift } from 'lucide-react';
 import { useWallet } from '../contexts/WalletContext';
 import { useToast } from '../contexts/ToastContext';
 
+const WELCOME_BONUS_ALLOWED_PATHS = ['/', '/wallet'];
+
 const WelcomeBonusModal = () => {
-  const { showWelcomeBonus, setShowWelcomeBonus, creditWelcomeBonus } = useWallet();
+  const { showWelcomeBonus, setShowWelcomeBonus, creditWelcomeBonus, markWelcomeBonusSeen } = useWallet();
   const { showSuccess, showError } = useToast();
   const [isCrediting, setIsCrediting] = useState(false);
   const bonusAmount = 50; // Fixed amount - no animation needed
+  const pathname = usePathname();
+  const allowedPaths = WELCOME_BONUS_ALLOWED_PATHS;
+
+  useEffect(() => {
+    if (showWelcomeBonus && pathname && allowedPaths.includes(pathname)) {
+      // Mark as seen immediately to avoid re-showing on refresh.
+      markWelcomeBonusSeen();
+    }
+  }, [showWelcomeBonus, pathname, markWelcomeBonusSeen]);
 
   const handleCreditBonus = async () => {
     setIsCrediting(true);
@@ -19,10 +31,12 @@ const WelcomeBonusModal = () => {
 
     if (result.success) {
       showSuccess('Welcome Bonus Credited!', `₹${result.amount} has been added to your wallet.`);
+      markWelcomeBonusSeen();
       setShowWelcomeBonus(false);
     } else {
       // If already credited, just close the modal
       if (result.message && result.message.includes('already credited')) {
+        markWelcomeBonusSeen();
         setShowWelcomeBonus(false);
       } else {
         showError('Error', result.message || 'Failed to credit welcome bonus');
@@ -31,10 +45,12 @@ const WelcomeBonusModal = () => {
   };
 
   const handleClose = () => {
+    markWelcomeBonusSeen();
     setShowWelcomeBonus(false);
   };
 
   if (!showWelcomeBonus) return null;
+  if (pathname && !allowedPaths.includes(pathname)) return null;
 
   return (
     <AnimatePresence>
