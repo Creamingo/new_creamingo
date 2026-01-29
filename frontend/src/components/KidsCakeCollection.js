@@ -154,7 +154,7 @@ export default function KidsCakeCollection() {
           </div>
 
                      {/* Category Cards - Mobile: Vertical List, Desktop: 1x5 Grid */}
-           <div className="space-y-4 lg:space-y-0 lg:grid lg:grid-cols-5 lg:gap-6">
+           <div className="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-5 lg:gap-6">
              {displayCategories.map((category) => (
               <div key={category.id} className="group">
                                                                                                                                                <button 
@@ -173,28 +173,28 @@ export default function KidsCakeCollection() {
                         </div>
                       
                 {/* Content Section - 60% width */}
-                <div className="w-3/5 px-4 pt-4 pb-5 flex flex-col justify-between bg-gradient-to-b from-white via-gray-50/30 to-white dark:from-gray-800 dark:via-gray-800/50 dark:to-gray-800">
+                <div className="w-3/5 px-3 pt-3 pb-4 flex flex-col justify-between bg-gradient-to-b from-white via-gray-50/30 to-white dark:from-gray-800 dark:via-gray-800/50 dark:to-gray-800">
                   <div className="flex-1">
                     {/* Title */}
-                    <h3 className="font-poppins font-bold text-xl mb-2.5 leading-tight text-gray-900 dark:text-gray-100 group-hover:text-[#6c3e27] dark:group-hover:text-amber-400 transition-colors duration-300">
+                    <h3 className="font-poppins font-bold text-lg mb-2 leading-tight text-gray-900 dark:text-gray-100 group-hover:text-[#6c3e27] dark:group-hover:text-amber-400 transition-colors duration-300">
                       {category.name}
                     </h3>
                     
                     {/* Description */}
-                    <p className="font-inter text-gray-600 dark:text-gray-300 text-sm leading-relaxed mb-0 group-hover:text-gray-700 dark:group-hover:text-gray-200 transition-colors duration-300 line-clamp-2">
+                    <p className="font-inter text-gray-600 dark:text-gray-300 text-xs leading-relaxed mb-0 group-hover:text-gray-700 dark:group-hover:text-gray-200 transition-colors duration-300 line-clamp-2">
                       {category.description}
                     </p>
                   </div>
                   
                   {/* Subtle divider */}
-                  <div className="w-12 h-px bg-gradient-to-r from-transparent via-[#6c3e27]/20 to-transparent dark:via-amber-500/30 my-3 mx-auto"></div>
+                  <div className="w-10 h-px bg-gradient-to-r from-transparent via-[#6c3e27]/20 to-transparent dark:via-amber-500/30 my-2.5 mx-auto"></div>
                   
                   {/* Action indicator */}
                   <div className="flex items-center justify-center">
-                    <div className="flex items-center space-x-2 text-sm font-semibold text-[#6c3e27] dark:text-amber-400 group-hover:text-[#5a2e1f] dark:group-hover:text-amber-300 transition-colors duration-300 bg-gradient-to-r from-[#6c3e27]/10 to-amber-600/10 dark:from-amber-500/10 dark:to-amber-600/10 px-4 py-2 rounded-full shadow-sm group-hover:shadow-md group-hover:scale-105 transition-all duration-300 border border-[#6c3e27]/30 dark:border-amber-500/40 group-hover:border-[#6c3e27]/50 dark:group-hover:border-amber-500/60 group-hover:from-[#6c3e27]/15 group-hover:to-amber-600/15 dark:group-hover:from-amber-500/15 dark:group-hover:to-amber-600/15">
+                    <div className="flex items-center space-x-2 text-xs font-semibold text-[#6c3e27] dark:text-amber-400 group-hover:text-[#5a2e1f] dark:group-hover:text-amber-300 transition-colors duration-300 bg-gradient-to-r from-[#6c3e27]/10 to-amber-600/10 dark:from-amber-500/10 dark:to-amber-600/10 px-3 py-1.5 rounded-full shadow-sm group-hover:shadow-md group-hover:scale-105 transition-all duration-300 border border-[#6c3e27]/30 dark:border-amber-500/40 group-hover:border-[#6c3e27]/50 dark:group-hover:border-amber-500/60 group-hover:from-[#6c3e27]/15 group-hover:to-amber-600/15 dark:group-hover:from-amber-500/15 dark:group-hover:to-amber-600/15">
                       <span className="font-medium">Explore</span>
-                      <div className="w-5 h-5 bg-[#6c3e27] dark:bg-amber-500 rounded-full flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-300">
-                        <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="w-4 h-4 bg-[#6c3e27] dark:bg-amber-500 rounded-full flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-300">
+                        <svg className="w-2 h-2 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
                         </svg>
                       </div>

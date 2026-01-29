@@ -103,6 +103,28 @@ const LoveAndRelationshipCakes = () => {
     }
   }
 
+  const renderAccentTitle = (name) => {
+    const accentWords = ['Love', 'Him', 'Her', 'Father', 'Mother', 'Brother', 'Sister']
+    const words = (name || '').split(' ')
+    return (
+      <>
+        {words.map((word, index) => {
+          const cleanWord = word.replace(/[^a-z]/gi, '')
+          const isAccent = accentWords.includes(cleanWord)
+          return (
+            <span
+              key={`${word}-${index}`}
+              className={isAccent ? 'text-pink-600 dark:text-pink-400' : 'text-gray-900 dark:text-gray-100'}
+            >
+              {word}
+              {index < words.length - 1 ? ' ' : ''}
+            </span>
+          )
+        })}
+      </>
+    )
+  }
+
   useEffect(() => {
     const fetchLoveAndRelationshipCakes = async () => {
       try {
@@ -181,7 +203,7 @@ const LoveAndRelationshipCakes = () => {
             <div className="inline-block mb-3">
               <div className="flex items-center justify-center mb-4">
                 <div className="w-12 h-px bg-gradient-to-r from-purple-400 to-pink-400 dark:from-purple-500 dark:to-pink-500"></div>
-                <span className="px-4 text-xs font-semibold text-pink-500 dark:text-pink-400 uppercase tracking-widest leading-relaxed">LOVE & RELATIONSHIP</span>
+                <span className="px-4 text-xs font-semibold text-pink-500 dark:text-pink-400 uppercase tracking-[0.25em] leading-relaxed">LOVE & RELATIONSHIP</span>
                 <div className="w-12 h-px bg-gradient-to-r from-pink-400 to-purple-400 dark:from-pink-500 dark:to-purple-500"></div>
               </div>
               <h2 className="font-poppins text-2xl lg:text-3xl font-bold mb-1 leading-tight tracking-tight">
@@ -236,22 +258,26 @@ const LoveAndRelationshipCakes = () => {
                     }}
                     onClick={() => handleRelationshipClick(relationship)}
                   >
-                    <div className="bg-white dark:bg-gray-800 rounded-xl border border-[#6c3e27]/20 dark:border-amber-700/30 shadow-sm dark:shadow-md dark:shadow-black/10 overflow-hidden transition-all duration-300 hover:shadow-md hover:shadow-[#6c3e27]/5 dark:hover:shadow-amber-500/10 hover:border-[#6c3e27]/30 dark:hover:border-amber-500/40 hover:-translate-y-0.5 active:translate-y-0 h-full flex flex-col">
+                    <div className="love-card bg-white dark:bg-gray-800 rounded-2xl border border-pink-200/40 dark:border-pink-900/30 shadow-[0_8px_20px_rgba(0,0,0,0.10)] dark:shadow-black/20 overflow-hidden transition-all duration-300 hover:shadow-[0_14px_28px_rgba(255,63,108,0.18)] hover:-translate-y-0.5 hover:border-pink-400/50 h-full flex flex-col">
                       {/* Image Container with Elegant Design */}
-                      <div className="relative w-full aspect-square overflow-hidden bg-gradient-to-br from-gray-50 via-pink-50/30 to-orange-50/30 dark:from-gray-700 dark:via-pink-900/10 dark:to-orange-900/10">
+                      <div className="relative w-full aspect-square overflow-hidden rounded-t-2xl">
                         <img 
                           src={relationship.image} 
                           alt={relationship.name}
-                          className="w-full h-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.02]"
+                          className="w-full h-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.03]"
                           loading="lazy"
                         />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/10 to-transparent"></div>
+                        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-white/70 backdrop-blur px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-800 shadow-sm border border-white/60">
+                          {relationship.name}
+                        </div>
                       </div>
                       
                       {/* Category Name with Enhanced Styling */}
                       <div className="p-4 text-center flex-1 flex items-center justify-center bg-gradient-to-b from-white to-gray-50/50 dark:from-gray-800 dark:to-gray-800/50">
                         <div className="w-full">
-                          <h3 className="font-poppins font-semibold text-base text-[#6c3e27] dark:text-amber-400 group-hover:text-[#8b4513] dark:group-hover:text-amber-300 transition-colors duration-300 leading-tight">
-                            {relationship.name}
+                          <h3 className="font-poppins font-semibold text-base tracking-tight leading-tight">
+                            {renderAccentTitle(relationship.name)}
                           </h3>
                           {/* Subtle animated underline accent on hover */}
                           <div className="mt-2 mx-auto w-0 h-0.5 bg-gradient-to-r from-pink-400/60 to-orange-400/60 dark:from-pink-500/60 dark:to-orange-500/60 group-hover:w-8 transition-all duration-300"></div>
@@ -269,22 +295,26 @@ const LoveAndRelationshipCakes = () => {
                 <div key={index} className="group">
                   <button 
                     onClick={() => handleRelationshipClick(relationship)}
-                    className="w-full bg-white dark:bg-gray-800 rounded-xl border border-[#6c3e27]/20 dark:border-amber-700/30 shadow-sm dark:shadow-md dark:shadow-black/10 overflow-hidden transition-all duration-300 hover:shadow-md hover:shadow-[#6c3e27]/10 dark:hover:shadow-amber-500/20 hover:border-[#6c3e27]/40 dark:hover:border-amber-500/50 hover:-translate-y-1 active:translate-y-0 flex flex-col h-full"
+                    className="love-card w-full bg-white dark:bg-gray-800 rounded-2xl border border-pink-200/40 dark:border-pink-900/30 shadow-[0_8px_20px_rgba(0,0,0,0.10)] dark:shadow-black/20 overflow-hidden transition-all duration-300 hover:shadow-[0_14px_28px_rgba(255,63,108,0.18)] hover:-translate-y-0.5 hover:border-pink-400/50 flex flex-col h-full"
                   >
                     {/* Image Container */}
-                    <div className="relative w-full aspect-square overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800">
+                    <div className="relative w-full aspect-square overflow-hidden rounded-t-2xl">
                       <img 
                         src={relationship.image} 
                         alt={relationship.name}
-                        className="w-full h-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.02]"
+                        className="w-full h-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.03]"
                         loading="lazy"
                       />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/10 to-transparent"></div>
+                      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-white/70 backdrop-blur px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-800 shadow-sm border border-white/60">
+                        {relationship.name}
+                      </div>
                     </div>
                     
                     {/* Category Name */}
                     <div className="p-3 text-center flex-1 flex items-center justify-center">
-                      <h3 className="font-inter font-semibold text-base text-[#6c3e27] dark:text-amber-400 group-hover:text-[#8b4513] dark:group-hover:text-amber-300 transition-colors duration-300">
-                        {relationship.name}
+                      <h3 className="font-poppins font-semibold text-sm tracking-tight leading-tight">
+                        {renderAccentTitle(relationship.name)}
                       </h3>
                     </div>
                   </button>
@@ -294,6 +324,24 @@ const LoveAndRelationshipCakes = () => {
           </div>
         </div>
       </div>
+      <style jsx>{`
+        .love-card {
+          position: relative;
+          overflow: hidden;
+        }
+        .love-card:active {
+          box-shadow: 0 0 0 6px rgba(255, 63, 108, 0.18);
+        }
+        .love-card:active::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(circle at center, rgba(255, 63, 108, 0.25), transparent 45%);
+          opacity: 1;
+          transition: opacity 0.2s ease;
+          pointer-events: none;
+        }
+      `}</style>
     </section>
   )
 }

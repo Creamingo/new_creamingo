@@ -148,11 +148,13 @@ const CrowdFavoriteCakes = () => {
           </div>
 
           {/* Category Cards - Mobile: Vertical List, Desktop: 1x5 Grid */}
-          <div className="space-y-4 lg:space-y-0 lg:grid lg:grid-cols-5 lg:gap-5">
-            {displayCategories.map((category) => (
+          <div className="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-5 lg:gap-5">
+            {displayCategories.map((category, index) => {
+              const badgeText = index === 0 ? 'Trending' : index === 1 ? 'Top Pick' : null
+              return (
               <div key={category.id} className="group">
                 <div 
-                  className="bg-white dark:bg-gray-800 rounded-xl border border-[#6c3e27]/20 dark:border-amber-700/30 shadow-sm dark:shadow-md dark:shadow-black/10 overflow-hidden hover:shadow-md hover:shadow-[#6c3e27]/10 dark:hover:shadow-amber-500/20 hover:border-[#6c3e27]/40 dark:hover:border-amber-500/50 hover:-translate-y-1 active:translate-y-0 transition-all duration-300 cursor-pointer"
+                  className="bg-white dark:bg-gray-800 rounded-2xl border border-[#6c3e27]/15 dark:border-amber-700/30 shadow-[0_8px_20px_rgba(0,0,0,0.10)] dark:shadow-black/20 overflow-hidden hover:shadow-[0_14px_28px_rgba(0,0,0,0.16)] hover:-translate-y-0.5 hover:border-[#E65A5A]/40 transition-all duration-300 cursor-pointer"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -162,29 +164,35 @@ const CrowdFavoriteCakes = () => {
                   {/* Mobile Layout - All images on left, content on right */}
                   <div className="flex lg:hidden">
                     {/* Image Section - 40% width */}
-                    <div className="w-2/5 relative overflow-hidden aspect-[4/3] rounded-l-xl border-r border-[#6c3e27]/10 dark:border-amber-700/20">
+                    <div className="w-2/5 relative overflow-hidden aspect-[4/3] rounded-l-2xl border-r border-[#6c3e27]/10 dark:border-amber-700/20">
                       <img
                         src={category.image}
                         alt={category.name}
-                        className="w-full h-full object-cover object-center group-hover:scale-[1.02] transition-transform duration-300"
+                        className="w-full h-full object-cover object-center group-hover:scale-[1.04] transition-transform duration-300"
                       />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-black/5 to-transparent"></div>
+                      {badgeText && (
+                        <div className="absolute top-2 left-2 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 text-white text-[9px] font-semibold uppercase tracking-[0.2em] px-2 py-0.5 shadow-md">
+                          {badgeText}
+                        </div>
+                      )}
                     </div>
                     
                     {/* Content Section - 60% width */}
-                    <div className="w-3/5 px-4 py-3 flex flex-col justify-between">
+                    <div className="w-3/5 px-3 py-3 flex flex-col justify-between">
                       <div>
-                        <h3 className="font-poppins font-semibold text-lg mb-1.5 leading-tight text-[#6c3e27] dark:text-amber-400 group-hover:text-[#8b4513] dark:group-hover:text-amber-300 transition-colors duration-300">
+                        <h3 className="font-poppins font-semibold text-base mb-1 leading-tight text-gray-900 dark:text-gray-100 group-hover:text-[#8b4513] dark:group-hover:text-amber-300 transition-colors duration-300">
                           {category.name}
                         </h3>
-                        <p className="font-inter text-gray-600 dark:text-gray-300 text-xs leading-relaxed line-clamp-2">
+                        <p className="font-inter text-gray-600 dark:text-gray-300 text-[11px] leading-relaxed line-clamp-2">
                           {category.description}
                         </p>
                       </div>
                       {/* Button Indicator */}
                       <div className="flex items-center justify-end mt-2">
-                        <div className="flex items-center space-x-1 text-[#6c3e27] dark:text-amber-400 group-hover:text-[#8b4513] dark:group-hover:text-amber-300 transition-colors duration-300">
-                          <span className="text-xs font-medium">Explore</span>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-[#ff3f6c]/10 to-rose-500/10 text-[#ff3f6c] text-[11px] font-semibold border border-[#ff3f6c]/30 group-hover:border-[#ff3f6c]/50 transition-colors duration-300">
+                          <span>Explore</span>
+                          <svg className="w-3 h-3 group-hover:translate-x-0.5 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>
                         </div>
@@ -195,27 +203,41 @@ const CrowdFavoriteCakes = () => {
                   {/* Desktop Layout - 1x5 Grid with image on top, content below */}
                   <div className="hidden lg:block">
                     {/* Image Section - Top with 1:1 aspect ratio */}
-                    <div className="w-full relative overflow-hidden aspect-square rounded-t-xl border-b border-[#6c3e27]/10 dark:border-amber-700/20">
+                    <div className="w-full relative overflow-hidden aspect-square rounded-t-2xl border-b border-[#6c3e27]/10 dark:border-amber-700/20">
                       <img
                         src={category.image}
                         alt={category.name}
-                        className="w-full h-full object-cover object-center group-hover:scale-[1.02] transition-transform duration-300"
+                        className="w-full h-full object-cover object-center group-hover:scale-[1.04] transition-transform duration-300"
                       />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-black/5 to-transparent"></div>
+                      {badgeText && (
+                        <div className="absolute top-2 left-2 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 text-white text-[9px] font-semibold uppercase tracking-[0.2em] px-2 py-0.5 shadow-md">
+                          {badgeText}
+                        </div>
+                      )}
                     </div>
                     
                     {/* Content Section - Bottom */}
-                    <div className="px-4 py-4 text-center">
-                      <h3 className="font-poppins font-semibold text-base mb-2 leading-tight text-[#6c3e27] dark:text-amber-400 group-hover:text-[#8b4513] dark:group-hover:text-amber-300 transition-colors duration-300">
+                    <div className="px-4 py-3 text-center">
+                      <h3 className="font-poppins font-semibold text-base mb-1.5 leading-tight text-gray-900 dark:text-gray-100 group-hover:text-[#8b4513] dark:group-hover:text-amber-300 transition-colors duration-300">
                         {category.name}
                       </h3>
-                      <p className="font-inter text-gray-600 dark:text-gray-300 text-xs leading-relaxed line-clamp-2">
+                      <p className="font-inter text-gray-600 dark:text-gray-300 text-[11px] leading-relaxed line-clamp-2">
                         {category.description}
                       </p>
+                      <div className="mt-2 flex items-center justify-center">
+                        <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-[#ff3f6c]/10 to-rose-500/10 text-[#ff3f6c] text-[11px] font-semibold border border-[#ff3f6c]/30 group-hover:border-[#ff3f6c]/50 transition-colors duration-300">
+                          <span>Explore</span>
+                          <svg className="w-3 h-3 group-hover:translate-x-0.5 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         </div>
       </div>

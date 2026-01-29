@@ -34,12 +34,14 @@ export const CustomerAuthProvider = ({ children }) => {
           setCustomer(customerData);
           setIsAuthenticated(true);
         } else {
-          // Try to load from localStorage as fallback
+          // Token is missing: treat session as unauthenticated
           const storedCustomer = customerAuthApi.getCustomerData();
           if (storedCustomer) {
-            setCustomer(storedCustomer);
-            setIsAuthenticated(true);
+            // Clear stale customer data to avoid false auth state
+            customerAuthApi.clearCustomerData();
           }
+          setCustomer(null);
+          setIsAuthenticated(false);
         }
       } catch (error) {
         // Only log non-token-expiration errors (token expiration is expected and handled silently)
