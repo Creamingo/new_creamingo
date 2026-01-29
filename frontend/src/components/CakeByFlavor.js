@@ -112,13 +112,13 @@ export default function CakeByFlavor() {
           {/* Mobile Version - Clean Design with Subtle Shadows */}
           {!loading && !error && subcategories.length > 0 && (
             <div className="lg:hidden">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 {subcategories.map((subcategory, index) => (
                   <div key={subcategory.id || index} className="group">
                     <button 
                       onClick={(e) => handleFlavorClick(subcategory, e)}
                       disabled={navigatingId === subcategory.id}
-                      className={`w-full bg-white dark:bg-gray-800 rounded-xl border border-[#6c3e27]/20 dark:border-amber-700/30 p-5 text-center shadow-sm dark:shadow-md dark:shadow-black/10 hover:shadow-lg hover:shadow-[#6c3e27]/10 dark:hover:shadow-amber-500/20 hover:border-[#6c3e27]/40 dark:hover:border-amber-500/50 hover:-translate-y-1 active:translate-y-0 transition-all duration-300 cursor-pointer ${navigatingId === subcategory.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      className={`w-full bg-white dark:bg-gray-800 rounded-xl border border-[#6c3e27]/20 dark:border-amber-700/30 p-4 text-center shadow-sm dark:shadow-md dark:shadow-black/10 hover:shadow-lg hover:shadow-[#6c3e27]/10 dark:hover:shadow-amber-500/20 hover:border-[#6c3e27]/40 dark:hover:border-amber-500/50 hover:-translate-y-1 active:translate-y-0 transition-all duration-300 cursor-pointer ${navigatingId === subcategory.id ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       <h3 className="font-poppins font-semibold text-base text-[#6c3e27] dark:text-amber-400 group-hover:text-[#8b4513] dark:group-hover:text-amber-300 transition-colors duration-300 leading-relaxed tracking-normal">
                         {navigatingId === subcategory.id ? 'Loading...' : subcategory.name}

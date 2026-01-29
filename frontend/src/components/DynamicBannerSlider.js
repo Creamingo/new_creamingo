@@ -89,14 +89,14 @@ const DynamicBannerSlider = () => {
     infinite: banners.length > 1,
     centerPadding: "0px",
     slidesToShow: 1,
-    speed: 800, // Increased for smoother fade effect
-    dots: false,
+    speed: 900, // Smooth premium transition
+    dots: true,
     arrows: false,
     autoplay: banners.length > 1,
-    autoplaySpeed: 4000,
+    autoplaySpeed: 4500,
     pauseOnHover: true,
     fade: true, // Enable fade transition
-    cssEase: 'cubic-bezier(0.4, 0, 0.2, 1)', // Smooth easing
+    cssEase: 'cubic-bezier(0.22, 1, 0.36, 1)', // Luxury easing
     beforeChange: (oldIndex, newIndex) => {
       // Update state immediately for perfect thumbnail sync
       setCurrentSlide(newIndex);
@@ -120,17 +120,17 @@ const DynamicBannerSlider = () => {
 
   // Mobile slider settings
   const mobileSettings = {
-    dots: false,
+    dots: true,
     infinite: banners.length > 1,
-    speed: 800, // Increased for smoother fade effect
+    speed: 900, // Smooth premium transition
     slidesToShow: 1,
     slidesToScroll: 1,
     autoplay: banners.length > 1,
-    autoplaySpeed: 4000,
+    autoplaySpeed: 4500,
     pauseOnHover: true,
     arrows: false,
     fade: true, // Enable fade transition
-    cssEase: 'cubic-bezier(0.4, 0, 0.2, 1)', // Smooth easing
+    cssEase: 'cubic-bezier(0.22, 1, 0.36, 1)', // Luxury easing
     beforeChange: (oldIndex, newIndex) => {
       setCurrentSlide(newIndex);
       setProgress(0); // Reset progress on slide change
@@ -213,14 +213,14 @@ const DynamicBannerSlider = () => {
 
   // Always render the section structure to maintain layout consistency
   const renderBannerSection = () => (
-    <section className="py-4 lg:pt-12 lg:pb-12 bg-white dark:bg-gray-900 banner-slider-section">
+    <section className="py-4 lg:pt-8 lg:pb-10 bg-white dark:bg-gray-900 banner-slider-section">
       <div className="w-full px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           {loading ? (
             <>
               {/* Desktop placeholder - matches actual banner dimensions exactly */}
               <div className="hidden lg:block relative">
-                <div className="h-96 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 rounded-2xl flex items-center justify-center">
+                <div className="h-72 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 rounded-2xl flex items-center justify-center">
                   <div className="text-center">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 dark:border-pink-400 mx-auto mb-2"></div>
                     <p className="text-gray-500 dark:text-gray-400 text-sm">Loading banners...</p>
@@ -230,7 +230,7 @@ const DynamicBannerSlider = () => {
               
               {/* Mobile placeholder - matches actual banner dimensions exactly */}
               <div className="lg:hidden">
-                <div className="h-48 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 rounded-2xl flex items-center justify-center">
+                <div className="h-40 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 rounded-2xl flex items-center justify-center">
                   <div className="text-center">
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-pink-500 dark:border-pink-400 mx-auto mb-2"></div>
                     <p className="text-gray-500 dark:text-gray-400 text-xs">Loading banners...</p>
@@ -240,7 +240,7 @@ const DynamicBannerSlider = () => {
             </>
           ) : banners.length === 0 ? (
             // Empty state - still maintain exact height
-            <div className="h-96 lg:h-96 flex items-center justify-center" style={{ height: '384px' }}>
+            <div className="h-72 lg:h-72 flex items-center justify-center">
               <p className="text-gray-500 dark:text-gray-400">No banners available</p>
             </div>
           ) : (
@@ -272,22 +272,20 @@ const DynamicBannerSlider = () => {
                                   loop
                                   muted
                                   playsInline
-                                  className="w-full h-96 object-cover rounded-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 banner-image"
-                                  style={{ aspectRatio: '16/9' }}
+                                  className="w-full h-72 object-cover rounded-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 banner-image"
                                 />
                               ) : (
                                 <img 
                                   src={banner.image_url} 
                                   alt={banner.title} 
-                                  className="w-full h-96 object-cover rounded-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 banner-image transition-all duration-300 group-hover:scale-[1.01] group-hover:brightness-[1.02]" 
-                                  style={{ aspectRatio: '16/9' }}
+                                  className="w-full h-72 object-cover rounded-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 banner-image transition-all duration-300 group-hover:scale-[1.01] group-hover:brightness-[1.02]" 
                                   onError={(e) => {
                                     const target = e.target;
                                     target.style.display = 'none';
                                     const parent = target.parentElement;
                                     if (parent && !parent.querySelector('.error-fallback')) {
                                       const fallback = document.createElement('div');
-                                      fallback.className = 'error-fallback w-full h-96 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 flex items-center justify-center rounded-2xl border border-gray-200 dark:border-gray-700';
+                                      fallback.className = 'error-fallback w-full h-72 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 flex items-center justify-center rounded-2xl border border-gray-200 dark:border-gray-700';
                                       fallback.innerHTML = '<span class="text-gray-400 dark:text-gray-500 text-sm">Image unavailable</span>';
                                       parent.appendChild(fallback);
                                     }
@@ -295,8 +293,9 @@ const DynamicBannerSlider = () => {
                                 />
                               )}
                               
-                              {/* Gradient overlay */}
-                              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent rounded-2xl z-0 group-hover:from-black/62 transition-all duration-300"></div>
+                              {/* Gradient overlays */}
+                              <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/20 to-transparent rounded-2xl z-0"></div>
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent rounded-2xl z-0"></div>
                               
                               {/* Interactive Hotspots */}
                               {banner.hotspots && banner.hotspots.length > 0 && (
@@ -328,24 +327,29 @@ const DynamicBannerSlider = () => {
                               <div 
                                 className={`absolute ${textPosition} z-10 banner-content glassmorphism-overlay`}
                               >
-                                <div className="bg-white/10 dark:bg-black/20 backdrop-blur-md rounded-2xl p-4 lg:p-6 border border-white/20 dark:border-white/10 shadow-2xl">
-                                  <h3 className="font-poppins text-lg lg:text-2xl font-bold text-white mb-2 banner-title drop-shadow-lg">
+                                <div className="bg-white/20 dark:bg-black/30 backdrop-blur-xl rounded-2xl p-4 lg:p-5 border border-white/30 dark:border-white/10 shadow-2xl">
+                                  <h3 className="font-poppins text-lg lg:text-xl font-semibold text-white mb-1.5 banner-title drop-shadow-lg">
                                     {banner.title}
                                   </h3>
                                   {banner.subtitle && (
-                                    <p className="font-inter text-sm lg:text-base text-white/95 mb-4 banner-subtitle drop-shadow-md">
+                                    <p className="font-inter text-sm lg:text-sm text-white/90 mb-3 banner-subtitle drop-shadow-md">
                                       {banner.subtitle}
                                     </p>
                                   )}
+                                  {(banner.badge_text || banner.discount_text || banner.offer_text || (banner.subtitle && /%|off/i.test(banner.subtitle))) && (
+                                    <div className="inline-flex items-center rounded-full bg-white/90 text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-800 px-3 py-1 shadow-sm mb-3">
+                                      {banner.badge_text || banner.discount_text || banner.offer_text || banner.subtitle}
+                                    </div>
+                                  )}
                                   {banner.button_text && (
-                                    <button className="group/btn relative bg-gradient-to-r from-[#6c3e27] to-amber-600 dark:from-amber-500 dark:to-amber-600 text-white px-6 py-3 rounded-xl font-inter text-sm lg:text-base font-semibold hover:scale-105 transition-all duration-300 banner-button shadow-xl hover:shadow-2xl overflow-hidden">
+                                    <button className="group/btn relative bg-[#ff3f6c] hover:bg-[#ff527d] text-white px-5 py-2.5 rounded-full font-inter text-sm font-semibold transition-all duration-300 banner-button shadow-lg hover:shadow-xl overflow-hidden">
                                       <span className="relative z-10 flex items-center gap-2">
                                         {banner.button_text}
                                         <svg className="w-4 h-4 group-hover/btn:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                         </svg>
                                       </span>
-                                      <div className="absolute inset-0 bg-gradient-to-r from-amber-600 to-[#6c3e27] opacity-0 group-hover/btn:opacity-100 transition-opacity duration-300"></div>
+                                      <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover/btn:opacity-100 transition-opacity duration-300"></div>
                                     </button>
                                   )}
                                 </div>
@@ -357,36 +361,7 @@ const DynamicBannerSlider = () => {
                     })}
                   </Slider>
                   
-                  {/* Progress Bar - Desktop */}
-                  {banners.length > 1 && (
-                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/20 dark:bg-white/10 rounded-b-2xl overflow-hidden z-[90]">
-                      <div 
-                        className="h-full bg-gradient-to-r from-[#6c3e27] to-amber-500 dark:from-amber-400 dark:to-amber-500 transition-all duration-75 ease-linear"
-                        style={{ width: `${progress}%` }}
-                      ></div>
-                    </div>
-                  )}
-
-                  {/* Slide Counter - Desktop */}
-                  {banners.length > 1 && (
-                    <div 
-                      className="absolute top-4 right-4 pointer-events-auto slider-counter" 
-                      style={{ 
-                        position: 'absolute', 
-                        top: '1rem', 
-                        right: '1rem',
-                        zIndex: 10
-                      }}
-                    >
-                      <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-md rounded-full px-4 py-2 shadow-xl border border-gray-200/50 dark:border-gray-700/50">
-                        <span className="font-poppins text-sm font-semibold text-[#6c3e27] dark:text-amber-400">
-                          {currentSlide + 1} / {banners.length}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Indicator Inside Slider - Desktop (Hidden as requested) */}
+                  {/* Minimal dot indicators handled by slick */}
                 </div>
                 
                 {/* Custom Navigation Arrows */}
@@ -443,7 +418,7 @@ const DynamicBannerSlider = () => {
                             onMouseEnter={() => setIsPaused(true)}
                             onMouseLeave={() => setIsPaused(false)}
                           >
-                            <div className="relative overflow-hidden rounded-2xl">
+                              <div className="relative overflow-hidden rounded-2xl">
                               {isVideo ? (
                                 <video
                                   src={banner.video_url || banner.image_url}
@@ -451,20 +426,20 @@ const DynamicBannerSlider = () => {
                                   loop
                                   muted
                                   playsInline
-                                  className="w-full h-48 object-cover rounded-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 banner-image"
+                                    className="w-full h-40 object-cover rounded-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 banner-image"
                                 />
                               ) : (
                                 <img 
                                   src={banner.image_url} 
                                   alt={banner.title} 
-                                  className="w-full h-48 object-cover rounded-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 banner-image transition-all duration-300 group-hover:scale-[1.01] group-hover:brightness-[1.02]"
+                                    className="w-full h-40 object-cover rounded-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 banner-image transition-all duration-300 group-hover:scale-[1.01] group-hover:brightness-[1.02]"
                                   onError={(e) => {
                                     const target = e.target;
                                     target.style.display = 'none';
                                     const parent = target.parentElement;
                                     if (parent && !parent.querySelector('.error-fallback')) {
                                       const fallback = document.createElement('div');
-                                      fallback.className = 'error-fallback w-full h-48 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 flex items-center justify-center rounded-2xl border border-gray-200 dark:border-gray-700';
+                                        fallback.className = 'error-fallback w-full h-40 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 flex items-center justify-center rounded-2xl border border-gray-200 dark:border-gray-700';
                                       fallback.innerHTML = '<span class="text-gray-400 dark:text-gray-500 text-xs">Image unavailable</span>';
                                       parent.appendChild(fallback);
                                     }

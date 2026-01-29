@@ -307,11 +307,8 @@ const MainCategories = () => {
         <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="max-w-7xl mx-auto">
             <div className="text-center relative">
-              <div className="inline-flex items-center gap-2 rounded-full bg-pink-100/70 dark:bg-pink-900/30 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-pink-700 dark:text-pink-300">
-                Most Loved
-              </div>
-              <h2 className="mt-2 font-poppins text-2xl lg:text-3xl text-gray-900 dark:text-gray-100 font-semibold tracking-tight">
-                Most Loved Categories
+              <h2 className="font-poppins text-2xl lg:text-3xl text-gray-900 dark:text-gray-100 font-semibold tracking-tight">
+                Most Loved 9 Categories
               </h2>
               <p className="mt-1 text-[12px] lg:text-sm text-gray-600 dark:text-gray-400 font-inter font-normal">
                 Curated picks that customers order the most.
@@ -367,9 +364,9 @@ const MainCategories = () => {
                 return (
                   <div
                     key={categoryKey}
-                    className={`group rounded-2xl bg-white/80 dark:bg-gray-800/70 backdrop-blur border border-white/60 dark:border-gray-700 shadow-[0_8px_20px_rgba(0,0,0,0.10)] hover:shadow-[0_12px_28px_rgba(0,0,0,0.14)] hover:-translate-y-0.5 hover:scale-[1.02] transition-all duration-300 cursor-pointer overflow-hidden ${
+                    className={`group rounded-2xl bg-white/80 dark:bg-gray-800/70 backdrop-blur border border-white/60 dark:border-gray-700 shadow-[0_10px_26px_rgba(0,0,0,0.12)] hover:shadow-[0_16px_36px_rgba(0,0,0,0.18)] hover:-translate-y-0.5 hover:scale-[1.02] transition-all duration-300 cursor-pointer overflow-hidden ${
                       isFeatured ? 'ring-2 ring-pink-300/60 dark:ring-pink-500/40' : ''
-                    } ${isMobile ? 'active:scale-[0.98]' : 'min-w-[140px] flex-shrink-0 h-[140px] hover:border-[#E65A5A]/60'}`}
+                    } ${isMobile ? 'active:scale-[0.98]' : 'min-w-[140px] flex-shrink-0 h-[140px] hover:border-[#E65A5A]/60'} hover:shadow-pink-500/20`}
                     onClick={() => handleCategoryClick(category)}
                   >
                     <div className={`relative ${isMobile ? 'aspect-[4/3]' : 'h-[98px]'} w-full overflow-hidden ${
@@ -379,7 +376,7 @@ const MainCategories = () => {
                         <img
                           src={imageUrl}
                           alt={displayName}
-                          className="h-full w-full object-cover object-center transition-transform duration-500 group-hover:scale-[1.02]"
+                          className="h-full w-full object-cover object-center transition-transform duration-500 group-hover:scale-[1.03]"
                           onError={() => setImageErrors((prev) => ({ ...prev, [categoryKey]: true }))}
                         />
                       ) : (
@@ -387,16 +384,16 @@ const MainCategories = () => {
                           {getCategoryIcon(category)}
                         </div>
                       )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-black/10 to-transparent"></div>
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/5 to-transparent"></div>
                       {(isFeatured || isSecondary) && (
-                        <div className="absolute top-2 left-2 rounded-full bg-white/90 text-[10px] font-semibold uppercase tracking-wide text-gray-800 px-2 py-0.5 shadow-sm">
+                        <div className="absolute top-2 left-2 rounded-full bg-white/90 backdrop-blur text-[9px] font-semibold uppercase tracking-[0.2em] text-gray-800 px-2.5 py-0.5 shadow-sm border border-white/80">
                           {isFeatured ? 'Trending' : 'Best Seller'}
                         </div>
                       )}
                     </div>
                     <div className={`${isMobile ? 'px-3 py-2' : 'px-2.5 py-1.5'}`}>
                       <span className={`block font-inter text-gray-900 dark:text-gray-100 text-center leading-snug ${
-                        isMobile ? 'text-[12px] font-semibold tracking-wide' : 'text-xs font-semibold tracking-wide leading-snug'
+                        isMobile ? 'text-[12px] font-semibold tracking-wide' : 'text-[12px] font-semibold tracking-wide leading-snug'
                       }`}>
                         {wrapCategoryName(displayName)}
                       </span>

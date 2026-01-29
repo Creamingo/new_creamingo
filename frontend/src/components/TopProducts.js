@@ -294,13 +294,13 @@ export default function TopProducts() {
           {/* Section Header - Compact & Trendy */}
           <div className="mb-6 lg:mb-6 text-center">
             <div className="inline-flex items-center justify-center mb-2 lg:mb-1.5">
-              <div className="w-8 h-0.5 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full"></div>
-              <span className="mx-3 text-pink-600 dark:text-pink-400 font-inter text-xs font-medium tracking-wider uppercase" style={{
+              <div className="w-6 h-0.5 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full"></div>
+              <span className="mx-3 text-pink-600 dark:text-pink-400 font-inter text-[11px] font-medium tracking-[0.25em] uppercase" style={{
                 WebkitFontSmoothing: 'antialiased',
                 MozOsxFontSmoothing: 'grayscale',
                 textRendering: 'optimizeLegibility'
-              }}>Instant Buy</span>
-              <div className="w-8 h-0.5 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"></div>
+              }}>Top Picks</span>
+              <div className="w-6 h-0.5 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"></div>
             </div>
             <h2 className="font-poppins text-2xl lg:text-3xl font-bold bg-gradient-to-r from-gray-900 via-pink-600 to-purple-600 dark:from-gray-100 dark:via-pink-400 dark:to-purple-400 bg-clip-text text-transparent mb-1 lg:mb-0.5" style={{
               WebkitFontSmoothing: 'antialiased',
@@ -310,8 +310,11 @@ export default function TopProducts() {
             }}>
               Top Products
             </h2>
-            <p className="font-inter text-gray-600 dark:text-gray-300 text-sm lg:text-base max-w-xl mx-auto mt-1">
-              In a hurry? Click, pick, and enjoy unbeatable cake prices!
+            <div className="mt-1 flex justify-center">
+              <div className="h-0.5 w-16 rounded-full bg-gradient-to-r from-pink-400 via-rose-400 to-orange-300"></div>
+            </div>
+            <p className="font-inter text-gray-600 dark:text-gray-300 text-sm lg:text-sm max-w-xl mx-auto mt-1">
+              Bestsellers with unbeatable prices, ready to order.
             </p>
           </div>
 
@@ -336,20 +339,20 @@ export default function TopProducts() {
                 onClick={() => handleProductClick(product)}
               >
                   {/* Modern Card with Enhanced Design */}
-                  <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 border border-[#6c3e27]/30 dark:border-amber-700/50 overflow-hidden h-full flex flex-col">
+                  <div className="tp-card bg-white dark:bg-gray-800 rounded-2xl shadow-[0_10px_26px_rgba(0,0,0,0.12)] dark:shadow-xl dark:shadow-black/30 border border-white/60 dark:border-gray-700 overflow-hidden h-full flex flex-col">
                     {/* Product Image Container - Larger on Mobile */}
-                    <div className="relative w-full h-48 overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800">
+                    <div className="relative w-full h-48 overflow-hidden bg-gray-50 dark:bg-gray-800">
                     <img
                       src={product.image}
                       alt={product.name}
-                        className="w-full h-full object-cover object-center"
+                        className="tp-image w-full h-full object-cover object-center"
                         loading="lazy"
                     />
                       
-                      {/* Modern Discount Badge - Corner Style */}
+                      {/* Modern Discount Badge - Floating Pill */}
                     {product.discount && (
-                      <div className="absolute top-0 right-0 z-10">
-                          <div className="bg-gradient-to-r from-red-500 to-red-600 text-white font-bold text-[10px] px-3 py-1.5 shadow-lg rounded-tr-2xl rounded-bl-lg" style={{ 
+                      <div className="absolute top-0 right-0 z-20">
+                          <div className="bg-gradient-to-r from-[#ff3f6c] to-[#ff7a59] text-white font-semibold text-[10px] px-3 py-1 rounded-tr-2xl rounded-bl-2xl shadow-lg" style={{ 
                             WebkitFontSmoothing: 'antialiased',
                             MozOsxFontSmoothing: 'grayscale',
                             textRendering: 'optimizeLegibility'
@@ -361,9 +364,9 @@ export default function TopProducts() {
                   </div>
 
                     {/* Product Info Section - Optimized for Horizontal Scroll */}
-                    <div className="p-2 flex-1 flex flex-col justify-between">
+                    <div className="p-2.5 flex-1 flex flex-col justify-between">
                       {/* Product Name */}
-                      <h3 className="font-inter font-medium text-sm lg:text-base text-gray-800 dark:text-gray-100 mb-1 truncate flex items-center gap-1.5" style={{
+                      <h3 className="font-inter font-semibold text-sm lg:text-base text-gray-900 dark:text-gray-100 mb-1 truncate flex items-center gap-1.5 tracking-tight" style={{
                         WebkitFontSmoothing: 'antialiased',
                         MozOsxFontSmoothing: 'grayscale',
                         textRendering: 'optimizeLegibility'
@@ -425,7 +428,7 @@ export default function TopProducts() {
                       {/* Price Section - Dynamic Pricing */}
                       <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
                         <div className="flex items-baseline gap-1.5">
-                          <span className="font-poppins font-bold text-base text-gray-800 dark:text-gray-100">
+                          <span className="font-poppins font-bold text-base text-gray-900 dark:text-gray-100">
                             {formatPrice(getCurrentPrice(product))}
                           </span>
                           {product.base_weight && (
@@ -434,14 +437,14 @@ export default function TopProducts() {
                             </span>
                           )}
                           {getOriginalPrice(product) > 0 && (
-                            <span className="font-inter text-[10px] text-gray-400 dark:text-gray-500 line-through ml-1">
+                            <span className="font-inter text-[10px] text-gray-400 dark:text-gray-500 line-through ml-1 font-normal">
                               {formatPrice(getOriginalPrice(product))}
                             </span>
                           )}
                         </div>
                         {/* Multiple Sizes Badge - Mobile (right side of price) */}
                         {product.hasMultipleWeights && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-700/50 shadow-sm">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold bg-pink-50 dark:bg-pink-900/20 text-pink-700 dark:text-pink-300 border border-pink-200/70 dark:border-pink-700/50 shadow-sm">
                             <svg className="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
                             </svg>
@@ -457,11 +460,11 @@ export default function TopProducts() {
 
             {/* Scroll Indicator Dots */}
             {products.length > 0 && (
-              <div className="flex justify-center gap-2 mt-1 mb-2">
+              <div className="tp-dots flex justify-center gap-2 mt-1 mb-2">
                 {visibleProducts.map((_, index) => (
                   <div
                     key={index}
-                    className="w-1.5 h-1.5 rounded-full bg-[#6c3e27]/30 dark:bg-amber-600/40"
+                    className="tp-dot"
                   ></div>
                 ))}
               </div>
@@ -488,20 +491,20 @@ export default function TopProducts() {
                 }}
                 onClick={() => handleProductClick(product)}
               >
-                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md dark:shadow-xl dark:shadow-black/20 border border-[#6c3e27]/30 dark:border-amber-700/50 overflow-hidden transition-all duration-300 hover:shadow-lg dark:hover:shadow-2xl dark:hover:shadow-black/30 relative">
+                <div className="tp-card bg-white dark:bg-gray-800 rounded-2xl shadow-[0_10px_26px_rgba(0,0,0,0.12)] dark:shadow-xl dark:shadow-black/30 border border-white/60 dark:border-gray-700 overflow-hidden transition-all duration-300 hover:shadow-[0_16px_36px_rgba(0,0,0,0.18)] dark:hover:shadow-black/40 relative">
                   {/* Product Image Container */}
-                  <div className="relative w-full aspect-square overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 z-10">
+                  <div className="relative w-full aspect-square overflow-hidden bg-gray-50 dark:bg-gray-800 z-10">
                     <img
                       src={product.image}
                       alt={product.name}
-                      className="w-full h-full object-cover object-center transition-transform duration-300 group-hover:scale-105"
+                      className="tp-image w-full h-full object-cover object-center transition-transform duration-300 group-hover:scale-105"
                       loading="lazy"
                     />
                     
-                    {/* Discount Badge - Corner Style */}
+                    {/* Discount Badge - Floating Pill */}
                     {product.discount && (
                       <div className="absolute top-0 right-0 z-20">
-                        <div className="bg-gradient-to-r from-red-500 to-red-600 text-white font-bold rounded-tr-2xl rounded-bl-lg text-sm px-3 py-1.5 shadow-lg" style={{ 
+                        <div className="bg-gradient-to-r from-[#ff3f6c] to-[#ff7a59] text-white font-semibold rounded-tr-2xl rounded-bl-2xl text-[11px] px-3 py-1 shadow-lg" style={{ 
                           WebkitFontSmoothing: 'antialiased',
                           MozOsxFontSmoothing: 'grayscale',
                           textRendering: 'optimizeLegibility'
@@ -515,7 +518,7 @@ export default function TopProducts() {
                   {/* Product Info Section */}
                   <div className="p-3 relative z-10 bg-white dark:bg-gray-800 flex flex-col">
                     {/* Product Name */}
-                    <h3 className="font-inter font-medium text-xs lg:text-sm text-gray-800 dark:text-gray-100 mb-0.5 lg:mb-0.5 truncate flex items-center gap-1.5">
+                    <h3 className="font-inter font-semibold text-xs lg:text-sm text-gray-900 dark:text-gray-100 mb-0.5 lg:mb-0.5 truncate flex items-center gap-1.5 tracking-tight">
                       {/* Veg/Non-Veg icon */}
                       <span
                         className={`inline-flex items-center justify-center align-middle w-[0.95em] h-[0.95em] border-2 ${product.is_eggless ? 'border-green-600' : 'border-red-600'} rounded-[3px] flex-shrink-0`}
@@ -575,7 +578,7 @@ export default function TopProducts() {
                     {/* Price Section */}
                     <div className="flex items-baseline justify-between mb-1 lg:mt-2 lg:mb-1">
                       <div className="flex items-baseline gap-1 lg:gap-1.5">
-                        <span className="font-poppins font-bold text-base text-gray-800 dark:text-gray-100">
+                        <span className="font-poppins font-bold text-base text-gray-900 dark:text-gray-100">
                           {formatPrice(getCurrentPrice(product))}
                         </span>
                         {product.base_weight && (
@@ -584,14 +587,14 @@ export default function TopProducts() {
                           </span>
                         )}
                       {getOriginalPrice(product) > 0 && (
-                        <span className="font-inter text-[10px] text-gray-400 dark:text-gray-500 line-through">
+                        <span className="font-inter text-[10px] text-gray-400 dark:text-gray-500 line-through font-normal">
                           {formatPrice(getOriginalPrice(product))}
                         </span>
                       )}
                             </div>
                     {/* Multiple Sizes Badge - Desktop */}
                     {product.hasMultipleWeights && (
-                        <span className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-700/50 shadow-sm transition-all hover:shadow-md hover:scale-105">
+                        <span className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-pink-50 dark:bg-pink-900/20 text-pink-700 dark:text-pink-300 border border-pink-200/70 dark:border-pink-700/50 shadow-sm transition-all hover:shadow-md hover:scale-105">
                           <svg className="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
                               </svg>
@@ -607,14 +610,14 @@ export default function TopProducts() {
           </div>
 
           {/* View All Products Button */}
-          {products.length > 0 && (
+            {products.length > 0 && (
             <div className="text-center mt-6 lg:mt-4">
               <button
                 onClick={() => router.push('/products')}
-                className="inline-flex items-center gap-2 px-6 py-2.5 border border-[#6c3e27] dark:border-amber-400 text-[#6c3e27] dark:text-amber-400 rounded-lg font-inter text-sm font-medium hover:bg-[#6c3e27] hover:text-white dark:hover:bg-amber-400 dark:hover:text-gray-900 transition-colors duration-300"
+                className="group inline-flex items-center gap-2 px-6 py-2.5 rounded-full font-inter text-sm font-semibold text-[#ff3f6c] border border-[#ff3f6c]/40 shadow-sm hover:shadow-md hover:bg-[#ff3f6c] hover:text-white transition-all duration-300"
               >
                 View All Products
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                 </svg>
               </button>
@@ -656,6 +659,35 @@ export default function TopProducts() {
         }
         .animate-pulse-slow {
           animation: pulse-slow 2s ease-in-out infinite;
+        }
+        .tp-card {
+          transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+          position: relative;
+        }
+        .tp-card:hover {
+          transform: translateY(-4px);
+          border-color: rgba(255, 63, 108, 0.5);
+          box-shadow: 0 14px 30px rgba(255, 63, 108, 0.2);
+        }
+        .tp-card:active {
+          transform: scale(0.98);
+        }
+        .tp-image {
+          transition: transform 0.35s ease;
+        }
+        .tp-card:hover .tp-image {
+          transform: scale(1.05);
+        }
+        .tp-dots .tp-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 999px;
+          background: rgba(255, 63, 108, 0.35);
+          transition: all 0.3s ease;
+        }
+        .tp-dots .tp-dot:first-child {
+          width: 18px;
+          background: #ff3f6c;
         }
       `}</style>
     </section>
