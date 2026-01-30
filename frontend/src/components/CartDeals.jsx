@@ -5,6 +5,7 @@ import { Gift, Sparkles, Plus, CheckCircle, TrendingUp, Trash2 } from 'lucide-re
 import { useCart } from '../contexts/CartContext';
 import dealApi from '../api/dealApi';
 import { formatPrice } from '../utils/priceFormatter';
+import { resolveImageUrl } from '../utils/imageUrl';
 
 const CartDeals = () => {
   const { cartItems, addToCart, removeFromCart, getCartSummary } = useCart();
@@ -128,8 +129,8 @@ const CartDeals = () => {
           
           <div className="space-y-2 sm:space-y-2">
             <div className="flex items-center justify-between text-xs sm:text-sm">
-              <span className="text-gray-600 dark:text-gray-400">Progress to next deal</span>
-              <span className="font-semibold text-pink-600 dark:text-pink-400">
+              <span className="text-gray-700 dark:text-gray-300">Progress to next deal</span>
+              <span className="font-semibold text-pink-700 dark:text-pink-400">
                 {formatPrice(cartTotal)} / {formatPrice(deals.next_deal.threshold)}
               </span>
             </div>
@@ -192,7 +193,7 @@ const CartDeals = () => {
                     {/* Product Image - Left side */}
                     {deal.product.image_url && (
                       <img
-                        src={deal.product.image_url}
+                        src={resolveImageUrl(deal.product.image_url)}
                         alt={deal.product.name}
                         className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg object-cover flex-shrink-0"
                       />
@@ -276,6 +277,10 @@ const CartDeals = () => {
             <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
               Upcoming Deals
             </h3>
+            <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 dark:bg-pink-900/30 text-pink-700 dark:text-pink-300 text-[10px] font-semibold px-2 py-0.5 border border-pink-200 dark:border-pink-800">
+              <Gift className="w-3 h-3" />
+              Deal
+            </span>
           </div>
 
           <div className="space-y-2.5 sm:space-y-3">
@@ -291,7 +296,7 @@ const CartDeals = () => {
                   <div className="flex items-start gap-2.5 sm:gap-3 mb-2 sm:mb-2.5">
                     {deal.product.image_url && (
                       <img
-                        src={deal.product.image_url}
+                        src={resolveImageUrl(deal.product.image_url)}
                         alt={deal.product.name}
                         className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg object-cover flex-shrink-0"
                       />
@@ -314,7 +319,7 @@ const CartDeals = () => {
                   </div>
                   <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1.5 sm:h-2">
                     <div
-                      className="bg-gradient-to-r from-pink-400 to-rose-400 h-1.5 sm:h-2 rounded-full transition-all duration-300"
+                      className="bg-gradient-to-r from-pink-500 to-rose-500 dark:from-pink-600 dark:to-rose-600 h-1.5 sm:h-2 rounded-full transition-all duration-300"
                       style={{ width: `${progressPercent}%` }}
                     />
                   </div>

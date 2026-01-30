@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { X, Plus, Minus, Trash2, ShoppingBag, Package, Sparkles } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { formatPrice } from '../utils/priceFormatter';
+import { resolveImageUrl } from '../utils/imageUrl';
 
 const CartDisplay = ({ isOpen, onClose }) => {
   const { 
@@ -90,7 +91,7 @@ const CartDisplay = ({ isOpen, onClose }) => {
                     <div className="flex items-start gap-4">
                       <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
                         <img
-                          src={item.product.image_url}
+                          src={resolveImageUrl(item.product.image_url)}
                           alt={item.product.name}
                           className="w-full h-full object-cover"
                         />

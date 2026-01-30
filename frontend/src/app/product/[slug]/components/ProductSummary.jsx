@@ -1152,13 +1152,19 @@ const ProductSummary = ({
                    }
                  }
                }}
-              className="flex-1 py-2.5 px-3 font-medium transition-all duration-200 flex flex-col items-center justify-center gap-0.5 text-sm bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 cursor-pointer active:from-pink-700 active:to-rose-700 dark:active:from-pink-800 dark:active:to-rose-800 min-h-[56px] text-center"
+              className={`flex-1 py-2.5 px-3 font-medium transition-all duration-200 flex flex-col items-center justify-center gap-0.5 text-sm min-h-[56px] text-center cursor-pointer ${
+                isAddToCartEnabled
+                  ? 'bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 active:from-pink-700 active:to-rose-700 dark:active:from-pink-800 dark:active:to-rose-800'
+                  : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+              }`}
               style={{ boxShadow: '0 0 0 0 rgba(219, 39, 119, 0.4)' }}
               onMouseEnter={(e) => {
-                  e.target.style.boxShadow = '0 0 15px rgba(219, 39, 119, 0.4)';
+                if (!isAddToCartEnabled) return;
+                e.target.style.boxShadow = '0 0 15px rgba(219, 39, 119, 0.4)';
               }}
               onMouseLeave={(e) => {
-                  e.target.style.boxShadow = '0 0 0 0 rgba(219, 39, 119, 0.4)';
+                if (!isAddToCartEnabled) return;
+                e.target.style.boxShadow = '0 0 0 0 rgba(219, 39, 119, 0.4)';
               }}
             >
               {/* Button content - Centered text with icon, price below */}
@@ -1176,7 +1182,7 @@ const ProductSummary = ({
                 <div className={`text-[10px] font-medium mt-0.5 leading-tight ${
                   isAddToCartEnabled 
                     ? 'text-white/90' 
-                    : 'text-white/60 dark:text-white/50'
+                    : 'text-gray-400 dark:text-gray-500'
                 }`}>
                   {formatPrice(totalPrice)}
                 </div>
