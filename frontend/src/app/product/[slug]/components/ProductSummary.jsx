@@ -711,7 +711,7 @@ const ProductSummary = ({
       </div>
 
         {/* Quantity - Compact */}
-        <div className="shrink-0">
+        <div className="shrink-0 -mt-5">
           <div className="flex items-center gap-1.5 bg-rose-50 dark:bg-rose-900/20 rounded-full px-1.5 py-1 border border-rose-200 dark:border-rose-700">
           <button
             onClick={() => onQuantityChange(quantity - 1)}
@@ -1094,9 +1094,9 @@ const ProductSummary = ({
              </p>
            </div>
          </div>
-        <div className="px-3 py-2.5 min-h-[72px]">
+        <div className="px-2 py-2.5 min-h-[72px]">
           {/* Unified Button Layout - Compact and refined */}
-          <div className="w-[90vw] mx-auto flex items-stretch gap-2 h-full">
+          <div className="w-full flex items-stretch gap-2 h-full">
              {/* Add Combo Button - Fixed height to prevent layout shift */}
              <button
                onClick={() => {
@@ -1164,12 +1164,12 @@ const ProductSummary = ({
               {/* Button content - Centered text with icon, price below */}
               <div className="flex flex-col items-center justify-center">
                 {/* ADD TO CART text with icon - Centered and larger */}
-                <div className="flex items-center justify-center gap-1.5">
+              <div className="flex items-center justify-center gap-1.5 flex-nowrap">
                   {/* Modern shopping bag/cart icon */}
                   <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
               </svg>
-                  <span className="font-medium text-base sm:text-lg leading-tight mt-0.5">ADD TO CART</span>
+                  <span className="font-medium text-[13px] sm:text-base leading-none mt-0.5 whitespace-nowrap">ADD TO CART</span>
                   <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" strokeWidth={2.5} />
                 </div>
                 {/* Total price below - Smaller font */}
