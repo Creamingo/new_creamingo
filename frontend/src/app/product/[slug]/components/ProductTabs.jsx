@@ -267,35 +267,35 @@ const ProductTabs = ({ product, selectedVariant, customizations = {}, dynamicCon
           </div>
 
           {/* Key Features - Compact Horizontal Scroll on Mobile */}
-          <div className="space-y-3">
-            <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100">Key Features</h4>
-            <div className="flex sm:grid sm:grid-cols-2 gap-2.5 overflow-x-auto sm:overflow-x-visible pb-2 sm:pb-0">
-              <div className="flex items-center space-x-2 p-2.5 bg-green-50/70 dark:bg-green-900/15 rounded-lg border border-green-200/50 dark:border-green-800/30 flex-shrink-0 sm:flex-shrink">
-                <div className="w-6 h-6 bg-green-100 dark:bg-green-900/40 rounded-full flex items-center justify-center">
-                  <span className="text-green-600 dark:text-green-400 text-xs font-medium">✓</span>
+          <div className="space-y-2.5">
+            <h4 className="text-[15px] font-semibold text-gray-900 dark:text-gray-100 tracking-tight">Key Features</h4>
+            <div className="flex sm:grid sm:grid-cols-2 gap-2 overflow-x-auto sm:overflow-x-visible pb-1.5 sm:pb-0">
+              <div className="flex items-center space-x-2 p-2 bg-green-50/70 dark:bg-green-900/15 rounded-lg border border-green-200/50 dark:border-green-800/30 flex-shrink-0 sm:flex-shrink">
+                <div className="w-5 h-5 bg-green-100 dark:bg-green-900/40 rounded-full flex items-center justify-center">
+                  <span className="text-green-600 dark:text-green-400 text-[10px] font-semibold">✓</span>
                 </div>
-                <span className="text-xs font-semibold text-green-800 dark:text-green-300 whitespace-nowrap">Freshly Baked</span>
+                <span className="text-[11px] font-medium text-green-800 dark:text-green-300 whitespace-nowrap">Freshly Baked</span>
               </div>
               
-              <div className="flex items-center space-x-2 p-2.5 bg-purple-50/70 dark:bg-purple-900/15 rounded-lg border border-purple-200/50 dark:border-purple-800/30 flex-shrink-0 sm:flex-shrink">
-                <div className="w-6 h-6 bg-purple-100 dark:bg-purple-900/40 rounded-full flex items-center justify-center">
-                  <span className="text-purple-600 dark:text-purple-400 text-xs font-medium">✓</span>
+              <div className="flex items-center space-x-2 p-2 bg-purple-50/70 dark:bg-purple-900/15 rounded-lg border border-purple-200/50 dark:border-purple-800/30 flex-shrink-0 sm:flex-shrink">
+                <div className="w-5 h-5 bg-purple-100 dark:bg-purple-900/40 rounded-full flex items-center justify-center">
+                  <span className="text-purple-600 dark:text-purple-400 text-[10px] font-semibold">✓</span>
             </div>
-                <span className="text-xs font-semibold text-purple-800 dark:text-purple-300 whitespace-nowrap">Premium Quality</span>
+                <span className="text-[11px] font-medium text-purple-800 dark:text-purple-300 whitespace-nowrap">Premium Quality</span>
               </div>
               
-              <div className="flex items-center space-x-2 p-2.5 bg-orange-50/70 dark:bg-orange-900/15 rounded-lg border border-orange-200/50 dark:border-orange-800/30 flex-shrink-0 sm:flex-shrink">
-                <div className="w-6 h-6 bg-orange-100 dark:bg-orange-900/40 rounded-full flex items-center justify-center">
-                  <span className="text-orange-600 dark:text-orange-400 text-xs font-medium">✓</span>
+              <div className="flex items-center space-x-2 p-2 bg-orange-50/70 dark:bg-orange-900/15 rounded-lg border border-orange-200/50 dark:border-orange-800/30 flex-shrink-0 sm:flex-shrink">
+                <div className="w-5 h-5 bg-orange-100 dark:bg-orange-900/40 rounded-full flex items-center justify-center">
+                  <span className="text-orange-600 dark:text-orange-400 text-[10px] font-semibold">✓</span>
             </div>
-                <span className="text-xs font-semibold text-orange-800 dark:text-orange-300 whitespace-nowrap">Handcrafted</span>
+                <span className="text-[11px] font-medium text-orange-800 dark:text-orange-300 whitespace-nowrap">Handcrafted</span>
             </div>
             
-              <div className="flex items-center space-x-2 p-2.5 bg-rose-50/70 dark:bg-rose-900/15 rounded-lg border border-rose-200/50 dark:border-rose-800/30 flex-shrink-0 sm:flex-shrink">
-                <div className="w-6 h-6 bg-rose-100 dark:bg-rose-900/40 rounded-full flex items-center justify-center">
-                  <span className="text-rose-600 dark:text-rose-400 text-xs font-medium">✓</span>
+              <div className="flex items-center space-x-2 p-2 bg-rose-50/70 dark:bg-rose-900/15 rounded-lg border border-rose-200/50 dark:border-rose-800/30 flex-shrink-0 sm:flex-shrink">
+                <div className="w-5 h-5 bg-rose-100 dark:bg-rose-900/40 rounded-full flex items-center justify-center">
+                  <span className="text-rose-600 dark:text-rose-400 text-[10px] font-semibold">✓</span>
               </div>
-                <span className="text-xs font-semibold text-rose-800 dark:text-rose-300 whitespace-nowrap">Made with Love</span>
+                <span className="text-[11px] font-medium text-rose-800 dark:text-rose-300 whitespace-nowrap">Made with Love</span>
               </div>
             </div>
           </div>

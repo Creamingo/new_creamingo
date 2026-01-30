@@ -75,6 +75,8 @@ const ProductHero = ({ product, selectedVariant, isFavorite, onFavoriteToggle, o
     );
   }
 
+  const isHeroPriority = selectedImageIndex === 0;
+
   return (
     <div className="space-y-2 lg:space-y-0 lg:flex lg:items-start lg:gap-4">
       {/* Thumbnails column on large screens */}
@@ -117,9 +119,9 @@ const ProductHero = ({ product, selectedVariant, isFavorite, onFavoriteToggle, o
           sizes="(max-width: 1024px) 100vw, 50vw"
           className="object-cover transition-transform duration-300 group-hover:scale-105"
           onClick={handleImageClick}
-          priority
-          loading="eager"
-          fetchPriority="high"
+          priority={isHeroPriority}
+          loading={isHeroPriority ? 'eager' : 'lazy'}
+          fetchPriority={isHeroPriority ? 'high' : 'auto'}
           unoptimized
         />
 
