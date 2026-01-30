@@ -34,6 +34,7 @@ const getWalletBalance = async (req, res) => {
     // Calculate actual balance from transactions for accuracy
     const transactionsResult = await query(
       `SELECT 
+        COUNT(*) as total_count,
         COALESCE(SUM(CASE WHEN type = 'credit' AND status = 'completed' THEN amount ELSE 0 END), 0) as total_credits,
         COALESCE(SUM(CASE WHEN type = 'debit' AND status = 'completed' THEN amount ELSE 0 END), 0) as total_debits
       FROM wallet_transactions 
@@ -41,12 +42,21 @@ const getWalletBalance = async (req, res) => {
       [customerId]
     );
 
-    const { total_credits, total_debits } = transactionsResult.rows[0];
-    const calculatedBalance = parseFloat(total_credits) - parseFloat(total_debits);
-
-    // Update cached balance if different (always update to keep in sync)
+    const totalCount = parseInt(transactionsResult.rows[0].total_count, 10) || 0;
+    const totalCredits = parseFloat(transactionsResult.rows[0].total_credits) || 0;
+    const totalDebits = parseFloat(transactionsResult.rows[0].total_debits) || 0;
     const currentBalance = parseFloat(customerResult.rows[0].wallet_balance) || 0;
-    if (Math.abs(calculatedBalance - currentBalance) > 0.01) {
+
+    let calculatedBalance = totalCredits - totalDebits;
+    let totalEarned = totalCredits;
+    let totalSpent = totalDebits;
+
+    // Legacy fallback: if there are no transactions but wallet_balance exists, preserve it
+    if (totalCount === 0 && currentBalance > 0) {
+      calculatedBalance = currentBalance;
+      totalEarned = currentBalance;
+      totalSpent = 0;
+    } else if (Math.abs(calculatedBalance - currentBalance) > 0.01) {
       try {
         await query(
           'UPDATE customers SET wallet_balance = ? WHERE id = ?',
@@ -62,8 +72,8 @@ const getWalletBalance = async (req, res) => {
       success: true,
       data: {
         balance: calculatedBalance,
-        totalEarned: parseFloat(total_credits),
-        totalSpent: parseFloat(total_debits)
+        totalEarned: totalEarned,
+        totalSpent: totalSpent
       }
     });
   } catch (error) {
@@ -119,7 +129,7 @@ const getWalletTransactions = async (req, res) => {
     );
 
     // Convert dates to IST ISO format using the utility function
-    const transactions = transactionsResult.rows.map(tx => ({
+    let transactions = transactionsResult.rows.map(tx => ({
       id: tx.id,
       type: tx.type,
       amount: parseFloat(tx.amount),
@@ -130,6 +140,29 @@ const getWalletTransactions = async (req, res) => {
       createdAt: convertToIST(tx.created_at) || tx.created_at
     }));
 
+    // Legacy fallback: surface opening balance if no transactions exist
+    if (transactions.length === 0) {
+      const customerBalanceResult = await query(
+        'SELECT COALESCE(wallet_balance, 0) as wallet_balance FROM customers WHERE id = ?',
+        [customerId]
+      );
+      const legacyBalance = parseFloat(customerBalanceResult.rows[0]?.wallet_balance) || 0;
+      if (legacyBalance > 0) {
+        transactions = [
+          {
+            id: `opening-${customerId}`,
+            type: 'credit',
+            amount: legacyBalance,
+            orderId: null,
+            description: 'Opening Balance',
+            status: 'completed',
+            transactionType: 'opening_balance',
+            createdAt: new Date().toISOString()
+          }
+        ];
+      }
+    }
+
     res.json({
       success: true,
       data: {
@@ -137,8 +170,8 @@ const getWalletTransactions = async (req, res) => {
         pagination: {
           page: pageNum,
           limit: limitNum,
-          total: countResult.rows[0].total,
-          totalPages: Math.ceil(countResult.rows[0].total / limitNum)
+          total: transactions.length > 0 && transactionsResult.rows.length === 0 ? 1 : countResult.rows[0].total,
+          totalPages: Math.ceil((transactions.length > 0 && transactionsResult.rows.length === 0 ? 1 : countResult.rows[0].total) / limitNum)
         }
       }
     });
@@ -246,6 +279,7 @@ const getWalletStats = async (req, res) => {
     // Get statistics
     const statsResult = await query(
       `SELECT 
+        COUNT(*) as total_count,
         COALESCE(SUM(CASE WHEN type = 'credit' AND status = 'completed' THEN amount ELSE 0 END), 0) as total_earned,
         COALESCE(SUM(CASE WHEN type = 'debit' AND status = 'completed' THEN amount ELSE 0 END), 0) as total_spent,
         COUNT(CASE WHEN type = 'credit' AND status = 'completed' THEN 1 END) as total_credits,
@@ -268,15 +302,36 @@ const getWalletStats = async (req, res) => {
 
     const stats = statsResult.rows[0];
     const earnedThisMonth = thisMonthResult.rows[0].earned_this_month;
+    const totalCount = parseInt(stats.total_count, 10) || 0;
+
+    let totalEarned = parseFloat(stats.total_earned);
+    let totalSpent = parseFloat(stats.total_spent);
+    let totalCredits = stats.total_credits;
+    let totalDebits = stats.total_debits;
+
+    // Legacy fallback: if no transactions but wallet balance exists, show opening balance
+    if (totalCount === 0) {
+      const customerBalanceResult = await query(
+        'SELECT COALESCE(wallet_balance, 0) as wallet_balance FROM customers WHERE id = ?',
+        [customerId]
+      );
+      const legacyBalance = parseFloat(customerBalanceResult.rows[0]?.wallet_balance) || 0;
+      if (legacyBalance > 0) {
+        totalEarned = legacyBalance;
+        totalSpent = 0;
+        totalCredits = 1;
+        totalDebits = 0;
+      }
+    }
 
     res.json({
       success: true,
       data: {
-        totalEarned: parseFloat(stats.total_earned),
-        totalSpent: parseFloat(stats.total_spent),
+        totalEarned: totalEarned,
+        totalSpent: totalSpent,
         earnedThisMonth: parseFloat(earnedThisMonth),
-        totalCredits: stats.total_credits,
-        totalDebits: stats.total_debits
+        totalCredits: totalCredits,
+        totalDebits: totalDebits
       }
     });
   } catch (error) {

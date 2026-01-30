@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { usePathname } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Wallet, X, Sparkles, Gift } from 'lucide-react';
 import { useWallet } from '../contexts/WalletContext';
@@ -15,33 +15,41 @@ const WelcomeBonusModal = () => {
   const [isCrediting, setIsCrediting] = useState(false);
   const bonusAmount = 50; // Fixed amount - no animation needed
   const pathname = usePathname();
+  const router = useRouter();
   const allowedPaths = WELCOME_BONUS_ALLOWED_PATHS;
+  const hasAutoCreditedRef = useRef(false);
 
   useEffect(() => {
-    if (showWelcomeBonus && pathname && allowedPaths.includes(pathname)) {
-      // Mark as seen immediately to avoid re-showing on refresh.
-      markWelcomeBonusSeen();
+    if (!showWelcomeBonus || !pathname || !allowedPaths.includes(pathname)) return;
+
+    // Mark as seen immediately to avoid re-showing on refresh.
+    markWelcomeBonusSeen();
+
+    // Auto-credit once when the modal is shown
+    if (!hasAutoCreditedRef.current) {
+      hasAutoCreditedRef.current = true;
+      handleAutoCredit();
     }
   }, [showWelcomeBonus, pathname, markWelcomeBonusSeen]);
 
-  const handleCreditBonus = async () => {
+  const handleAutoCredit = async () => {
     setIsCrediting(true);
     const result = await creditWelcomeBonus();
     setIsCrediting(false);
 
     if (result.success) {
       showSuccess('Welcome Bonus Credited!', `₹${result.amount} has been added to your wallet.`);
-      markWelcomeBonusSeen();
+      setShowWelcomeBonus(false);
+    } else if (result.message && result.message.includes('already credited')) {
       setShowWelcomeBonus(false);
     } else {
-      // If already credited, just close the modal
-      if (result.message && result.message.includes('already credited')) {
-        markWelcomeBonusSeen();
-        setShowWelcomeBonus(false);
-      } else {
-        showError('Error', result.message || 'Failed to credit welcome bonus');
-      }
+      showError('Error', result.message || 'Failed to credit welcome bonus');
     }
+  };
+
+  const handleViewWallet = () => {
+    router.push('/wallet');
+    setShowWelcomeBonus(false);
   };
 
   const handleClose = () => {
@@ -152,7 +160,7 @@ const WelcomeBonusModal = () => {
               className="flex flex-col sm:flex-row gap-3"
             >
               <button
-                onClick={handleCreditBonus}
+                onClick={handleViewWallet}
                 disabled={isCrediting}
                 className="flex-1 bg-gradient-to-r from-pink-600 to-rose-600 text-white py-3 px-6 rounded-xl font-semibold hover:from-pink-700 hover:to-rose-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
               >
