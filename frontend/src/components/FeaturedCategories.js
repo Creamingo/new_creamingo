@@ -55,6 +55,7 @@ const MainCategories = () => {
           name: category.name,
           description: category.description,
           image_url: category.image_url,
+          display_name: category.display_name,
           is_active: category.is_active,
           order_index: category.order_index,
           // Add legacy fields for compatibility
@@ -133,7 +134,7 @@ const MainCategories = () => {
   // Get category display name
   const getCategoryDisplayName = (category) => {
     if (category.item_type === 'category') {
-      return category.category_name;
+      return category.display_name || category.category_name;
     } else if (category.item_type === 'subcategory') {
       return category.subcategory_name;
     }

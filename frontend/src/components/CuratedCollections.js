@@ -8,7 +8,8 @@ const CuratedCollections = () => {
   const router = useRouter()
   const [collections, setCollections] = useState([
     {
-      name: 'Flowers',
+      key: 'flowers',
+      title: 'Flowers',
       image: 'https://images.unsplash.com/photo-1490750967868-88aa4486c946?w=600&h=600&fit=crop',
       suggestions: [
         { name: 'All Flowers Combos', slug: 'all-flowers-combos' },
@@ -19,7 +20,8 @@ const CuratedCollections = () => {
       imagePosition: 'left'
     },
     {
-      name: 'Sweets and Dry Fruits',
+      key: 'sweets-dry-fruits',
+      title: 'Sweets and Dry Fruits',
       image: 'https://images.unsplash.com/photo-1481391319762-47dff72954d9?w=600&h=600&fit=crop',
       suggestions: [
         { name: 'Chocolates & Combos', slug: 'chocolates-and-combos' },
@@ -42,7 +44,7 @@ const CuratedCollections = () => {
   // Navigation handler for entire Flowers box - navigates to first subcategory
   const handleFlowerBoxClick = () => {
     // Get the first subcategory from the Flowers collection
-    const flowersCollection = collections.find(collection => collection.name === 'Flowers')
+    const flowersCollection = collections.find(collection => collection.key === 'flowers')
     const firstSubcategory = flowersCollection?.suggestions?.[0]
     
     if (firstSubcategory) {
@@ -67,7 +69,7 @@ const CuratedCollections = () => {
   // Navigation handler for entire Sweets and Dry Fruits box - navigates to first subcategory
   const handleSweetsBoxClick = () => {
     // Get the first subcategory from the Sweets and Dry Fruits collection
-    const sweetsCollection = collections.find(collection => collection.name === 'Sweets and Dry Fruits')
+    const sweetsCollection = collections.find(collection => collection.key === 'sweets-dry-fruits')
     const firstSubcategory = sweetsCollection?.suggestions?.[0]
     
     if (firstSubcategory) {
@@ -100,11 +102,12 @@ const CuratedCollections = () => {
             slug: subcategory.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and')
           }))
           
-          setCollections(prevCollections => 
-            prevCollections.map(collection => 
-              collection.name === 'Flowers' 
+          setCollections(prevCollections =>
+            prevCollections.map(collection =>
+              collection.key === 'flowers'
                 ? {
                     ...collection,
+                    title: flowersResponse.data.category?.name || collection.title,
                     suggestions: flowersSuggestions.length > 0 ? flowersSuggestions : collection.suggestions,
                     image: resolveImageUrl(flowersResponse.data.category.image_url) || collection.image
                   }
@@ -120,11 +123,12 @@ const CuratedCollections = () => {
             slug: subcategory.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and')
           }))
           
-          setCollections(prevCollections => 
-            prevCollections.map(collection => 
-              collection.name === 'Sweets and Dry Fruits' 
+          setCollections(prevCollections =>
+            prevCollections.map(collection =>
+              collection.key === 'sweets-dry-fruits'
                 ? {
                     ...collection,
+                    title: sweetsResponse.data.category?.name || collection.title,
                     suggestions: sweetsSuggestions.length > 0 ? sweetsSuggestions : collection.suggestions,
                     image: resolveImageUrl(sweetsResponse.data.category.image_url) || collection.image
                   }
@@ -204,7 +208,7 @@ const CuratedCollections = () => {
               <div key={index} className="group">
                 <div className="bg-white dark:bg-gray-800 border border-pink-200 dark:border-pink-800/30 rounded-3xl overflow-hidden shadow-lg dark:shadow-xl dark:shadow-black/20">
                   {/* Desktop Layout - Image left, content right */}
-                  {collection.name === 'Flowers' ? (
+                  {collection.key === 'flowers' ? (
                     <div 
                       onClick={handleFlowerBoxClick}
                       className="hidden lg:flex w-full hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-200 cursor-pointer"
@@ -213,7 +217,7 @@ const CuratedCollections = () => {
                       <div className="w-[45%] p-3 relative overflow-hidden">
                         <img
                           src={collection.image}
-                          alt={collection.name}
+                          alt={collection.title}
                           className="w-full h-full object-cover object-center rounded-2xl"
                         />
                       </div>
@@ -221,7 +225,7 @@ const CuratedCollections = () => {
                       {/* Content Section - 55% width */}
                       <div className="w-[55%] p-8 flex flex-col justify-start ml-4">
                         <h3 className="font-poppins font-bold text-3xl lg:text-4xl mb-6 text-gray-900 dark:text-gray-100">
-                          {collection.name} <span className="ml-2 lg:ml-3 text-3xl lg:text-4xl">→</span>
+                          {collection.title} <span className="ml-2 lg:ml-3 text-3xl lg:text-4xl">→</span>
                         </h3>
                         <ul className="space-y-3">
                           {collection.suggestions.map((suggestion, idx) => (
@@ -241,7 +245,7 @@ const CuratedCollections = () => {
                         </ul>
                       </div>
                     </div>
-                  ) : collection.name === 'Sweets and Dry Fruits' ? (
+                  ) : collection.key === 'sweets-dry-fruits' ? (
                     <div 
                       onClick={handleSweetsBoxClick}
                       className="hidden lg:flex w-full hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-200 cursor-pointer"
@@ -250,7 +254,7 @@ const CuratedCollections = () => {
                       <div className="w-[45%] p-3 relative overflow-hidden">
                         <img
                           src={collection.image}
-                          alt={collection.name}
+                          alt={collection.title}
                           className="w-full h-full object-cover object-center rounded-2xl"
                         />
                       </div>
@@ -258,7 +262,7 @@ const CuratedCollections = () => {
                       {/* Content Section - 55% width */}
                       <div className="w-[55%] p-8 flex flex-col justify-start">
                         <h3 className="font-poppins font-bold text-3xl lg:text-4xl mb-6 text-gray-900 dark:text-gray-100">
-                          {collection.name} <span className="ml-2 lg:ml-3 text-3xl lg:text-4xl">→</span>
+                          {collection.title} <span className="ml-2 lg:ml-3 text-3xl lg:text-4xl">→</span>
                         </h3>
                         <ul className="space-y-3">
                           {collection.suggestions.map((suggestion, idx) => (
@@ -284,7 +288,7 @@ const CuratedCollections = () => {
                       <div className="w-[45%] p-3 relative overflow-hidden">
                         <img
                           src={collection.image}
-                          alt={collection.name}
+                          alt={collection.title}
                           className="w-full h-full object-cover object-center rounded-2xl"
                         />
                       </div>
@@ -292,7 +296,7 @@ const CuratedCollections = () => {
                       {/* Content Section - 55% width */}
                       <div className="w-[55%] p-8 flex flex-col justify-start">
                         <h3 className="font-poppins font-bold text-3xl lg:text-4xl mb-6 text-gray-900 dark:text-gray-100">
-                          {collection.name} <span className="ml-2 lg:ml-3 text-3xl lg:text-4xl">→</span>
+                          {collection.title} <span className="ml-2 lg:ml-3 text-3xl lg:text-4xl">→</span>
                         </h3>
                         <ul className="space-y-3">
                           {collection.suggestions.map((suggestion, idx) => (
@@ -320,7 +324,7 @@ const CuratedCollections = () => {
                           <div className="w-1/2 relative overflow-hidden aspect-square rounded-2xl">
                             <img
                               src={collection.image}
-                              alt={collection.name}
+                              alt={collection.title}
                               className="w-full h-full object-cover object-center"
                             />
                           </div>
@@ -328,7 +332,7 @@ const CuratedCollections = () => {
                           {/* Content - Right side with 50% width */}
                           <div className="w-1/2 flex flex-col justify-start">
                             <h3 className="font-poppins font-bold text-xl mb-3 text-gray-900 dark:text-gray-100">
-                              {collection.name} <span className="ml-2 text-xl">→</span>
+                              {collection.title} <span className="ml-2 text-xl">→</span>
                             </h3>
                             <ul className="space-y-2">
                               {collection.suggestions.map((suggestion, idx) => (
@@ -357,7 +361,7 @@ const CuratedCollections = () => {
                           {/* Content - Left side with 50% width */}
                           <div className="w-1/2 flex flex-col justify-start">
                             <h3 className="font-poppins font-bold text-lg mb-3 text-gray-900 dark:text-gray-100">
-                              {collection.name} <span className="ml-2 text-lg">→</span>
+                              {collection.title} <span className="ml-2 text-lg">→</span>
                             </h3>
                             <ul className="space-y-2">
                               {collection.suggestions.map((suggestion, idx) => (
@@ -381,7 +385,7 @@ const CuratedCollections = () => {
                           <div className="w-1/2 relative overflow-hidden aspect-square rounded-2xl">
                             <img
                               src={collection.image}
-                              alt={collection.name}
+                              alt={collection.title}
                               className="w-full h-full object-cover object-center"
                             />
                           </div>

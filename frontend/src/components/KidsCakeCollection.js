@@ -7,6 +7,7 @@ import { resolveImageUrl } from '../utils/imageUrl'
 export default function KidsCakeCollection() {
   const router = useRouter()
   const [categories, setCategories] = useState([])
+  const [categoryTitle, setCategoryTitle] = useState('Kid\'s Cake Collection')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -72,6 +73,10 @@ export default function KidsCakeCollection() {
             description: subcategory.description || 'Delicious kids cake collection'
           }))
           setCategories(transformedCategories)
+          const title = response.data.category?.name
+          if (title) {
+            setCategoryTitle(title)
+          }
         } else {
           setError('Failed to fetch kids cake collection')
         }
@@ -123,6 +128,20 @@ export default function KidsCakeCollection() {
     )
   }
 
+  const getTitleParts = (title) => {
+    const cleanTitle = (title || '').trim()
+    if (!cleanTitle) {
+      return { first: '', rest: '' }
+    }
+    const parts = cleanTitle.split(' ')
+    return {
+      first: parts[0],
+      rest: parts.slice(1).join(' ')
+    }
+  }
+
+  const { first: titleFirst, rest: titleRest } = getTitleParts(categoryTitle)
+
   return (
     <>
       <section className="bg-gradient-to-br from-pink-50 via-purple-50 to-pink-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-900 pt-12 pb-10 lg:pt-16 lg:pb-12 relative overflow-hidden">
@@ -144,8 +163,10 @@ export default function KidsCakeCollection() {
                 <div className="w-12 h-px bg-gradient-to-r from-pink-400 to-purple-400 dark:from-pink-500 dark:to-purple-500"></div>
               </div>
               <h2 className="font-poppins text-2xl lg:text-3xl font-bold mb-1 leading-tight tracking-tight">
-                <span className="text-purple-700 dark:text-purple-400">Kid's Cake</span>
-                <span className="text-pink-600 dark:text-pink-400"> Collection</span>
+                <span className="text-purple-700 dark:text-purple-400">{titleFirst}</span>
+                {titleRest && (
+                  <span className="text-pink-600 dark:text-pink-400"> {titleRest}</span>
+                )}
               </h2>
               <p className="font-inter text-gray-600 dark:text-gray-300 text-sm lg:text-lg max-w-2xl mx-auto leading-relaxed font-normal">
                 Magical cakes that bring smiles to little faces

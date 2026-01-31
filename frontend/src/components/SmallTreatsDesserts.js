@@ -31,6 +31,7 @@ const SmallTreatsDesserts = () => {
       description: 'Classic sweet treats'
     }
   ])
+  const [categoryTitle, setCategoryTitle] = useState('Small Treats Desserts')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -56,6 +57,10 @@ const SmallTreatsDesserts = () => {
           }))
           
           setCategories(transformedCategories)
+          const title = response.data.category?.name
+          if (title) {
+            setCategoryTitle(title)
+          }
         } else {
           setError('Failed to fetch small treats desserts data')
         }
@@ -103,6 +108,20 @@ const SmallTreatsDesserts = () => {
     )
   }
 
+  const getTitleParts = (title) => {
+    const cleanTitle = (title || '').trim()
+    if (!cleanTitle) {
+      return { first: '', rest: '' }
+    }
+    const parts = cleanTitle.split(' ')
+    return {
+      first: parts[0],
+      rest: parts.slice(1).join(' ')
+    }
+  }
+
+  const { first: titleFirst, rest: titleRest } = getTitleParts(categoryTitle)
+
   return (
       <section className="relative bg-pink-100 dark:bg-gray-800 py-16 lg:py-20">
         {/* Scalloped Separator Border */}
@@ -134,8 +153,10 @@ const SmallTreatsDesserts = () => {
                <div className="absolute right-full mr-2 w-16 h-px bg-gradient-to-l from-pink-300 dark:from-pink-500 to-transparent"></div>
              </div>
              <h2 className="font-poppins text-2xl lg:text-4xl font-bold mb-2">
-               <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-500 dark:from-purple-400 dark:to-pink-400">Small Treats</span>
-               <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-orange-500 dark:from-pink-400 dark:to-orange-400"> Desserts</span>
+               <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-500 dark:from-purple-400 dark:to-pink-400">{titleFirst}</span>
+               {titleRest && (
+                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-orange-500 dark:from-pink-400 dark:to-orange-400"> {titleRest}</span>
+               )}
              </h2>
              <p className="font-inter text-gray-600 dark:text-gray-300 text-base lg:text-xl max-w-2xl mx-auto leading-relaxed">
                Sweet bites for every mood

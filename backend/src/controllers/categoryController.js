@@ -27,6 +27,23 @@ const mapCategory = (req, category) => {
   return mapped;
 };
 
+const categorySlugToIdMap = {
+  'cakes-by-flavor': 19,
+  'cakes-for-occasion': 20,
+  'kids-cake-collection': 21,
+  'kids-favorite': 21,
+  'crowd-favorite-cakes': 22,
+  'crowd-favorite': 22,
+  'love-relationship-cakes': 23,
+  'love-relationship': 23,
+  'milestone-year-cakes': 24,
+  'milestone-year': 24,
+  'small-treats-desserts': 26,
+  'small-treats': 26,
+  'flowers': 27,
+  'sweets-dry-fruits': 28
+};
+
 // Get all categories
 const getCategories = async (req, res) => {
   try {
@@ -315,11 +332,19 @@ const deleteCategory = async (req, res) => {
 // Get cake flavor category with its subcategories
 const getCakeFlavorCategory = async (req, res) => {
   try {
-    // First, find the "Pick a Cake by Flavor" category
-    const categoryResult = await query(
-      'SELECT * FROM categories WHERE name = ? AND is_active = 1',
-      ['Pick a Cake by Flavor']
+    const categoryId = categorySlugToIdMap['cakes-by-flavor'];
+    let categoryResult = await query(
+      'SELECT * FROM categories WHERE id = ? AND is_active = 1',
+      [categoryId]
     );
+
+    if (!categoryResult.rows || categoryResult.rows.length === 0) {
+      // Fallback to legacy name lookup
+      categoryResult = await query(
+        'SELECT * FROM categories WHERE name = ? AND is_active = 1',
+        ['Pick a Cake by Flavor']
+      );
+    }
 
     if (!categoryResult.rows || categoryResult.rows.length === 0) {
       return res.status(404).json({
@@ -358,11 +383,19 @@ const getCakeFlavorCategory = async (req, res) => {
 // Get occasion categories for "Cakes for Any Occasion" section
 const getOccasionCategories = async (req, res) => {
   try {
-    // First, find the "Cakes for Any Occasion" category
-    const occasionCategoryResult = await query(
-      'SELECT * FROM categories WHERE name = ? AND is_active = 1',
-      ['Cakes for Any Occasion']
+    const categoryId = categorySlugToIdMap['cakes-for-occasion'];
+    let occasionCategoryResult = await query(
+      'SELECT * FROM categories WHERE id = ? AND is_active = 1',
+      [categoryId]
     );
+
+    if (!occasionCategoryResult.rows || occasionCategoryResult.rows.length === 0) {
+      // Fallback to legacy name lookup
+      occasionCategoryResult = await query(
+        'SELECT * FROM categories WHERE name = ? AND is_active = 1',
+        ['Cakes for Any Occasion']
+      );
+    }
 
     if (!occasionCategoryResult.rows || occasionCategoryResult.rows.length === 0) {
       return res.status(404).json({
@@ -401,11 +434,19 @@ const getOccasionCategories = async (req, res) => {
 // Get Kid's Cake Collection category with its subcategories
 const getKidsCakeCollection = async (req, res) => {
   try {
-    // First, find the "Kid's Cake Collection" category
-    const kidsCategoryResult = await query(
-      'SELECT * FROM categories WHERE name = ? AND is_active = 1',
-      ['Kid\'s Cake Collection']
+    const categoryId = categorySlugToIdMap['kids-cake-collection'];
+    let kidsCategoryResult = await query(
+      'SELECT * FROM categories WHERE id = ? AND is_active = 1',
+      [categoryId]
     );
+
+    if (!kidsCategoryResult.rows || kidsCategoryResult.rows.length === 0) {
+      // Fallback to legacy name lookup
+      kidsCategoryResult = await query(
+        'SELECT * FROM categories WHERE name = ? AND is_active = 1',
+        ['Kid\'s Cake Collection']
+      );
+    }
 
     if (!kidsCategoryResult.rows || kidsCategoryResult.rows.length === 0) {
       return res.status(404).json({
@@ -444,11 +485,19 @@ const getKidsCakeCollection = async (req, res) => {
 // Get Crowd-Favorite Cakes category with its subcategories
 const getCrowdFavoriteCakes = async (req, res) => {
   try {
-    // First, find the "Crowd-Favorite Cakes" category
-    const crowdFavoriteResult = await query(
-      'SELECT * FROM categories WHERE name = ? AND is_active = 1',
-      ['Crowd-Favorite Cakes']
+    const categoryId = categorySlugToIdMap['crowd-favorite-cakes'];
+    let crowdFavoriteResult = await query(
+      'SELECT * FROM categories WHERE id = ? AND is_active = 1',
+      [categoryId]
     );
+
+    if (!crowdFavoriteResult.rows || crowdFavoriteResult.rows.length === 0) {
+      // Fallback to legacy name lookup
+      crowdFavoriteResult = await query(
+        'SELECT * FROM categories WHERE name = ? AND is_active = 1',
+        ['Crowd-Favorite Cakes']
+      );
+    }
 
     if (!crowdFavoriteResult.rows || crowdFavoriteResult.rows.length === 0) {
       return res.status(404).json({
@@ -487,11 +536,19 @@ const getCrowdFavoriteCakes = async (req, res) => {
 // Get Love and Relationship Cakes category with its subcategories
 const getLoveAndRelationshipCakes = async (req, res) => {
   try {
-    // First, find the "Love and Relationship Cakes" category
-    const loveRelationshipResult = await query(
-      'SELECT * FROM categories WHERE name = ? AND is_active = 1',
-      ['Love and Relationship Cakes']
+    const categoryId = categorySlugToIdMap['love-relationship-cakes'];
+    let loveRelationshipResult = await query(
+      'SELECT * FROM categories WHERE id = ? AND is_active = 1',
+      [categoryId]
     );
+
+    if (!loveRelationshipResult.rows || loveRelationshipResult.rows.length === 0) {
+      // Fallback to legacy name lookup
+      loveRelationshipResult = await query(
+        'SELECT * FROM categories WHERE name = ? AND is_active = 1',
+        ['Love and Relationship Cakes']
+      );
+    }
 
     if (!loveRelationshipResult.rows || loveRelationshipResult.rows.length === 0) {
       return res.status(404).json({
@@ -530,11 +587,19 @@ const getLoveAndRelationshipCakes = async (req, res) => {
 // Get Cakes for Every Milestone Year category with its subcategories
 const getCakesForEveryMilestoneYear = async (req, res) => {
   try {
-    // First, find the "Cakes for Every Milestone Year" category
-    const milestoneResult = await query(
-      'SELECT * FROM categories WHERE name = ? AND is_active = 1',
-      ['Cakes for Every Milestone Year']
+    const categoryId = categorySlugToIdMap['milestone-year-cakes'];
+    let milestoneResult = await query(
+      'SELECT * FROM categories WHERE id = ? AND is_active = 1',
+      [categoryId]
     );
+
+    if (!milestoneResult.rows || milestoneResult.rows.length === 0) {
+      // Fallback to legacy name lookup
+      milestoneResult = await query(
+        'SELECT * FROM categories WHERE name = ? AND is_active = 1',
+        ['Cakes for Every Milestone Year']
+      );
+    }
 
     if (!milestoneResult.rows || milestoneResult.rows.length === 0) {
       return res.status(404).json({
@@ -573,11 +638,19 @@ const getCakesForEveryMilestoneYear = async (req, res) => {
 // Get Flowers category with its subcategories
 const getFlowers = async (req, res) => {
   try {
-    // First, find the "Flowers" category
-    const flowersResult = await query(
-      'SELECT * FROM categories WHERE name = ? AND is_active = 1',
-      ['Flowers']
+    const categoryId = categorySlugToIdMap['flowers'];
+    let flowersResult = await query(
+      'SELECT * FROM categories WHERE id = ? AND is_active = 1',
+      [categoryId]
     );
+
+    if (!flowersResult.rows || flowersResult.rows.length === 0) {
+      // Fallback to legacy name lookup
+      flowersResult = await query(
+        'SELECT * FROM categories WHERE name = ? AND is_active = 1',
+        ['Flowers']
+      );
+    }
 
     if (!flowersResult.rows || flowersResult.rows.length === 0) {
       return res.status(404).json({
@@ -616,11 +689,19 @@ const getFlowers = async (req, res) => {
 // Get Sweets and Dry Fruits category with its subcategories
 const getSweetsAndDryFruits = async (req, res) => {
   try {
-    // First, find the "Sweets and Dry Fruits" category
-    const sweetsResult = await query(
-      'SELECT * FROM categories WHERE name = ? AND is_active = 1',
-      ['Sweets and Dry Fruits']
+    const categoryId = categorySlugToIdMap['sweets-dry-fruits'];
+    let sweetsResult = await query(
+      'SELECT * FROM categories WHERE id = ? AND is_active = 1',
+      [categoryId]
     );
+
+    if (!sweetsResult.rows || sweetsResult.rows.length === 0) {
+      // Fallback to legacy name lookup
+      sweetsResult = await query(
+        'SELECT * FROM categories WHERE name = ? AND is_active = 1',
+        ['Sweets and Dry Fruits']
+      );
+    }
 
     if (!sweetsResult.rows || sweetsResult.rows.length === 0) {
       return res.status(404).json({
@@ -662,20 +743,8 @@ const getSubcategoriesByCategorySlug = async (req, res) => {
     const { categorySlug } = req.params;
 
     // Map slugs directly to category IDs
-    const slugToCategoryIdMap = {
-      'cakes-by-flavor': 19,
-      'cakes-for-occasion': 20,
-      'kids-favorite': 21,
-      'crowd-favorite': 22,
-      'love-relationship': 23,
-      'milestone-year': 24,
-      'small-treats': 26,
-      'flowers': 27,
-      'sweets-dry-fruits': 28
-    };
-
     // Get the category ID from the slug
-    const categoryId = slugToCategoryIdMap[categorySlug];
+    const categoryId = categorySlugToIdMap[categorySlug];
 
     if (!categoryId) {
       return res.status(404).json({
@@ -732,20 +801,8 @@ const getSubcategoryBySlugs = async (req, res) => {
     console.log('getSubcategoryBySlugs called with:', { categorySlug, subCategorySlug });
 
     // Map slugs directly to category IDs
-    const slugToCategoryIdMap = {
-      'cakes-by-flavor': 19,
-      'cakes-for-occasion': 20,
-      'kids-cake-collection': 21,
-      'crowd-favorite-cakes': 22,
-      'love-relationship-cakes': 23,
-      'milestone-year-cakes': 24,
-      'small-treats-desserts': 26,
-      'flowers': 27,
-      'sweets-dry-fruits': 28
-    };
-
     // Get the category ID from the slug
-    const categoryId = slugToCategoryIdMap[categorySlug];
+    const categoryId = categorySlugToIdMap[categorySlug];
 
     if (!categoryId) {
       return res.status(404).json({
@@ -862,11 +919,19 @@ const updateCategoryOrder = async (req, res) => {
 // Get Small Treats Desserts category with its subcategories
 const getSmallTreatsDesserts = async (req, res) => {
   try {
-    // First, find the "Small Treats Desserts" category
-    const treatsResult = await query(
-      'SELECT * FROM categories WHERE name = ? AND is_active = 1',
-      ['Small Treats Desserts']
+    const categoryId = categorySlugToIdMap['small-treats-desserts'];
+    let treatsResult = await query(
+      'SELECT * FROM categories WHERE id = ? AND is_active = 1',
+      [categoryId]
     );
+
+    if (!treatsResult.rows || treatsResult.rows.length === 0) {
+      // Fallback to legacy name lookup
+      treatsResult = await query(
+        'SELECT * FROM categories WHERE name = ? AND is_active = 1',
+        ['Small Treats Desserts']
+      );
+    }
 
     if (!treatsResult.rows || treatsResult.rows.length === 0) {
       return res.status(404).json({
