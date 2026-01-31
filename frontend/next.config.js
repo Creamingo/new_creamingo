@@ -44,6 +44,15 @@ const nextConfig = {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
     NEXT_PUBLIC_ENVIRONMENT: process.env.NEXT_PUBLIC_ENVIRONMENT,
   },
+  async rewrites() {
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${apiBaseUrl}/:path*`,
+      },
+    ];
+  },
 }
 
 module.exports = nextConfig
