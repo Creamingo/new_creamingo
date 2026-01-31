@@ -49,6 +49,10 @@ const schemas = {
     rememberMe: Joi.boolean().optional()
   }),
 
+  customerCheckEmail: Joi.object({
+    email: Joi.string().email().required()
+  }),
+
   updateCustomerProfile: Joi.object({
     name: Joi.string().min(2).max(100),
     email: Joi.string().email(),

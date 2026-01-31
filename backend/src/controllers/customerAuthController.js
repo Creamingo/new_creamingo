@@ -11,6 +11,41 @@ const generateToken = (customerId) => {
   );
 };
 
+// Check if customer email exists
+const checkEmail = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    const result = await query(
+      'SELECT id, name, is_active FROM customers WHERE email = ?',
+      [email]
+    );
+
+    const exists = result.rows.length > 0;
+    const customer = exists ? result.rows[0] : null;
+
+    res.json({
+      success: true,
+      data: {
+        exists,
+        customer: customer
+          ? {
+              id: customer.id,
+              name: customer.name,
+              is_active: customer.is_active
+            }
+          : null
+      }
+    });
+  } catch (error) {
+    console.error('Check email error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
 // Register new customer
 const register = async (req, res) => {
   try {
@@ -418,6 +453,7 @@ const logout = async (req, res) => {
 };
 
 module.exports = {
+  checkEmail,
   register,
   login,
   getMe,
