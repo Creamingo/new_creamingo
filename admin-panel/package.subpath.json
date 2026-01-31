@@ -2,7 +2,6 @@
   "name": "creamingo-admin-panel",
   "version": "0.1.0",
   "private": true,
-  "homepage": "/admin",
   "dependencies": {
     "@types/node": "^16.18.0",
     "@types/react": "^18.2.0",
@@ -24,13 +23,13 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "start:subpath": "PUBLIC_URL=/admin react-scripts start",
-    "build": "PUBLIC_URL=/admin react-scripts build",
-    "build:subpath": "PUBLIC_URL=/admin react-scripts build",
+    "start:subpath": "react-scripts start",
+    "build": "react-scripts build",
+    "build:subpath": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "dev": "react-scripts start",
-    "dev:subpath": "PUBLIC_URL=/admin react-scripts start"
+    "dev:subpath": "react-scripts start"
   },
   "eslintConfig": {
     "extends": [
