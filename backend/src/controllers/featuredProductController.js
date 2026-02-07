@@ -1,4 +1,10 @@
 const { query } = require('../config/db');
+const { applyUploadUrl } = require('../utils/urlHelpers');
+
+const mapFeaturedProduct = (req, item) => ({
+  ...item,
+  product_image: applyUploadUrl(req, item.product_image)
+});
 
 // Fixed SQL query to handle missing slug column
 
@@ -78,11 +84,11 @@ const getFeaturedProducts = async (req, res) => {
         ORDER BY display_order ASC
       `, [product.product_id]);
       
-      return {
+      return mapFeaturedProduct(req, {
         ...product,
         variants: variantsResult.rows,
-        gallery_images: galleryResult.rows.map(img => img.image_url)
-      };
+        gallery_images: galleryResult.rows.map(img => img.image_url).map((url) => applyUploadUrl(req, url))
+      });
     }));
     
     res.status(200).json({
@@ -136,7 +142,7 @@ const getFeaturedProduct = async (req, res) => {
     
     res.status(200).json({
       success: true,
-      data: result.rows[0]
+      data: mapFeaturedProduct(req, result.rows[0])
     });
   } catch (error) {
     console.error('Error fetching featured product:', error);
@@ -213,7 +219,7 @@ const createFeaturedProduct = async (req, res) => {
     // Insert new featured product
     const insertSql = `
       INSERT INTO featured_products (product_id, section, display_order, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))
+      VALUES (?, ?, ?, 1, NOW(), NOW())
     `;
     
     const insertResult = await query(insertSql, [product_id, section, display_order]);
@@ -244,7 +250,7 @@ const createFeaturedProduct = async (req, res) => {
     res.status(201).json({
       success: true,
       message: 'Product added to featured list successfully',
-      data: newFeaturedProduct.rows[0]
+      data: mapFeaturedProduct(req, newFeaturedProduct.rows[0])
     });
   } catch (error) {
     console.error('Error creating featured product:', error);
@@ -296,7 +302,7 @@ const updateFeaturedProduct = async (req, res) => {
       });
     }
     
-    updateFields.push('updated_at = datetime(\'now\')');
+    updateFields.push('updated_at = NOW()');
     updateValues.push(id);
     
     const updateSql = `
@@ -333,7 +339,7 @@ const updateFeaturedProduct = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Featured product updated successfully',
-      data: updatedProduct.rows[0]
+      data: mapFeaturedProduct(req, updatedProduct.rows[0])
     });
   } catch (error) {
     console.error('Error updating featured product:', error);
@@ -411,7 +417,12 @@ const getAvailableProducts = async (req, res) => {
     const result = await query(sql, [section]);
     
     // Filter out already featured products
-    const availableProducts = result.rows.filter(product => !product.is_featured);
+    const availableProducts = result.rows
+      .filter(product => !product.is_featured)
+      .map((product) => ({
+        ...product,
+        image_url: applyUploadUrl(req, product.image_url)
+      }));
     
     res.status(200).json({
       success: true,
@@ -451,7 +462,7 @@ const toggleFeaturedProductStatus = async (req, res) => {
     
     // Update status
     await query(
-      'UPDATE featured_products SET is_active = ?, updated_at = datetime(\'now\') WHERE id = ?',
+      'UPDATE featured_products SET is_active = ?, updated_at = NOW() WHERE id = ?',
       [newStatus, id]
     );
     
@@ -489,7 +500,7 @@ const reorderFeaturedProducts = async (req, res) => {
     for (const product of products) {
       if (product.id && product.display_order !== undefined) {
         await query(
-          'UPDATE featured_products SET display_order = ?, updated_at = datetime(\'now\') WHERE id = ?',
+          'UPDATE featured_products SET display_order = ?, updated_at = NOW() WHERE id = ?',
           [product.display_order, product.id]
         );
       }
@@ -575,7 +586,7 @@ const toggleFeaturedStatus = async (req, res) => {
     
     // Update featured_products table
     await query(
-      'UPDATE featured_products SET is_featured = ?, updated_at = datetime(\'now\') WHERE id = ?',
+      'UPDATE featured_products SET is_featured = ?, updated_at = NOW() WHERE id = ?',
       [newStatus, id]
     );
     
@@ -588,7 +599,7 @@ const toggleFeaturedStatus = async (req, res) => {
     if (productCheck.rows.length > 0) {
       const productId = productCheck.rows[0].product_id;
       await query(
-        'UPDATE products SET is_featured = ?, updated_at = datetime(\'now\') WHERE id = ?',
+        'UPDATE products SET is_featured = ?, updated_at = NOW() WHERE id = ?',
         [newStatus, productId]
       );
     }
@@ -634,7 +645,7 @@ const toggleTopProductStatus = async (req, res) => {
     
     // Update featured_products table
     await query(
-      'UPDATE featured_products SET is_top_product = ?, updated_at = datetime(\'now\') WHERE id = ?',
+      'UPDATE featured_products SET is_top_product = ?, updated_at = NOW() WHERE id = ?',
       [newStatus, id]
     );
     
@@ -647,7 +658,7 @@ const toggleTopProductStatus = async (req, res) => {
     if (productCheck.rows.length > 0) {
       const productId = productCheck.rows[0].product_id;
       await query(
-        'UPDATE products SET is_top_product = ?, updated_at = datetime(\'now\') WHERE id = ?',
+        'UPDATE products SET is_top_product = ?, updated_at = NOW() WHERE id = ?',
         [newStatus, productId]
       );
       
@@ -701,7 +712,7 @@ const toggleBestsellerStatus = async (req, res) => {
     
     // Update featured_products table
     await query(
-      'UPDATE featured_products SET is_bestseller = ?, updated_at = datetime(\'now\') WHERE id = ?',
+      'UPDATE featured_products SET is_bestseller = ?, updated_at = NOW() WHERE id = ?',
       [newStatus, id]
     );
     
@@ -714,7 +725,7 @@ const toggleBestsellerStatus = async (req, res) => {
     if (productCheck.rows.length > 0) {
       const productId = productCheck.rows[0].product_id;
       await query(
-        'UPDATE products SET is_bestseller = ?, updated_at = datetime(\'now\') WHERE id = ?',
+        'UPDATE products SET is_bestseller = ?, updated_at = NOW() WHERE id = ?',
         [newStatus, productId]
       );
       
@@ -767,7 +778,7 @@ const toggleActiveStatus = async (req, res) => {
     
     // Update featured_products table
     await query(
-      'UPDATE featured_products SET is_active = ?, updated_at = datetime(\'now\') WHERE id = ?',
+      'UPDATE featured_products SET is_active = ?, updated_at = NOW() WHERE id = ?',
       [newStatus, id]
     );
     

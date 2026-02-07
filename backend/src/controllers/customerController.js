@@ -11,7 +11,10 @@ const getCustomers = async (req, res) => {
       sort_order = 'DESC'
     } = req.query;
 
-    const offset = (page - 1) * limit;
+    // Convert to integers for MySQL
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
+    const offset = (pageNum - 1) * limitNum;
     let whereConditions = [];
     let queryParams = [];
     let paramCount = 1;
@@ -36,6 +39,10 @@ const getCustomers = async (req, res) => {
     const total = parseInt(countResult.rows[0].total);
 
     // Get customers with order statistics
+    // Ensure limit/offset are integers (inline to avoid MySQL stmt issues)
+    const finalLimit = Number.isInteger(limitNum) && limitNum > 0 ? limitNum : 10;
+    const finalOffset = Number.isInteger(offset) && offset >= 0 ? offset : 0;
+
     const customersQuery = `
       SELECT 
         c.id,
@@ -53,20 +60,20 @@ const getCustomers = async (req, res) => {
       ${whereClause}
       GROUP BY c.id, c.name, c.email, c.phone, c.address, c.created_at, c.updated_at
       ORDER BY c.${sortField} ${sortDirection}
-      LIMIT ? OFFSET ?
+      LIMIT ${finalLimit} OFFSET ${finalOffset}
     `;
 
-    queryParams.push(limit, offset);
-    const customersResult = await query(customersQuery, queryParams);
+    const customersQueryParams = [...queryParams];
+    const customersResult = await query(customersQuery, customersQueryParams);
 
     res.json({
       success: true,
       data: customersResult.rows,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
-        pages: Math.ceil(total / limit)
+        pages: Math.ceil(total / limitNum)
       }
     });
   } catch (error) {
@@ -315,7 +322,7 @@ const getCustomerStats = async (req, res) => {
     const newThisMonthResult = await query(`
       SELECT COUNT(*) as new_count
       FROM customers
-      WHERE created_at >= date('now', '-30 days')
+      WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
     `);
     const new_this_month = parseInt(newThisMonthResult.rows[0].new_count);
 
@@ -342,9 +349,11 @@ const getCustomerStats = async (req, res) => {
     });
   } catch (error) {
     console.error('Get customer stats error:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

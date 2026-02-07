@@ -184,7 +184,7 @@ const createUser = async (req, res) => {
     // Create user with delivery boy fields if applicable
     const result = await query(`
       INSERT INTO users (name, email, password, role, is_active, order_index, owned_bike, driving_license_number, contact_number, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `, [
       name, 
       email, 
@@ -283,7 +283,7 @@ const updateUser = async (req, res) => {
       });
     }
 
-    updates.push('updated_at = datetime(\'now\')');
+    updates.push('updated_at = NOW()');
     values.push(id);
 
     const queryText = `
@@ -414,7 +414,7 @@ const toggleUserStatus = async (req, res) => {
 
     const result = await query(`
       UPDATE users 
-      SET is_active = ?, updated_at = datetime('now')
+      SET is_active = ?, updated_at = NOW()
       WHERE id = ?
     `, [is_active ? 1 : 0, id]);
 
@@ -470,7 +470,7 @@ const changePassword = async (req, res) => {
 
     await query(`
       UPDATE users 
-      SET password = ?, updated_at = datetime('now')
+      SET password = ?, updated_at = NOW()
       WHERE id = ?
     `, [hashedPassword, id]);
 
@@ -546,7 +546,7 @@ const updateUserOrder = async (req, res) => {
     // Super Admin first
     for (const user of roleGroups.super_admin) {
       await query(
-        'UPDATE users SET order_index = ?, updated_at = datetime(\'now\') WHERE id = ?',
+        'UPDATE users SET order_index = ?, updated_at = NOW() WHERE id = ?',
         [globalOrderIndex++, user.id]
       );
     }
@@ -554,7 +554,7 @@ const updateUserOrder = async (req, res) => {
     // Admin second
     for (const user of roleGroups.admin) {
       await query(
-        'UPDATE users SET order_index = ?, updated_at = datetime(\'now\') WHERE id = ?',
+        'UPDATE users SET order_index = ?, updated_at = NOW() WHERE id = ?',
         [globalOrderIndex++, user.id]
       );
     }
@@ -562,7 +562,7 @@ const updateUserOrder = async (req, res) => {
     // Staff third
     for (const user of roleGroups.staff) {
       await query(
-        'UPDATE users SET order_index = ?, updated_at = datetime(\'now\') WHERE id = ?',
+        'UPDATE users SET order_index = ?, updated_at = NOW() WHERE id = ?',
         [globalOrderIndex++, user.id]
       );
     }
@@ -570,7 +570,7 @@ const updateUserOrder = async (req, res) => {
     // Bakery Production fourth
     for (const user of roleGroups.bakery_production) {
       await query(
-        'UPDATE users SET order_index = ?, updated_at = datetime(\'now\') WHERE id = ?',
+        'UPDATE users SET order_index = ?, updated_at = NOW() WHERE id = ?',
         [globalOrderIndex++, user.id]
       );
     }
@@ -578,7 +578,7 @@ const updateUserOrder = async (req, res) => {
     // Delivery Boy fifth
     for (const user of roleGroups.delivery_boy) {
       await query(
-        'UPDATE users SET order_index = ?, updated_at = datetime(\'now\') WHERE id = ?',
+        'UPDATE users SET order_index = ?, updated_at = NOW() WHERE id = ?',
         [globalOrderIndex++, user.id]
       );
     }

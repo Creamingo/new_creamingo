@@ -81,7 +81,7 @@ function AccountPageContent() {
       <Header />
       
       {/* Sticky Greeting Line */}
-      <div className="sticky top-16 z-40 bg-white dark:bg-gray-800 border-b border-gray-200/60 dark:border-gray-700/60">
+      <div className="sticky top-[3.6rem] lg:top-16 z-40 bg-white dark:bg-gray-800 border-b border-gray-200/60 dark:border-gray-700/60">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
           <p className="font-poppins text-base lg:text-lg font-medium text-gray-700 dark:text-gray-200 leading-tight tracking-tight">
             Hello, {customer?.name || 'User'} 👋

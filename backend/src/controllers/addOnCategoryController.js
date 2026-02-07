@@ -89,7 +89,7 @@ const createAddOnCategory = async (req, res) => {
     const newCategory = await query(`
       SELECT * FROM add_on_categories 
       WHERE id = ?
-    `, [result.insertId]);
+    `, [result.lastID || result.insertId]);
 
     res.status(201).json({
       success: true,
@@ -111,6 +111,8 @@ const updateAddOnCategory = async (req, res) => {
   try {
     const { id } = req.params;
     const { name, display_order, is_active } = req.body;
+    const safeDisplayOrder = typeof display_order === 'undefined' ? null : display_order;
+    const safeIsActive = typeof is_active === 'undefined' ? null : is_active;
 
     // Check if category exists
     const existingCategory = await query(`
@@ -147,7 +149,7 @@ const updateAddOnCategory = async (req, res) => {
           is_active = COALESCE(?, is_active),
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `, [name, display_order, is_active, id]);
+    `, [name, safeDisplayOrder, safeIsActive, id]);
 
     const updatedCategory = await query(`
       SELECT * FROM add_on_categories 

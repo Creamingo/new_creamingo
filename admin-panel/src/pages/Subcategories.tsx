@@ -24,6 +24,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Modal, ModalFooter } from '../components/ui/Modal';
 import { FileUpload } from '../components/ui/FileUpload';
+import { resolveImageUrl } from '../utils/imageUrl';
 import { Subcategory, Category } from '../types';
 import categoryService from '../services/categoryService';
 import apiClient from '../services/api';
@@ -136,7 +137,7 @@ const SortableRow: React.FC<SortableRowProps> = ({
           <div className="flex items-center justify-center">
             {subcategory.image_url ? (
               <img 
-                src={subcategory.image_url} 
+                src={resolveImageUrl(subcategory.image_url)} 
                 alt={subcategory.name} 
                 className="w-12 h-8 object-cover rounded border border-gray-200 dark:border-gray-700"
                 onError={(e) => {
@@ -580,7 +581,7 @@ export const Subcategories: React.FC = () => {
       
       // Upload image if files are selected
       if (uploadedFiles.length > 0) {
-        const uploadResponse = await apiClient.uploadFile('/upload/single', uploadedFiles[0]);
+        const uploadResponse = await apiClient.uploadFile('/upload/single?type=subcategories', uploadedFiles[0]);
         if (uploadResponse.success && uploadResponse.data) {
           imageUrl = uploadResponse.data.url;
         }
@@ -637,7 +638,7 @@ export const Subcategories: React.FC = () => {
       
       // Upload new image if files are selected
       if (uploadedFiles.length > 0) {
-        const uploadResponse = await apiClient.uploadFile('/upload/single', uploadedFiles[0]);
+        const uploadResponse = await apiClient.uploadFile('/upload/single?type=subcategories', uploadedFiles[0]);
         if (uploadResponse.success && uploadResponse.data) {
           imageUrl = uploadResponse.data.url;
         }
@@ -1362,7 +1363,7 @@ export const Subcategories: React.FC = () => {
                         {subcategory.image_url ? (
                           <div className="w-full h-32 sm:h-40 bg-gray-100 dark:bg-gray-700 overflow-hidden">
                             <img 
-                              src={subcategory.image_url} 
+                              src={resolveImageUrl(subcategory.image_url)}
                               alt={subcategory.name} 
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                               onError={(e) => {

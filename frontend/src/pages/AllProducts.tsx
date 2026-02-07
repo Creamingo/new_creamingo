@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { Star, Filter, Search, Grid, List, ArrowRight, Award } from 'lucide-react';
+import { resolveImageUrl } from '../utils/imageUrl';
 
 interface Product {
   id: number;
@@ -253,7 +254,7 @@ const AllProducts: React.FC = () => {
                   viewMode === 'list' ? 'w-48 h-32' : 'h-48'
                 }`}>
                   <img
-                    src={product.image_url}
+                    src={resolveImageUrl(product.image_url)}
                     alt={product.name}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   />

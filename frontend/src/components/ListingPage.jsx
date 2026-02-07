@@ -15,6 +15,7 @@ import productApi from '../api/productApi';
 import { useCategoryMenu } from '../contexts/CategoryMenuContext';
 import { useWishlist } from '../contexts/WishlistContext';
 import { formatPrice } from '../utils/priceFormatter';
+import { resolveImageUrl } from '../utils/imageUrl';
 
 const ListingPage = () => {
   const params = useParams();
@@ -36,9 +37,13 @@ const ListingPage = () => {
   const [activeSlider, setActiveSlider] = useState(null); // 'min' or 'max' or null
   const [showScrollToTop, setShowScrollToTop] = useState(false);
   const [focusedSubcategoryIndex, setFocusedSubcategoryIndex] = useState(null);
+  const [filterBarHeight, setFilterBarHeight] = useState(0);
   const locationBarRef = useRef(null);
   const filterBarRef = useRef(null);
   const subcategoryButtonsRef = useRef([]);
+  const subcategoryScrollRef = useRef(null);
+  const leftScrollIndicatorRef = useRef(null);
+  const rightScrollIndicatorRef = useRef(null);
   
   // Calculate max price from products and round up to ensure slider can reach it
   const rawMaxPrice = products.length > 0 
@@ -122,19 +127,33 @@ const ListingPage = () => {
       const response = await categoryApi.getSubcategories(categorySlug);
       console.log('API response:', response);
       
-      // Transform the API response to match our expected format
-      if (response && response.success && response.data && response.data.subcategories && response.data.subcategories.length > 0) {
-        const transformedData = response.data.subcategories.map(subcategory => ({
-          id: subcategory.id,
-          name: subcategory.name,
-          slug: subcategory.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and'),
-          image: subcategory.image_url,
-          productCount: subcategory.product_count || subcategory.products_count || subcategory.productCount || 0 // Use API count if available
-        }));
-        console.log('Transformed subcategories data:', transformedData);
-        return transformedData;
+      if (!response || !response.success || !response.data) {
+        throw new Error('Invalid API response format');
       }
-      throw new Error('Invalid API response format or empty subcategories');
+
+      const rawSubcategories =
+        response.data.subcategories ||
+        response.data.category?.subcategories ||
+        [];
+
+      if (!Array.isArray(rawSubcategories)) {
+        throw new Error('Invalid API response format');
+      }
+
+      if (rawSubcategories.length === 0) {
+        console.warn('No subcategories found for category:', categorySlug);
+        return [];
+      }
+
+      const transformedData = rawSubcategories.map(subcategory => ({
+        id: subcategory.id,
+        name: subcategory.name,
+        slug: subcategory.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and'),
+        image: subcategory.image_url,
+        productCount: subcategory.product_count || subcategory.products_count || subcategory.productCount || 0 // Use API count if available
+      }));
+      console.log('Transformed subcategories data:', transformedData);
+      return transformedData;
     } catch (error) {
       console.error('Failed to fetch subcategories data:', error);
       throw error; // Don't fall back to mock data, let the error propagate
@@ -164,7 +183,7 @@ const ListingPage = () => {
         id: product.id,
         name: product.name,
         slug: product.slug, // Include the slug field
-        image: product.image_url || product.image,
+        image: resolveImageUrl(product.image_url || product.image),
         originalPrice: product.base_price || product.originalPrice,
         discountedPrice: product.discounted_price || product.discountedPrice,
         rating: product.rating || 4.5, // Default rating if not provided
@@ -408,6 +427,62 @@ const ListingPage = () => {
     };
   }, [products, allSubcategories, loading]); // Re-run when content changes or loads
 
+  // Measure filter bar height for sticky breadcrumb positioning
+  useEffect(() => {
+    if (!filterBarRef.current) return;
+
+    const updateHeight = () => {
+      const height = filterBarRef.current?.offsetHeight || 0;
+      setFilterBarHeight(height);
+    };
+
+    updateHeight();
+
+    if (window.ResizeObserver) {
+      const observer = new ResizeObserver(() => updateHeight());
+      observer.observe(filterBarRef.current);
+      return () => observer.disconnect();
+    }
+
+    window.addEventListener('resize', updateHeight);
+    return () => window.removeEventListener('resize', updateHeight);
+  }, []);
+
+  // Keep the selected subcategory visible in the horizontal list
+  useEffect(() => {
+    if (!subcategoryScrollRef.current || allSubcategories.length === 0) return;
+    if (!subCategorySlug) return;
+
+    const selectedIndex = allSubcategories.findIndex(
+      (subcategory) => subcategory.slug === subCategorySlug
+    );
+    if (selectedIndex === -1) return;
+
+    const targetButton = subcategoryButtonsRef.current[selectedIndex];
+    if (!targetButton) return;
+
+    setFocusedSubcategoryIndex(selectedIndex);
+
+    requestAnimationFrame(() => {
+      targetButton.scrollIntoView({
+        behavior: 'auto',
+        inline: 'center',
+        block: 'nearest'
+      });
+
+      const container = subcategoryScrollRef.current;
+      if (!container) return;
+
+      if (leftScrollIndicatorRef.current) {
+        leftScrollIndicatorRef.current.style.opacity = container.scrollLeft > 10 ? '1' : '0';
+      }
+      if (rightScrollIndicatorRef.current) {
+        const isAtEnd = container.scrollWidth - container.scrollLeft <= container.clientWidth + 10;
+        rightScrollIndicatorRef.current.style.opacity = isAtEnd ? '0' : '1';
+      }
+    });
+  }, [subCategorySlug, allSubcategories]);
+
   // Get current page data
   const currentData = isSubcategory ? subcategoryData : categoryData?.data?.category;
   
@@ -468,7 +543,7 @@ const ListingPage = () => {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <Header />
-        <div className="flex items-center justify-center min-h-[calc(100vh-64px)] pt-16 pb-8">
+        <div className="flex items-center justify-center min-h-[calc(100vh-3.6rem)] lg:min-h-[calc(100vh-64px)] pt-[3.6rem] lg:pt-16 pb-8">
           <div className="text-center px-4 max-w-md">
             <div className="w-20 h-20 bg-gradient-to-br from-red-100 to-pink-100 dark:from-red-900/30 dark:to-pink-900/30 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg dark:shadow-black/20">
               <AlertCircle className="w-10 h-10 text-red-500 dark:text-red-400" />
@@ -550,18 +625,18 @@ const ListingPage = () => {
               <div className="relative">
                 {/* Left fade gradient - only show when scrolled */}
                 <div 
-                  id="left-scroll-indicator"
+                  ref={leftScrollIndicatorRef}
                   className="absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-white dark:from-gray-800 to-transparent z-10 pointer-events-none opacity-0 transition-opacity duration-300"
                 ></div>
                 {/* Right fade gradient */}
                 <div 
-                  id="right-scroll-indicator"
+                  ref={rightScrollIndicatorRef}
                   className="absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-white dark:from-gray-800 to-transparent z-10 pointer-events-none opacity-100 transition-opacity duration-300"
                 ></div>
               
               {/* Subcategory Horizontal Scroll - Mobile Only */}
                 <div 
-                  id="subcategory-scroll-container"
+                  ref={subcategoryScrollRef}
                   className="flex space-x-2 overflow-x-auto pb-1 scrollbar-hide relative"
                   style={{
                     scrollSnapType: 'x mandatory',
@@ -570,8 +645,8 @@ const ListingPage = () => {
                   }}
                   onScroll={(e) => {
                     const container = e.target;
-                    const leftIndicator = document.getElementById('left-scroll-indicator');
-                    const rightIndicator = document.getElementById('right-scroll-indicator');
+                    const leftIndicator = leftScrollIndicatorRef.current;
+                    const rightIndicator = rightScrollIndicatorRef.current;
                     
                     // Show left indicator only if scrolled
                     if (leftIndicator) {
@@ -647,7 +722,7 @@ const ListingPage = () => {
         )}
 
         {/* Sticky Filter Bar - Mobile Only */}
-        <div ref={filterBarRef} className="lg:hidden sticky top-16 z-40 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm transition-all duration-300">
+        <div ref={filterBarRef} className="lg:hidden sticky top-[3.6rem] z-40 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm transition-all duration-300">
           <div className="px-3 py-1.5">
             <div className="flex items-center justify-between gap-2">
               {/* Quick Filter Chips */}
@@ -700,9 +775,12 @@ const ListingPage = () => {
         </div>
 
         {/* Sticky Breadcrumb - Mobile Only (Below Filter Bar) */}
-        <div className="lg:hidden sticky top-[112px] z-30 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <div
+          className="lg:hidden sticky z-30 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700"
+          style={{ top: `calc(3.6rem + ${filterBarHeight}px)` }}
+        >
           <div className="w-full px-3 py-0.5">
-            <nav className="flex items-center space-x-1 text-[10px] text-gray-400 dark:text-gray-500">
+            <nav className="flex items-center space-x-1 text-[11px] text-gray-400 dark:text-gray-500">
               <button
                 onClick={() => router.push('/')}
                 className="hover:text-purple-600 dark:hover:text-purple-400 transition-colors duration-200 font-medium"
@@ -1205,33 +1283,31 @@ const ListingPage = () => {
                 animate={{ y: 0 }}
                 exit={{ y: '100%' }}
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="fixed bottom-16 left-0 right-0 bg-white dark:bg-gray-800 rounded-t-xl shadow-2xl z-[45] max-h-[calc(85vh-4rem)] overflow-y-auto lg:hidden"
+                className="fixed bottom-16 left-0 right-0 bg-white dark:bg-gray-800 rounded-t-2xl shadow-2xl z-[45] max-h-[calc(85vh-4rem)] overflow-y-auto lg:hidden"
               >
                 {/* Header */}
-                <div className="sticky top-0 bg-gradient-to-r from-pink-50 via-rose-50 to-pink-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-800 border-b border-pink-100 dark:border-gray-700 px-4 py-3.5 flex items-center justify-between z-10 backdrop-blur-sm">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-pink-400 to-rose-400 dark:from-pink-500 dark:to-rose-500 flex items-center justify-center shadow-sm shadow-pink-200/50 dark:shadow-pink-900/30">
-                      <SlidersHorizontal className="w-4 h-4 text-white" />
-                    </div>
-                    <h2 className="text-base font-bold text-gray-800 dark:text-white font-poppins">
+                <div className="sticky top-0 bg-white/95 dark:bg-gray-800/95 border-b border-gray-200/70 dark:border-gray-700 px-4 py-3 flex items-center justify-between z-10 backdrop-blur">
+                  <div className="flex items-center gap-2">
+                    <SlidersHorizontal className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                    <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 font-poppins">
                       Filters
                     </h2>
                   </div>
                   <button
                     onClick={() => setShowBottomSheet(false)}
-                    className="w-9 h-9 rounded-xl bg-white/80 dark:bg-gray-700/80 backdrop-blur-sm flex items-center justify-center hover:bg-white dark:hover:bg-gray-600 transition-colors active:scale-95 border border-pink-100 dark:border-gray-600"
+                    className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors active:scale-95"
                   >
-                    <X className="w-4.5 h-4.5 text-gray-600 dark:text-gray-300" />
+                    <X className="w-4 h-4 text-gray-600 dark:text-gray-300" />
                   </button>
                 </div>
                 
-                <div className="px-4 py-4 space-y-4 pb-6 bg-white dark:bg-gray-800">
+                <div className="px-4 py-3 space-y-4 pb-4 bg-white dark:bg-gray-800">
                   {/* Sort Options - Soft Design */}
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-800 dark:text-white mb-3 font-poppins">
+                  <div className="pt-1">
+                    <h3 className="text-[11px] font-semibold text-gray-700 dark:text-gray-300 mb-2 font-poppins uppercase tracking-wide">
                       Sort By
                     </h3>
-                    <div className="space-y-2">
+                    <div className="divide-y divide-gray-200 dark:divide-gray-700 rounded-xl bg-gray-50/70 dark:bg-gray-700/40">
                       {[
                         { value: 'popularity', label: 'Popularity' },
                         { value: 'newest', label: 'Latest First' },
@@ -1245,22 +1321,22 @@ const ListingPage = () => {
                             handleSortChange(option.value);
                             setShowBottomSheet(false);
                           }}
-                          className={`w-full text-left px-4 py-3 rounded-xl transition-all duration-200 ${
+                          className={`w-full text-left px-3.5 py-2 text-sm transition-colors ${
                             sortBy === option.value
-                              ? 'bg-gradient-to-r from-pink-100 to-rose-100 dark:from-pink-900/40 dark:to-rose-900/40 text-pink-700 dark:text-pink-300 border-2 border-pink-300 dark:border-pink-600 shadow-sm'
-                              : 'bg-gray-50/80 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 border-2 border-gray-200 dark:border-gray-600 hover:bg-pink-50/50 dark:hover:bg-pink-900/20 hover:border-pink-200 dark:hover:border-pink-800'
+                              ? 'bg-pink-50 dark:bg-pink-900/20 text-gray-900 dark:text-gray-100 font-semibold'
+                              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100/70 dark:hover:bg-gray-600/40'
                           }`}
                         >
-                          <span className="font-inter text-sm font-semibold">{option.label}</span>
+                          <span className="font-inter">{option.label}</span>
                         </button>
                       ))}
                     </div>
                   </div>
 
                   {/* Price Range - Preset Buttons with Soft Design */}
-                  <div className="bg-gradient-to-br from-pink-50/50 via-rose-50/30 to-pink-50/50 dark:from-gray-900/30 dark:via-gray-800/20 dark:to-gray-900/30 rounded-2xl p-4 border border-pink-100/50 dark:border-gray-700/50">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-bold text-gray-800 dark:text-white font-poppins">
+                  <div className="pt-1">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-[11px] font-semibold text-gray-700 dark:text-gray-300 font-poppins uppercase tracking-wide">
                         Price Range
                       </h3>
                       {(priceRange[0] > 0 || priceRange[1] < maxPrice) && (
@@ -1274,7 +1350,7 @@ const ListingPage = () => {
                     </div>
                     
                     {/* Preset Price Range Buttons */}
-                    <div className="grid grid-cols-2 gap-2.5">
+                    <div className="flex flex-wrap gap-2">
                       {(() => {
                         // Calculate price ranges based on maxPrice
                         const ranges = [];
@@ -1315,10 +1391,10 @@ const ListingPage = () => {
                             <button
                               key={index}
                               onClick={() => setPriceRange([range.min, range.max])}
-                              className={`px-3 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                              className={`px-3 py-1.5 rounded-full text-[11px] font-medium transition-colors ${
                                 isActive
-                                  ? 'bg-gradient-to-br from-pink-400 to-rose-400 dark:from-pink-500 dark:to-rose-500 text-white scale-[1.02] border-2 border-pink-300 dark:border-pink-600'
-                                  : 'bg-white/90 dark:bg-gray-700/80 backdrop-blur-sm text-gray-700 dark:text-gray-300 hover:bg-pink-50/70 dark:hover:bg-pink-900/20 border-2 border-pink-100 dark:border-gray-600 hover:border-pink-200 dark:hover:border-pink-800'
+                                  ? 'bg-pink-500 text-white font-semibold'
+                                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                               }`}
                             >
                               {range.label}
@@ -1330,9 +1406,9 @@ const ListingPage = () => {
                     
                     {/* Current Selection Display */}
                     {(priceRange[0] > 0 || priceRange[1] < maxPrice) && (
-                      <div className="mt-3.5 pt-3 border-t border-pink-200/50 dark:border-gray-700">
-                        <div className="px-3.5 py-2.5 bg-gradient-to-r from-pink-100/80 to-rose-100/80 dark:from-pink-900/30 dark:to-rose-900/30 rounded-xl border border-pink-200 dark:border-pink-800/50">
-                          <span className="text-xs font-bold text-pink-700 dark:text-pink-300 font-poppins">
+                      <div className="mt-3 pt-3 border-t border-gray-200/70 dark:border-gray-700">
+                        <div className="px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                          <span className="text-xs font-semibold text-gray-700 dark:text-gray-200 font-poppins">
                             Selected: ₹{priceRange[0].toLocaleString()} - ₹{priceRange[1].toLocaleString()}
                           </span>
                         </div>
@@ -1342,8 +1418,8 @@ const ListingPage = () => {
 
                   {/* Rating Filter - Soft Design */}
                   <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-bold text-gray-800 dark:text-white font-poppins">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-xs font-medium text-gray-700 dark:text-gray-300 font-poppins uppercase tracking-wide">
                         Filter by Rating
                       </h3>
                       {minRating > 0 && (
@@ -1355,26 +1431,23 @@ const ListingPage = () => {
                         </button>
                       )}
                     </div>
-                    <div className="grid grid-cols-4 gap-2.5">
+                    <div className="flex flex-wrap gap-2">
                       {[0, 3, 4, 4.5].map((rating) => (
                         <button
                           key={rating}
                           onClick={() => setMinRating(rating)}
-                          className={`relative px-3 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                          className={`relative px-3 py-1.5 rounded-full text-[11px] font-medium transition-colors ${
                             minRating === rating
-                              ? 'bg-gradient-to-br from-pink-400 to-rose-400 dark:from-pink-500 dark:to-rose-500 text-white scale-[1.02] border-2 border-pink-300 dark:border-pink-600'
-                              : 'bg-white/90 dark:bg-gray-700/80 backdrop-blur-sm text-gray-700 dark:text-gray-300 hover:bg-pink-50/70 dark:hover:bg-pink-900/20 border-2 border-pink-100 dark:border-gray-600 hover:border-pink-200 dark:hover:border-pink-800'
+                              ? 'bg-pink-500 text-white font-semibold'
+                              : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                           }`}
                         >
                           {rating === 0 ? (
                             <span className="font-semibold">All</span>
                           ) : (
-                            <div className="flex flex-col items-center justify-center gap-1">
-                              <div className="flex items-center gap-0.5">
-                                <span className="font-bold">{rating}</span>
-                                <Star className={`w-3.5 h-3.5 ${minRating === rating ? 'fill-white' : 'fill-yellow-400 text-yellow-400'}`} />
-                              </div>
-                              <span className="text-[9px] font-medium opacity-75">+ Rating</span>
+                            <div className="flex items-center gap-1">
+                              <span className="font-semibold">{rating}+</span>
+                              <Star className={`w-3 h-3 ${minRating === rating ? 'fill-white text-white' : 'fill-yellow-400 text-yellow-400'}`} />
                             </div>
                           )}
                         </button>
@@ -1383,10 +1456,10 @@ const ListingPage = () => {
                   </div>
 
                   {/* Apply Button - Soft Gradient */}
-                  <div className="pt-2">
+                  <div className="sticky bottom-0 -mx-4 px-4 pt-3 pb-3 bg-white/95 dark:bg-gray-800/95 border-t border-gray-200/70 dark:border-gray-700 backdrop-blur">
                     <button
                       onClick={() => setShowBottomSheet(false)}
-                      className="w-full py-3.5 bg-gradient-to-r from-pink-400 via-rose-400 to-pink-500 hover:from-pink-500 hover:via-rose-500 hover:to-pink-600 text-white rounded-xl font-inter text-sm font-bold transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-sm shadow-pink-200/50 dark:shadow-pink-900/30"
+                      className="w-full py-3 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white rounded-xl font-inter text-sm font-semibold transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-md"
                     >
                       <Sparkles className="w-4 h-4" />
                       Apply Filters

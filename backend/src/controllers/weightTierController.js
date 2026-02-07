@@ -1,8 +1,39 @@
 const { query } = require('../config/db');
 
+let hasEnsuredWeightTierTable = false;
+const ensureWeightTierMappingsTable = async () => {
+  if (hasEnsuredWeightTierTable) {
+    return;
+  }
+
+  const tableResult = await query(
+    `
+    SELECT TABLE_NAME
+    FROM INFORMATION_SCHEMA.TABLES
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'weight_tier_mappings'
+    `
+  );
+
+  if (tableResult.rows.length === 0) {
+    await query(`
+      CREATE TABLE IF NOT EXISTS weight_tier_mappings (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        weight VARCHAR(50) NOT NULL UNIQUE,
+        available_tiers TEXT NOT NULL,
+        is_active BOOLEAN DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+  }
+
+  hasEnsuredWeightTierTable = true;
+};
+
 // Get all weight-tier mappings
 const getWeightTierMappings = async (req, res) => {
   try {
+    await ensureWeightTierMappingsTable();
     const result = await query(`
       SELECT 
         id,
@@ -22,14 +53,27 @@ const getWeightTierMappings = async (req, res) => {
         weight ASC
     `);
 
-    const mappings = result.rows.map(row => ({
-      id: row.id,
-      weight: row.weight,
-      available_tiers: JSON.parse(row.available_tiers),
-      is_active: row.is_active,
-      created_at: row.created_at,
-      updated_at: row.updated_at
-    }));
+    const mappings = result.rows.map(row => {
+      let availableTiers = [];
+      try {
+        availableTiers = row.available_tiers ? JSON.parse(row.available_tiers) : [];
+      } catch (parseError) {
+        console.error('Invalid available_tiers JSON:', {
+          id: row.id,
+          weight: row.weight,
+          value: row.available_tiers
+        });
+      }
+
+      return {
+        id: row.id,
+        weight: row.weight,
+        available_tiers: Array.isArray(availableTiers) ? availableTiers : [],
+        is_active: row.is_active,
+        created_at: row.created_at,
+        updated_at: row.updated_at
+      };
+    });
 
     res.json({
       success: true,
@@ -40,6 +84,20 @@ const getWeightTierMappings = async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching weight-tier mappings:', error);
+    const schemaErrorCodes = new Set(['ER_BAD_FIELD_ERROR', 'ER_NO_SUCH_TABLE', 'ER_PARSE_ERROR']);
+    if (schemaErrorCodes.has(error.code)) {
+      console.warn('Weight-tier mappings query failed due to schema mismatch; returning empty list.', {
+        code: error.code,
+        message: error.message
+      });
+      return res.json({
+        success: true,
+        data: {
+          mappings: [],
+          total: 0
+        }
+      });
+    }
     res.status(500).json({
       success: false,
       message: 'Failed to fetch weight-tier mappings',
@@ -56,6 +114,7 @@ const normalizeWeight = (weight) => {
 // Get single weight-tier mapping by weight
 const getWeightTierMappingByWeight = async (req, res) => {
   try {
+    await ensureWeightTierMappingsTable();
     const { weight } = req.params;
     const normalizedWeight = normalizeWeight(weight);
     
@@ -88,7 +147,16 @@ const getWeightTierMappingByWeight = async (req, res) => {
     }
 
     const mapping = result.rows[0];
-    mapping.available_tiers = JSON.parse(mapping.available_tiers);
+    try {
+      mapping.available_tiers = mapping.available_tiers ? JSON.parse(mapping.available_tiers) : [];
+    } catch (parseError) {
+      console.error('Invalid available_tiers JSON:', {
+        id: mapping.id,
+        weight: mapping.weight,
+        value: mapping.available_tiers
+      });
+      mapping.available_tiers = [];
+    }
 
     res.json({
       success: true,
@@ -96,6 +164,17 @@ const getWeightTierMappingByWeight = async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching weight-tier mapping:', error);
+    const schemaErrorCodes = new Set(['ER_BAD_FIELD_ERROR', 'ER_NO_SUCH_TABLE', 'ER_PARSE_ERROR']);
+    if (schemaErrorCodes.has(error.code)) {
+      console.warn('Weight-tier mapping query failed due to schema mismatch; returning not found.', {
+        code: error.code,
+        message: error.message
+      });
+      return res.status(404).json({
+        success: false,
+        message: 'Weight-tier mapping not found'
+      });
+    }
     res.status(500).json({
       success: false,
       message: 'Failed to fetch weight-tier mapping',
@@ -107,6 +186,7 @@ const getWeightTierMappingByWeight = async (req, res) => {
 // Update weight-tier mapping
 const updateWeightTierMapping = async (req, res) => {
   try {
+    await ensureWeightTierMappingsTable();
     const { id } = req.params;
     const { available_tiers } = req.body;
 
@@ -183,6 +263,7 @@ const updateWeightTierMapping = async (req, res) => {
 // Create new weight-tier mapping
 const createWeightTierMapping = async (req, res) => {
   try {
+    await ensureWeightTierMappingsTable();
     const { weight, available_tiers } = req.body;
 
     // Validate input
@@ -268,6 +349,7 @@ const createWeightTierMapping = async (req, res) => {
 // Delete weight-tier mapping (soft delete)
 const deleteWeightTierMapping = async (req, res) => {
   try {
+    await ensureWeightTierMappingsTable();
     const { id } = req.params;
 
     const result = await query(

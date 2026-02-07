@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, ShoppingBag, Home, Package, Gift, ChevronDown, ChevronUp, MapPin, Calendar, CreditCard, Download, FileText, Loader2, Check } from 'lucide-react';
@@ -14,7 +14,7 @@ import { useWallet } from '../../contexts/WalletContext';
 import { useToast } from '../../contexts/ToastContext';
 import { formatPrice } from '../../utils/priceFormatter';
 
-export default function OrderSuccessPage() {
+function OrderSuccessPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { fetchBalance } = useWallet();
@@ -1083,6 +1083,21 @@ export default function OrderSuccessPage() {
 
       <Footer />
     </div>
+  );
+}
+
+export default function OrderSuccessPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-300">Loading...</p>
+        </div>
+      </div>
+    }>
+      <OrderSuccessPageContent />
+    </Suspense>
   );
 }
 

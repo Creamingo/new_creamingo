@@ -6,7 +6,7 @@ const createNotification = async (customerId, type, title, message, data = {}) =
     const result = await query(
       `INSERT INTO notifications 
        (customer_id, type, title, message, data, is_read, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 0, datetime('now'), datetime('now'))`,
+       VALUES (?, ?, ?, ?, ?, 0, NOW(), NOW())`,
       [customerId, type, title, message, JSON.stringify(data)]
     );
 
@@ -59,7 +59,7 @@ const getUserNotifications = async (customerId, limit = 50, unreadOnly = false) 
 const markAsRead = async (notificationId, customerId) => {
   try {
     await query(
-      'UPDATE notifications SET is_read = 1, updated_at = datetime("now") WHERE id = ? AND customer_id = ?',
+      'UPDATE notifications SET is_read = 1, updated_at = NOW() WHERE id = ? AND customer_id = ?',
       [notificationId, customerId]
     );
 
@@ -74,7 +74,7 @@ const markAsRead = async (notificationId, customerId) => {
 const markAllAsRead = async (customerId) => {
   try {
     await query(
-      'UPDATE notifications SET is_read = 1, updated_at = datetime("now") WHERE customer_id = ? AND is_read = 0',
+      'UPDATE notifications SET is_read = 1, updated_at = NOW() WHERE customer_id = ? AND is_read = 0',
       [customerId]
     );
 

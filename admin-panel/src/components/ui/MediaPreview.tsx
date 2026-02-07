@@ -1,4 +1,5 @@
 import React from 'react';
+import { resolveImageUrl } from '../../utils/imageUrl';
 
 interface MediaPreviewProps {
   url: string;
@@ -23,13 +24,14 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
     return videoExtensions.includes(extension) ? 'video' : 'image';
   };
 
-  const actualType = type || getFileType(url);
+  const resolvedUrl = resolveImageUrl(url);
+  const actualType = type || getFileType(resolvedUrl);
 
   return (
     <div className={`relative group ${className}`}>
       {actualType === 'image' ? (
         <img
-          src={url}
+          src={resolvedUrl}
           alt={alt}
           className="w-full h-full object-cover rounded-lg"
           onError={(e) => {
@@ -40,7 +42,7 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({
         />
       ) : (
         <video
-          src={url}
+          src={resolvedUrl}
           className="w-full h-full object-cover rounded-lg"
           controls
           preload="metadata"

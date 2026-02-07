@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "build": "cross-env NODE_ENV=production next build",
+    "start": "cross-env NODE_ENV=production next start",
     "lint": "next lint"
   },
   "dependencies": {
@@ -21,6 +21,8 @@
   },
   "devDependencies": {
     "autoprefixer": "^10.0.1",
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.6.1",
     "eslint": "^8",
     "eslint-config-next": "14.2.35",
     "postcss": "^8",

@@ -66,8 +66,14 @@
   background: #111827 !important;
 }
 
+/* Allow explicit glass backgrounds while keeping slider neutral */
 .banner-slider-section * {
   background: transparent !important;
+}
+
+.banner-slider-section .glassmorphism-overlay > div,
+.banner-slider-section .luxury-badge {
+  background: rgba(255, 255, 255, 0.2) !important;
 }
 
 /* Exception for slider indicator - ensure it's visible */
@@ -129,7 +135,7 @@
 /* Enhanced Fade Transition Effects */
 .slider-container .slick-slide {
   opacity: 0;
-  transition: opacity 0.8s ease-in-out;
+  transition: opacity 0.9s ease-in-out;
 }
 
 .slider-container .slick-slide.slick-active {
@@ -199,6 +205,47 @@
 .banner-slide:hover {
   transform: translateY(-1px);
 }
+
+/* Minimal luxury dots */
+.banner-slider-section .slick-dots {
+  bottom: -22px;
+  left: 0;
+  right: 0;
+  display: flex !important;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+}
+
+.banner-slider-section .slick-dots li {
+  margin: 0;
+}
+
+.banner-slider-section .slick-dots li button:before {
+  font-size: 0;
+  width: 6px;
+  height: 6px;
+  background: #f1b5c2;
+  opacity: 1;
+  border-radius: 999px;
+  content: "";
+  display: block;
+}
+
+.banner-slider-section .slick-dots li.slick-active button:before {
+  width: 18px;
+  background: #ff3f6c;
+}
+
+.dark .banner-slider-section .slick-dots li button:before {
+  background: #f472b6;
+}
+
+.dark .banner-slider-section .slick-dots li.slick-active button:before {
+  background: #ff3f6c;
+}
+
 
 .banner-slide:hover .banner-image {
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.18);

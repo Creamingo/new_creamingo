@@ -72,8 +72,49 @@ type AuthAction =
 const initialState: AuthState = {
   user: null,
   isAuthenticated: false,
-  isLoading: false,
+  isLoading: true,
   error: null
+};
+
+const hydrateUserFromStorage = (): User | null => {
+  try {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    const storedUser = authService.getStoredUser();
+    if (!storedUser) {
+      return null;
+    }
+    return {
+      id: storedUser.id.toString(),
+      name: storedUser.name,
+      email: storedUser.email,
+      role: storedUser.role,
+      avatar: storedUser.avatar,
+      is_active: storedUser.is_active,
+      lastLogin: storedUser.last_login || new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Error hydrating user from storage:', error);
+    return null;
+  }
+};
+
+const getInitialState = (): AuthState => {
+  if (typeof window === 'undefined') {
+    return initialState;
+  }
+  const token = localStorage.getItem('auth_token');
+  const hydratedUser = hydrateUserFromStorage();
+  if (token && hydratedUser) {
+    return {
+      user: hydratedUser,
+      isAuthenticated: true,
+      isLoading: false,
+      error: null
+    };
+  }
+  return initialState;
 };
 
 // Auth reducer
@@ -133,12 +174,15 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [state, dispatch] = useReducer(authReducer, initialState);
+  const [state, dispatch] = useReducer(authReducer, initialState, getInitialState);
 
   // Check for existing session on mount
   useEffect(() => {
     const checkAuth = async () => {
-      dispatch({ type: 'SET_LOADING', payload: true });
+      const hasHydratedSession = !!(localStorage.getItem('auth_token') && authService.getStoredUser());
+      if (!hasHydratedSession) {
+        dispatch({ type: 'SET_LOADING', payload: true });
+      }
       
       try {
         // Check if user is authenticated

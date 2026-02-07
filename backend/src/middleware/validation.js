@@ -17,6 +17,22 @@ const validate = (schema) => {
   };
 };
 
+const relativeImagePattern = /^\/?(gallery|uploads)\/[^?#]+$/i;
+const imageUrlSchema = Joi.alternatives().try(
+  Joi.string().uri(),
+  Joi.string().pattern(relativeImagePattern)
+);
+const imageUrl = ({ required = false, allowEmpty = false } = {}) => {
+  let schema = imageUrlSchema;
+  if (allowEmpty) {
+    schema = schema.allow('', null);
+  }
+  if (required) {
+    schema = schema.required();
+  }
+  return schema;
+};
+
 // Validation schemas
 const schemas = {
   // Auth schemas
@@ -49,6 +65,10 @@ const schemas = {
     rememberMe: Joi.boolean().optional()
   }),
 
+  customerCheckEmail: Joi.object({
+    email: Joi.string().email().required()
+  }),
+
   updateCustomerProfile: Joi.object({
     name: Joi.string().min(2).max(100),
     email: Joi.string().email(),
@@ -76,7 +96,7 @@ const schemas = {
     subtitle: Joi.string().min(1).max(200),
     button_text: Joi.string().min(1).max(50),
     button_url: Joi.string().uri(),
-    image_url: Joi.string().uri().required(),
+    image_url: imageUrl({ required: true }),
     is_active: Joi.boolean().default(true),
     order_index: Joi.number().integer().min(0).default(0)
   }),
@@ -86,7 +106,7 @@ const schemas = {
     subtitle: Joi.string().min(1).max(200),
     button_text: Joi.string().min(1).max(50),
     button_url: Joi.string().uri(),
-    image_url: Joi.string().uri(),
+    image_url: imageUrl(),
     is_active: Joi.boolean(),
     order_index: Joi.number().integer().min(0)
   }),
@@ -95,9 +115,9 @@ const schemas = {
   createCategory: Joi.object({
     name: Joi.string().min(1).max(100).required(),
     description: Joi.string().max(500),
-    image_url: Joi.string().uri().required(),
+    image_url: imageUrl({ required: true }),
     icon: Joi.string().allow('', null).optional(),
-    icon_image_url: Joi.string().uri().allow('', null).optional(),
+    icon_image_url: imageUrl({ allowEmpty: true }).optional(),
     display_name: Joi.string().max(100).allow('', null).optional(),
     is_active: Joi.boolean().default(true),
     order_index: Joi.number().integer().min(0).default(0)
@@ -106,9 +126,9 @@ const schemas = {
   updateCategory: Joi.object({
     name: Joi.string().min(1).max(100),
     description: Joi.string().max(500),
-    image_url: Joi.string().uri(),
+    image_url: imageUrl(),
     icon: Joi.string().allow('', null).optional(),
-    icon_image_url: Joi.string().uri().allow('', null).optional(),
+    icon_image_url: imageUrl({ allowEmpty: true }).optional(),
     display_name: Joi.string().max(100).allow('', null).optional(),
     is_active: Joi.boolean(),
     order_index: Joi.number().integer().min(0)
@@ -119,7 +139,7 @@ const schemas = {
     name: Joi.string().min(1).max(100).required(),
     description: Joi.string().max(500),
     category_id: Joi.number().integer().positive().required(),
-    image_url: Joi.string().uri().required(),
+    image_url: imageUrl({ required: true }),
     is_active: Joi.boolean().default(true),
     order_index: Joi.number().integer().min(0).default(0)
   }),
@@ -128,7 +148,7 @@ const schemas = {
     name: Joi.string().min(1).max(100),
     description: Joi.string().max(500),
     category_id: Joi.number().integer().positive(),
-    image_url: Joi.string().uri(),
+    image_url: imageUrl(),
     is_active: Joi.boolean(),
     order_index: Joi.number().integer().min(0)
   }),
@@ -148,7 +168,7 @@ const schemas = {
     base_price: Joi.number().positive().required(),
     base_weight: Joi.string().min(1).max(50).required(),
     discount_percent: Joi.number().min(0).max(100).default(0),
-    image_url: Joi.string().uri().required(),
+    image_url: imageUrl({ required: true }),
     is_active: Joi.boolean().default(true),
     is_featured: Joi.boolean().default(false),
     is_top_product: Joi.boolean().default(false),
@@ -176,9 +196,7 @@ const schemas = {
         discount_percent: Joi.number().min(0).max(100).default(0)
       })
     ).optional(),
-    gallery_images: Joi.array().items(
-      Joi.string().uri()
-    ).optional()
+    gallery_images: Joi.array().items(imageUrl()).optional()
   }).custom((value, helpers) => {
     // Custom validation: ensure at least one category is provided
     const hasLegacyCategory = value.category_id && value.category_id > 0;
@@ -205,7 +223,7 @@ const schemas = {
     base_price: Joi.number().positive(),
     base_weight: Joi.string().min(1).max(50),
     discount_percent: Joi.number().min(0).max(100),
-    image_url: Joi.string().uri(),
+    image_url: imageUrl(),
     is_active: Joi.boolean(),
     is_featured: Joi.boolean(),
     is_top_product: Joi.boolean(),
@@ -233,9 +251,7 @@ const schemas = {
         discount_percent: Joi.number().min(0).max(100).default(0)
       })
     ).optional(),
-    gallery_images: Joi.array().items(
-      Joi.string().uri()
-    ).optional()
+    gallery_images: Joi.array().items(imageUrl()).optional()
   }),
 
   // Product variant schemas
@@ -261,7 +277,7 @@ const schemas = {
   createCollection: Joi.object({
     name: Joi.string().min(1).max(100).required(),
     description: Joi.string().max(500),
-    image_url: Joi.string().uri().required(),
+    image_url: imageUrl({ required: true }),
     is_active: Joi.boolean().default(true),
     order_index: Joi.number().integer().min(0).default(0)
   }),
@@ -269,7 +285,7 @@ const schemas = {
   updateCollection: Joi.object({
     name: Joi.string().min(1).max(100),
     description: Joi.string().max(500),
-    image_url: Joi.string().uri(),
+    image_url: imageUrl(),
     is_active: Joi.boolean(),
     order_index: Joi.number().integer().min(0)
   }),
@@ -498,7 +514,7 @@ const schemas = {
     subtitle: Joi.string().max(200).allow(''),
     button_text: Joi.string().max(50).allow(''),
     button_url: Joi.string().allow(''),
-    image_url: Joi.string().uri().required(),
+    image_url: imageUrl({ required: true }),
     is_active: Joi.boolean(),
     order_index: Joi.number().integer().min(0)
   }),
@@ -508,7 +524,7 @@ const schemas = {
     subtitle: Joi.string().max(200).allow(''),
     button_text: Joi.string().max(50).allow(''),
     button_url: Joi.string().allow(''),
-    image_url: Joi.string().uri(),
+    image_url: imageUrl(),
     is_active: Joi.boolean(),
     order_index: Joi.number().integer().min(0)
   })

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { Button } from './Button';
 
 interface FileUploadProps {
@@ -25,6 +25,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   disabled = false
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -86,15 +87,15 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onClick={() => !disabled && document.getElementById('file-input')?.click()}
+        onClick={() => !disabled && inputRef.current?.click()}
       >
         <input
-          id="file-input"
           type="file"
           accept={accept}
           onChange={handleFileInput}
           className="hidden"
           disabled={disabled}
+          ref={inputRef}
         />
 
         <div className="space-y-3">

@@ -51,7 +51,7 @@ const startServer = async () => {
 🌍 Environment: ${process.env.NODE_ENV || 'development'}
 🔗 Health check: http://localhost:${PORT}/health
 📚 API Base URL: http://localhost:${PORT}/api
-🗄️ Database: SQLite (./database/creamingo.db)
+🗄️ Database: MySQL (${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 3306}/${process.env.DB_NAME || 'creamingo_db'})
       `);
     });
     

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -35,9 +35,9 @@ import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import MobileFooter from '../../components/MobileFooter';
 import DeliverySlotSelector from '../../components/DeliverySlotSelector';
-import ProtectedRoute from '../../components/ProtectedRoute';
 import orderApi from '../../api/orderApi';
 import settingsApi from '../../api/settingsApi';
+import customerAuthApi from '../../api/customerAuthApi';
 import { formatPrice } from '../../utils/priceFormatter';
 
 // Helper functions for formatting dates and times (same as cart page)
@@ -127,7 +127,7 @@ function CheckoutPageContent() {
     currentPinCode,
     getFormattedDeliveryCharge
   } = usePinCode();
-  const { customer, isAuthenticated } = useCustomerAuth();
+  const { customer, isAuthenticated, login, register } = useCustomerAuth();
   const { balance: walletBalance = 0, fetchBalance } = useWallet();
 
   const [loading, setLoading] = useState(false);
@@ -139,6 +139,20 @@ function CheckoutPageContent() {
   const [locationName, setLocationName] = useState(null);
   const [locationAccuracy, setLocationAccuracy] = useState(null);
   const [locationWarning, setLocationWarning] = useState(null);
+  const authSectionRef = useRef(null);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authStep, setAuthStep] = useState('email');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const [emailCheckResult, setEmailCheckResult] = useState(null);
+  const [signupData, setSignupData] = useState({
+    name: '',
+    phone: '',
+    password: '',
+    confirmPassword: '',
+    referralCode: ''
+  });
 
   // Form states - Initialize with customer data if authenticated
   const [formData, setFormData] = useState({
@@ -186,6 +200,126 @@ function CheckoutPageContent() {
       }
     }
   }, [customer, isAuthenticated, currentPinCode]);
+
+  useEffect(() => {
+    if (!authEmail && formData.email) {
+      setAuthEmail(formData.email);
+    }
+  }, [formData.email, authEmail]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      setAuthStep('done');
+      setAuthError('');
+      setAuthPassword('');
+    } else if (authStep === 'done') {
+      setAuthStep('email');
+    }
+  }, [isAuthenticated, authStep]);
+
+  useEffect(() => {
+    if (!signupData.name && formData.name) {
+      setSignupData(prev => ({ ...prev, name: formData.name }));
+    }
+    if (!signupData.phone && formData.phone) {
+      setSignupData(prev => ({ ...prev, phone: formData.phone }));
+    }
+  }, [formData.name, formData.phone, signupData.name, signupData.phone]);
+
+  const normalizeEmail = (value) => value.trim().toLowerCase();
+
+  const scrollToAuthSection = () => {
+    if (authSectionRef.current) {
+      authSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const handleCheckEmail = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    const emailToCheck = normalizeEmail(authEmail);
+    if (!emailToCheck || !emailToCheck.includes('@')) {
+      setAuthError('Please enter a valid email address');
+      return;
+    }
+
+    setAuthLoading(true);
+    try {
+      const result = await customerAuthApi.checkEmail({ email: emailToCheck });
+      setEmailCheckResult(result);
+      setAuthStep(result.exists ? 'login' : 'signup');
+      setFormData(prev => ({ ...prev, email: emailToCheck }));
+      if (!result.exists) {
+        setSignupData(prev => ({
+          ...prev,
+          name: prev.name || formData.name || '',
+          phone: prev.phone || formData.phone || ''
+        }));
+      }
+    } catch (err) {
+      setAuthError(err.message || 'Unable to check email. Please try again.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLoginSubmit = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    const emailToLogin = normalizeEmail(authEmail);
+    if (!authPassword) {
+      setAuthError('Please enter your password');
+      return;
+    }
+
+    setAuthLoading(true);
+    try {
+      await login({ email: emailToLogin, password: authPassword });
+      setAuthPassword('');
+    } catch (err) {
+      setAuthError(err.message || 'Login failed. Please try again.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleSignupSubmit = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    const emailToRegister = normalizeEmail(authEmail);
+    if (!signupData.name.trim()) {
+      setAuthError('Please enter your name');
+      return;
+    }
+    if (!signupData.password || signupData.password.length < 6) {
+      setAuthError('Password must be at least 6 characters');
+      return;
+    }
+    if (signupData.password !== signupData.confirmPassword) {
+      setAuthError('Passwords do not match');
+      return;
+    }
+
+    setAuthLoading(true);
+    try {
+      await register({
+        name: signupData.name.trim(),
+        email: emailToRegister,
+        phone: signupData.phone?.trim() || undefined,
+        password: signupData.password,
+        referralCode: signupData.referralCode?.trim() || undefined
+      });
+      setSignupData(prev => ({
+        ...prev,
+        password: '',
+        confirmPassword: ''
+      }));
+    } catch (err) {
+      setAuthError(err.message || 'Signup failed. Please try again.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
 
   // Auto-reverse geocode when location exists but locationName is missing
   useEffect(() => {
@@ -1600,6 +1734,12 @@ function CheckoutPageContent() {
 
   const handlePlaceOrder = async () => {
     setError('');
+
+    if (!isAuthenticated) {
+      setError('Please sign in or create an account to continue checkout.');
+      scrollToAuthSection();
+      return;
+    }
     
     // Check if slot is selected first
     if (!selectedSlot && !cartDeliverySlot) {
@@ -2202,7 +2342,7 @@ function CheckoutPageContent() {
                       </button>
                       <button
                         onClick={handlePlaceOrder}
-                        disabled={loading || !selectedSlot}
+                        disabled={loading || !selectedSlot || !isAuthenticated}
                         className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-yellow-600 dark:bg-yellow-700 text-white rounded-lg hover:bg-yellow-700 dark:hover:bg-yellow-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Complete Order Now
@@ -2219,6 +2359,200 @@ function CheckoutPageContent() {
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-4 sm:gap-6 lg:gap-8">
           {/* LEFT SECTION: Form */}
           <div className="space-y-4 sm:space-y-6">
+            {!isAuthenticated && (
+              <div
+                id="checkoutAuth"
+                ref={authSectionRef}
+                className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-pink-500 dark:border-pink-400 border border-gray-200 dark:border-gray-700 overflow-hidden scroll-mt-24"
+              >
+                <div className="p-3 sm:p-4 lg:p-6 border-b border-gray-100 dark:border-gray-700">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 rounded-lg bg-pink-100 dark:bg-pink-900/30">
+                      <Lock className="w-4 h-4 sm:w-5 sm:h-5 text-pink-600 dark:text-pink-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">
+                        Sign in to place your order
+                      </h2>
+                      <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1">
+                        Use your email to continue. We will prompt you to sign in or create an account.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6">
+                  {authError && (
+                    <div className="mb-3 sm:mb-4 p-2.5 sm:p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-xs sm:text-sm text-red-700 dark:text-red-300 flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                      <span>{authError}</span>
+                    </div>
+                  )}
+
+                  {authStep === 'email' && (
+                    <form onSubmit={handleCheckEmail} className="space-y-3 sm:space-y-4">
+                      <div>
+                        <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                          Email *
+                        </label>
+                        <input
+                          type="email"
+                          value={authEmail}
+                          onChange={(e) => setAuthEmail(e.target.value)}
+                          required
+                          className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                          placeholder="your@email.com"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={authLoading}
+                        className="w-full px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-semibold bg-pink-600 dark:bg-pink-700 text-white rounded-lg hover:bg-pink-700 dark:hover:bg-pink-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {authLoading ? 'Checking...' : 'Continue'}
+                      </button>
+                    </form>
+                  )}
+
+                  {authStep === 'login' && (
+                    <form onSubmit={handleLoginSubmit} className="space-y-3 sm:space-y-4">
+                      <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                        Account found for <span className="font-semibold text-gray-900 dark:text-gray-100">{authEmail}</span>
+                        {emailCheckResult?.customer?.name ? ` • Welcome back, ${emailCheckResult.customer.name}` : ''}
+                      </div>
+                      <div>
+                        <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                          Password *
+                        </label>
+                        <input
+                          type="password"
+                          value={authPassword}
+                          onChange={(e) => setAuthPassword(e.target.value)}
+                          required
+                          className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                          placeholder="Enter your password"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={authLoading}
+                        className="w-full px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-semibold bg-pink-600 dark:bg-pink-700 text-white rounded-lg hover:bg-pink-700 dark:hover:bg-pink-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {authLoading ? 'Signing in...' : 'Sign in'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuthStep('email');
+                          setAuthError('');
+                        }}
+                        className="w-full text-xs sm:text-sm text-gray-600 dark:text-gray-400 hover:text-pink-600 dark:hover:text-pink-400 transition-colors"
+                      >
+                        Use a different email
+                      </button>
+                    </form>
+                  )}
+
+                  {authStep === 'signup' && (
+                    <form onSubmit={handleSignupSubmit} className="space-y-3 sm:space-y-4">
+                      <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                        New account for <span className="font-semibold text-gray-900 dark:text-gray-100">{authEmail}</span>
+                      </div>
+                      <div>
+                        <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                          Full Name *
+                        </label>
+                        <input
+                          type="text"
+                          value={signupData.name}
+                          onChange={(e) => setSignupData(prev => ({ ...prev, name: e.target.value }))}
+                          required
+                          className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                          placeholder="Enter your full name"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                          Mobile Number
+                        </label>
+                        <input
+                          type="tel"
+                          value={signupData.phone}
+                          onChange={(e) => setSignupData(prev => ({ ...prev, phone: e.target.value }))}
+                          className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                          placeholder="Enter mobile number"
+                        />
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                        <div>
+                          <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                            Password *
+                          </label>
+                          <input
+                            type="password"
+                            value={signupData.password}
+                            onChange={(e) => setSignupData(prev => ({ ...prev, password: e.target.value }))}
+                            required
+                            className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                            placeholder="Create a password"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                            Confirm Password *
+                          </label>
+                          <input
+                            type="password"
+                            value={signupData.confirmPassword}
+                            onChange={(e) => setSignupData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                            required
+                            className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                            placeholder="Confirm password"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                          Referral Code (optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={signupData.referralCode}
+                          onChange={(e) => setSignupData(prev => ({ ...prev, referralCode: e.target.value }))}
+                          className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                          placeholder="Enter referral code"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={authLoading}
+                        className="w-full px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-semibold bg-pink-600 dark:bg-pink-700 text-white rounded-lg hover:bg-pink-700 dark:hover:bg-pink-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {authLoading ? 'Creating account...' : 'Create account'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuthStep('email');
+                          setAuthError('');
+                        }}
+                        className="w-full text-xs sm:text-sm text-gray-600 dark:text-gray-400 hover:text-pink-600 dark:hover:text-pink-400 transition-colors"
+                      >
+                        Use a different email
+                      </button>
+                    </form>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {isAuthenticated && (
+              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 sm:p-4 text-xs sm:text-sm text-green-700 dark:text-green-300 flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+                Signed in as <span className="font-semibold">{customer?.email || 'customer'}</span>
+              </div>
+            )}
+
             {/* Customer Information - Collapsible on Mobile */}
             <div id="customerInfo" className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-blue-500 dark:border-blue-400 border border-gray-200 dark:border-gray-700 overflow-hidden scroll-mt-24">
               {/* Header - Clickable on Mobile */}
@@ -3064,10 +3398,10 @@ function CheckoutPageContent() {
                   setShowSuccessIndicator(false);
                   handlePlaceOrder();
                 }}
-                disabled={loading}
+                disabled={loading || !isAuthenticated}
                 className={`hidden lg:flex w-full py-3 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all duration-200 font-semibold text-lg shadow-lg dark:shadow-xl dark:shadow-black/30 hover:shadow-xl transform hover:scale-[1.02] items-center justify-center gap-2 ${
-                  loading 
-                    ? 'opacity-50 cursor-not-allowed transform-none' 
+                  loading || !isAuthenticated
+                    ? 'opacity-50 cursor-not-allowed transform-none'
                     : (!selectedSlot && !cartDeliverySlot)
                       ? 'opacity-75 cursor-pointer'
                       : ''
@@ -3158,10 +3492,10 @@ function CheckoutPageContent() {
                 setShowSuccessIndicator(false);
                 handlePlaceOrder();
               }}
-              disabled={loading}
+              disabled={loading || !isAuthenticated}
               className={`flex-1 w-[70%] h-[56px] bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all font-bold text-base shadow-lg dark:shadow-xl dark:shadow-black/30 flex items-center justify-center gap-2 ${
-                loading 
-                  ? 'opacity-50 cursor-not-allowed active:scale-100' 
+                loading || !isAuthenticated
+                  ? 'opacity-50 cursor-not-allowed active:scale-100'
                   : (!selectedSlot && !cartDeliverySlot)
                     ? 'opacity-75 cursor-pointer active:scale-95'
                     : 'active:scale-95'
@@ -3492,10 +3826,6 @@ function CheckoutPageContent() {
 }
 
 export default function CheckoutPage() {
-  return (
-    <ProtectedRoute>
-      <CheckoutPageContent />
-    </ProtectedRoute>
-  );
+  return <CheckoutPageContent />;
 }
 

@@ -35,6 +35,8 @@ import CartDisplay from './CartDisplay'
 import categoryApi from '../api/categoryApi'
 import productApi from '../api/productApi'
 import { formatPrice } from '../utils/priceFormatter'
+import { resolveImageUrl } from '../utils/imageUrl'
+import logger from '../utils/logger'
 
 const Header = () => {
   const router = useRouter()
@@ -48,6 +50,7 @@ const Header = () => {
   const [autocompleteData, setAutocompleteData] = useState({ products: [], flavors: [], categories: [] })
   const [isSearchLoading, setIsSearchLoading] = useState(false)
   const [recentSearches, setRecentSearches] = useState([])
+  const [showAllTrending, setShowAllTrending] = useState(false)
   const [pincode, setPincode] = useState('')
   const [isCartOpen, setIsCartOpen] = useState(false)
   const { getItemCount, duplicateDetected } = useCart()
@@ -185,7 +188,7 @@ const Header = () => {
   const fetchCategories = async () => {
     try {
       setCategoriesLoading(true)
-      console.log('Fetching categories from database...')
+      logger.log('Fetching categories from database...')
       
       // Map category IDs to their corresponding API endpoints
       const categoryEndpoints = {
@@ -229,7 +232,7 @@ const Header = () => {
         borderColor: cat.borderColor || getCategoryBorderColor(cat.id),
         color: cat.color || getCategoryColor(cat.id)
       }))
-      console.log('Fetched categories from database:', categoriesWithColors)
+      logger.log('Fetched categories from database:', categoriesWithColors)
       setCategories(categoriesWithColors)
     } catch (error) {
       console.error('Error fetching categories:', error)
@@ -311,7 +314,7 @@ const Header = () => {
   }
 
   const handleSubcategoryClick = useCallback((categoryName, subcategoryName) => {
-    console.log(`Navigating to ${subcategoryName} in ${categoryName}`)
+    logger.log(`Navigating to ${subcategoryName} in ${categoryName}`)
     
     // Get the category slug from the mapping
     const categorySlug = categorySlugMap[categoryName] || createSlug(categoryName)
@@ -319,7 +322,7 @@ const Header = () => {
     
     // Navigate to the subcategory listing page
     const url = `/category/${categorySlug}/${subcategorySlug}`
-    console.log(`Navigating to: ${url}`)
+    logger.log(`Navigating to: ${url}`)
     
     router.push(url)
     setIsMobileMenuOpen(false)
@@ -404,10 +407,10 @@ const Header = () => {
   }
 
   const handleContinueShopping = async () => {
-    console.log('Continue Shopping clicked (Header)');
-    console.log('Current state:', { pincode, tempValidationStatus, tempPinCode });
+    logger.log('Continue Shopping clicked (Header)');
+    logger.log('Current state:', { pincode, tempValidationStatus, tempPinCode });
     const success = await confirmTempPinCode()
-    console.log('Confirmation result:', success);
+    logger.log('Confirmation result:', success);
     if (success) {
       setIsLocationOpen(false)
     }
@@ -645,12 +648,12 @@ const Header = () => {
 
   return (
     <header 
-      className={`fixed top-0 left-0 right-0 z-50 bg-red-800 dark:bg-red-900 transition-all duration-300 ${
-        isScrolled ? 'shadow-lg dark:shadow-lg dark:shadow-black/20' : 'shadow-sm dark:shadow-sm dark:shadow-black/10'
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+        isScrolled ? 'bg-pink-600 dark:bg-pink-600 shadow-lg dark:shadow-lg dark:shadow-black/20' : 'bg-pink-600 dark:bg-pink-600 shadow-sm dark:shadow-sm dark:shadow-black/10'
       }`}
     >
       <div className="w-full px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-[3.6rem] lg:h-16">
           
           {/* Mobile Layout */}
           <div className="lg:hidden flex items-center justify-between w-full">
@@ -661,18 +664,18 @@ const Header = () => {
                   setIsMobileMenuOpen(!isMobileMenuOpen)
                   toggleCategoryMenu()
                 }}
-                className={`p-3 rounded-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 transition-all duration-300 shadow-sm hover:shadow-md active:scale-95 group ${
+                className={`p-2.5 rounded-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 transition-all duration-300 shadow-sm hover:shadow-md active:scale-95 group ${
                   isCategoryMenuOpen ? 'bg-pink-500/20 dark:bg-pink-500/30 shadow-md ring-2 ring-pink-500/30' : ''
                 }`}
               >
-                <div className="relative w-5 h-5 flex items-center justify-center">
+                <div className="relative w-[18px] h-[18px] flex items-center justify-center">
                   <Menu 
-                    className={`w-5 h-5 text-white group-hover:text-pink-200 transition-all duration-300 absolute ${
+                    className={`w-[18px] h-[18px] text-white group-hover:text-pink-200 transition-all duration-300 absolute ${
                       isCategoryMenuOpen ? 'opacity-0 rotate-90 scale-75' : 'opacity-100 rotate-0 scale-100'
                     }`}
                   />
                   <X 
-                    className={`w-5 h-5 text-white group-hover:text-pink-200 transition-all duration-300 absolute ${
+                    className={`w-[18px] h-[18px] text-white group-hover:text-pink-200 transition-all duration-300 absolute ${
                       isCategoryMenuOpen ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 -rotate-90 scale-75'
                     }`}
                   />
@@ -688,7 +691,7 @@ const Header = () => {
                   <img 
                     src="/Creamingo LOGO white.png" 
                     alt="Creamingo" 
-                    className="h-12 sm:h-14 w-auto max-w-[140px] sm:max-w-[160px] transition-all duration-200"
+                    className="h-11 sm:h-[50px] w-auto max-w-[126px] sm:max-w-[144px] transition-all duration-200"
                   />
                 </button>
               </div>
@@ -698,25 +701,25 @@ const Header = () => {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => isSearchOpen ? setIsSearchOpen(false) : setIsSearchOpen(true)}
-                className="p-3 rounded-xl bg-white/10 dark:bg-white/5 backdrop-blur-sm border border-white/20 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 transition-all duration-300 shadow-sm hover:shadow-md active:scale-95"
+                className="p-2.5 rounded-xl bg-white/10 dark:bg-white/5 backdrop-blur-sm border border-white/20 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 transition-all duration-300 shadow-sm hover:shadow-md active:scale-95"
               >
                 {isSearchOpen ? (
-                  <X className="w-5 h-5 text-white" />
+                  <X className="w-[18px] h-[18px] text-white" />
                 ) : (
-                  <Search className="w-5 h-5 text-white" />
+                  <Search className="w-[18px] h-[18px] text-white" />
                 )}
               </button>
               {/* Cart Icon - Always visible on PDP, enhanced when items exist */}
               {mounted && isOnPDP && (
                 <button
                   onClick={() => router.push('/cart')}
-                  className={`relative p-3 rounded-xl bg-white/10 dark:bg-white/5 backdrop-blur-sm border border-white/20 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 transition-all duration-300 shadow-sm hover:shadow-md active:scale-95 ${
+                  className={`relative p-2.5 rounded-xl bg-white/10 dark:bg-white/5 backdrop-blur-sm border border-white/20 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 transition-all duration-300 shadow-sm hover:shadow-md active:scale-95 ${
                     cartItemCount > 0 ? 'bg-white/20 dark:bg-white/10 border-white/30 dark:border-white/20' : ''
                   } ${
                     duplicateDetected ? 'animate-pulse' : ''
                   }`}
                 >
-                  <ShoppingCart className="w-5 h-5 text-white" />
+                  <ShoppingCart className="w-[18px] h-[18px] text-white" />
                   {cartItemCount > 0 && (
                     <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5 flex items-center justify-center bg-yellow-500 dark:bg-yellow-600 text-white text-xs font-bold rounded-full border-2 border-red-800 dark:border-red-900">
                       {cartItemCount > 99 ? '99+' : cartItemCount}
@@ -735,12 +738,12 @@ const Header = () => {
                       router.push('/account')
                     }
                   }}
-                  className="p-3 rounded-xl bg-white/10 dark:bg-white/5 backdrop-blur-sm border border-white/20 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 transition-all duration-300 shadow-sm hover:shadow-md active:scale-95"
+                  className="p-2.5 rounded-xl bg-white/10 dark:bg-white/5 backdrop-blur-sm border border-white/20 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 transition-all duration-300 shadow-sm hover:shadow-md active:scale-95"
                 >
                   {pathname === '/account' ? (
-                    <X className="w-5 h-5 text-white" />
+                    <X className="w-[18px] h-[18px] text-white" />
                   ) : (
-                    <User className="w-5 h-5 text-white" />
+                    <User className="w-[18px] h-[18px] text-white" />
                   )}
                 </button>
               )}
@@ -1133,7 +1136,7 @@ const Header = () => {
                     }
                   }}
                   placeholder="Search cakes, pastries, gifts..."
-                  className="w-full pl-4 pr-20 py-3 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-500 dark:focus:ring-pink-600 focus:border-transparent font-inter text-sm bg-gray-50 dark:bg-gray-700 hover:bg-white dark:hover:bg-gray-600 transition-colors text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 leading-relaxed"
+                  className="w-full pl-4 pr-20 py-3 border border-pink-500 dark:border-pink-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-500 dark:focus:ring-pink-600 focus:border-pink-500 dark:focus:border-pink-600 font-inter text-sm bg-gray-50 dark:bg-gray-700 hover:bg-white dark:hover:bg-gray-600 transition-colors text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 leading-relaxed"
                 />
                 {searchQuery && (
                   <button
@@ -1200,7 +1203,7 @@ const Header = () => {
                                         <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 flex-shrink-0">
                                           {product.image_url || product.image ? (
                                             <img 
-                                              src={product.image_url || product.image} 
+                                              src={resolveImageUrl(product.image_url || product.image)} 
                                               alt={product.name}
                                               className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-200"
                                             />
@@ -1332,12 +1335,12 @@ const Header = () => {
                             <X className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                           </button>
                         </div>
-                        <div className="grid grid-cols-4 gap-2">
+                        <div className="flex flex-wrap gap-2">
                           {trendingSearches.map((search, index) => (
                             <button
                               key={index}
                               onClick={() => handleSearchSubmit(search)}
-                              className="px-3 py-2 bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 text-sm font-inter hover:bg-pink-50 dark:hover:bg-pink-900/30 hover:border-pink-300 dark:hover:border-pink-700 hover:text-pink-700 dark:hover:text-pink-400 transition-all duration-200 text-center whitespace-nowrap leading-relaxed"
+                              className="px-3 py-2 bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 text-sm font-inter hover:bg-pink-50 dark:hover:bg-pink-900/30 hover:border-pink-300 dark:hover:border-pink-700 hover:text-pink-700 dark:hover:text-pink-400 transition-all duration-200 text-center whitespace-normal leading-snug"
                             >
                               {search}
                             </button>
@@ -1555,7 +1558,7 @@ const Header = () => {
           <>
             {/* Backdrop - Dimmed Background (below header only) */}
             <div 
-              className="fixed top-16 left-0 right-0 bottom-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
+              className="fixed top-[3.6rem] left-0 right-0 bottom-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
               onClick={() => {
                 setIsSearchOpen(false)
                 setSearchQuery('')
@@ -1565,15 +1568,15 @@ const Header = () => {
             
             {/* Clean Search Container */}
             <div 
-              className="fixed top-16 left-0 right-0 z-50 lg:hidden"
-              style={{ maxHeight: 'calc(100vh - 4rem)' }}
+              className="fixed top-[3.6rem] left-0 right-0 z-50 lg:hidden"
+              style={{ maxHeight: 'calc(100vh - 3.6rem)' }}
             >
               <div className={`bg-white shadow-2xl mx-0 overflow-hidden ${searchQuery && searchQuery.trim().length >= 2 ? 'rounded-b-xl' : 'rounded-b-xl'}`}>
                 {/* Search Input Section */}
-                <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+                <div className="px-4 pt-3 pb-2 border-b border-gray-100">
                   <div className="relative">
                     <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
-                      <Search className="w-5 h-5 text-gray-400" />
+                      <Search className="w-4 h-4 text-gray-500" />
                     </div>
                     <input
                       type="text"
@@ -1585,7 +1588,7 @@ const Header = () => {
                         }
                       }}
                       placeholder="Search for gifts..."
-                      className="w-full pl-12 pr-20 py-3.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 font-inter text-base bg-gray-50 focus:bg-white transition-colors leading-relaxed"
+                      className="w-full pl-12 pr-20 py-2 border border-pink-500 dark:border-pink-600 rounded-xl focus:outline-none focus:ring-1 focus:ring-pink-500 dark:focus:ring-pink-600 focus:border-pink-500 dark:focus:border-pink-600 font-inter text-sm font-medium bg-gray-50 focus:bg-white transition-colors leading-relaxed placeholder-gray-500"
                       autoFocus
                     />
                     {searchQuery && (
@@ -1597,7 +1600,7 @@ const Header = () => {
                         }}
                         className="absolute right-12 top-1/2 transform -translate-y-1/2 p-1.5 rounded-xl hover:bg-gray-100 transition-colors duration-200"
                       >
-                        <X className="w-4 h-4 text-gray-400" />
+                        <X className="w-4 h-4 text-gray-500" />
                       </button>
                     )}
                     <button
@@ -1609,7 +1612,7 @@ const Header = () => {
                       className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 rounded-xl hover:bg-gray-100 transition-colors duration-200"
                       title="Close"
                     >
-                      <X className="w-5 h-5 text-gray-500" />
+                      <X className="w-4 h-4 text-gray-500" />
                     </button>
                   </div>
                 </div>
@@ -1659,7 +1662,7 @@ const Header = () => {
                                         <div className="w-16 h-16 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0 shadow-sm group-hover:scale-105 transition-transform">
                                           {product.image_url ? (
                                             <img 
-                                              src={product.image_url} 
+                                              src={resolveImageUrl(product.image_url)} 
                                               alt={product.name}
                                               className="w-full h-full object-cover"
                                             />
@@ -1755,21 +1758,31 @@ const Header = () => {
                 {(!searchQuery || searchQuery.trim() === '') && (
                   <div className="max-h-[calc(100vh-12rem)] overflow-y-auto">
                     <div className="px-4 pt-4 pb-12">
-                      <div className="flex items-center space-x-2 mb-5">
+                        <div className="flex items-center space-x-2 mb-3">
                         <span className="text-lg">🔥</span>
-                        <h3 className="font-poppins font-semibold text-gray-700 text-sm uppercase tracking-wider">TRENDING SEARCHES</h3>
+                          <h3 className="font-poppins font-semibold text-gray-500 text-[11px] uppercase tracking-wider">TRENDING SEARCHES</h3>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className={`flex flex-wrap gap-2 ${showAllTrending ? '' : 'max-h-[4.5rem] overflow-hidden'}`}>
                         {trendingSearches.map((search, index) => (
                           <button
                             key={index}
                             onClick={() => handleSearchSubmit(search)}
-                            className="px-4 py-2 bg-gray-50 rounded-xl text-gray-700 text-sm font-inter font-medium hover:bg-gray-100 transition-colors border border-gray-200 leading-relaxed"
+                            className="px-3 py-1.5 bg-pink-50 dark:bg-pink-900/20 rounded-full text-gray-700 dark:text-gray-200 text-[12px] font-inter font-medium tracking-tight hover:bg-pink-100 dark:hover:bg-pink-900/30 transition-colors border border-pink-200 dark:border-pink-700/40 leading-snug text-center whitespace-normal"
                           >
                             {search}
                           </button>
                         ))}
                       </div>
+                      {trendingSearches.length > 0 && (
+                        <div className="mt-2">
+                          <button
+                            onClick={() => setShowAllTrending((prev) => !prev)}
+                            className="text-xs font-medium text-pink-600 dark:text-pink-400 hover:text-pink-700 dark:hover:text-pink-300 transition-colors"
+                          >
+                            {showAllTrending ? 'Show less' : 'More'}
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Recent Searches */}
@@ -1810,7 +1823,7 @@ const Header = () => {
         {/* Mobile Backdrop Overlay */}
         {(isCategoryMenuOpen || isMenuClosing) && (
           <div 
-            className="fixed top-16 left-0 right-0 bottom-0 bg-black/50 backdrop-blur-sm z-[45] lg:hidden"
+            className="fixed top-[3.6rem] left-0 right-0 bottom-0 bg-black/50 backdrop-blur-sm z-[45] lg:hidden"
             style={{ 
               animation: isMenuClosing 
                 ? 'fadeOut 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)' 
@@ -1827,7 +1840,7 @@ const Header = () => {
             role="dialog"
             aria-modal="true"
             aria-label="Category menu"
-            className="fixed top-16 bottom-16 left-0 w-[90vw] max-w-sm bg-white dark:bg-gray-800 shadow-2xl dark:shadow-black/50 z-50 lg:hidden overflow-y-auto"
+            className="fixed top-[3.6rem] bottom-16 left-0 w-[90vw] max-w-sm bg-white dark:bg-gray-800 shadow-2xl dark:shadow-black/50 z-50 lg:hidden overflow-y-auto"
             style={{ 
               animation: isMenuClosing 
                 ? 'slideOutLeft 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)' 

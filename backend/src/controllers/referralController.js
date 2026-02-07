@@ -198,7 +198,7 @@ const createReferral = async (refereeId, referralCode) => {
     const result = await query(
       `INSERT INTO referrals 
        (referrer_id, referee_id, referral_code, status, referrer_bonus_amount, referee_bonus_amount, created_at, updated_at)
-       VALUES (?, ?, ?, 'pending', ?, ?, datetime('now'), datetime('now'))`,
+       VALUES (?, ?, ?, 'pending', ?, ?, NOW(), NOW())`,
       [referrerId, refereeId, referralCode.trim().toUpperCase(), referrerBonusAmount, refereeBonusAmount]
     );
 
@@ -250,7 +250,7 @@ const creditReferralBonuses = async (orderId, customerId) => {
     // Update referral status to completed
     await query(
       `UPDATE referrals 
-       SET status = 'completed', first_order_id = ?, updated_at = datetime('now')
+       SET status = 'completed', first_order_id = ?, updated_at = NOW()
        WHERE id = ?`,
       [orderId, referral.id]
     );
@@ -278,7 +278,7 @@ const creditReferralBonuses = async (orderId, customerId) => {
       await query(
         `INSERT INTO wallet_transactions 
          (customer_id, type, amount, order_id, description, status, transaction_type, created_at, updated_at)
-         VALUES (?, 'credit', ?, ?, ?, 'completed', 'referral_bonus', datetime('now'), datetime('now'))`,
+         VALUES (?, 'credit', ?, ?, ?, 'completed', 'referral_bonus', NOW(), NOW())`,
         [
           referrerId,
           referral.referrer_bonus_amount,
@@ -296,7 +296,7 @@ const creditReferralBonuses = async (orderId, customerId) => {
       // Update referral record
       await query(
         `UPDATE referrals 
-         SET referrer_bonus_credited = 1, referrer_bonus_credited_at = datetime('now'), updated_at = datetime('now')
+         SET referrer_bonus_credited = 1, referrer_bonus_credited_at = NOW(), updated_at = NOW()
          WHERE id = ?`,
         [referral.id]
       );
@@ -326,7 +326,7 @@ const creditReferralBonuses = async (orderId, customerId) => {
       await query(
         `INSERT INTO wallet_transactions 
          (customer_id, type, amount, order_id, description, status, transaction_type, created_at, updated_at)
-         VALUES (?, 'credit', ?, ?, ?, 'completed', 'referral_bonus', datetime('now'), datetime('now'))`,
+         VALUES (?, 'credit', ?, ?, ?, 'completed', 'referral_bonus', NOW(), NOW())`,
         [
           refereeId,
           referral.referee_bonus_amount,
@@ -344,7 +344,7 @@ const creditReferralBonuses = async (orderId, customerId) => {
       // Update referral record
       await query(
         `UPDATE referrals 
-         SET referee_bonus_credited = 1, referee_bonus_credited_at = datetime('now'), updated_at = datetime('now')
+         SET referee_bonus_credited = 1, referee_bonus_credited_at = NOW(), updated_at = NOW()
          WHERE id = ?`,
         [referral.id]
       );

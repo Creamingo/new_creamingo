@@ -1,4 +1,9 @@
 const { query } = require('../config/db');
+const { mapUploadFields, normalizeUploadUrl } = require('../utils/urlHelpers');
+
+const mapSubcategory = (req, subcategory) => (
+  mapUploadFields(req, subcategory, ['image_url'])
+);
 
 // Get all subcategories
 const getSubcategories = async (req, res) => {
@@ -43,7 +48,7 @@ const getSubcategories = async (req, res) => {
 
     res.json({
       success: true,
-      data: { subcategories: result.rows }
+      data: { subcategories: result.rows.map((sub) => mapSubcategory(req, sub)) }
     });
   } catch (error) {
     console.error('Get subcategories error:', error);
@@ -77,7 +82,7 @@ const getSubcategory = async (req, res) => {
 
     res.json({
       success: true,
-      data: { subcategory: result.rows[0] }
+      data: { subcategory: mapSubcategory(req, result.rows[0]) }
     });
   } catch (error) {
     console.error('Get subcategory error:', error);
@@ -92,6 +97,7 @@ const getSubcategory = async (req, res) => {
 const createSubcategory = async (req, res) => {
   try {
     const { name, description, category_id, image_url, is_active = true, order_index = 0 } = req.body;
+    const normalizedImageUrl = normalizeUploadUrl(image_url);
 
     // Verify category exists
     const categoryResult = await query(
@@ -108,8 +114,8 @@ const createSubcategory = async (req, res) => {
 
     const result = await query(`
       INSERT INTO subcategories (name, description, category_id, image_url, is_active, order_index, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-    `, [name, description, category_id, image_url, is_active, order_index]);
+      VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
+    `, [name, description, category_id, normalizedImageUrl, is_active, order_index]);
 
     const subcategoryId = result.lastID;
 
@@ -123,7 +129,7 @@ const createSubcategory = async (req, res) => {
       WHERE sc.id = ?
     `, [subcategoryId]);
 
-    const subcategory = subcategoryResult.rows[0];
+    const subcategory = mapSubcategory(req, subcategoryResult.rows[0]);
 
     res.status(201).json({
       success: true,
@@ -143,7 +149,10 @@ const createSubcategory = async (req, res) => {
 const updateSubcategory = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const updateData = { ...req.body };
+    if (updateData.image_url) {
+      updateData.image_url = normalizeUploadUrl(updateData.image_url);
+    }
 
     // Check if subcategory exists
     const existingSubcategory = await query(
@@ -191,7 +200,7 @@ const updateSubcategory = async (req, res) => {
       });
     }
 
-    updates.push('updated_at = datetime(\'now\')');
+    updates.push('updated_at = NOW()');
     values.push(id);
 
     const queryText = `
@@ -212,7 +221,7 @@ const updateSubcategory = async (req, res) => {
       WHERE sc.id = ?
     `, [id]);
 
-    const subcategory = subcategoryResult.rows[0];
+    const subcategory = mapSubcategory(req, subcategoryResult.rows[0]);
 
     res.json({
       success: true,
@@ -290,7 +299,7 @@ const updateSubcategoryOrder = async (req, res) => {
     for (const subcategory of subcategories) {
       if (subcategory.id && subcategory.order_index !== undefined) {
         await query(
-          'UPDATE subcategories SET order_index = ?, updated_at = datetime(\'now\') WHERE id = ?',
+          'UPDATE subcategories SET order_index = ?, updated_at = NOW() WHERE id = ?',
           [subcategory.order_index, subcategory.id]
         );
       }

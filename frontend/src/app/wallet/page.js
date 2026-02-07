@@ -22,19 +22,20 @@ import Footer from '../../components/Footer';
 import MobileFooter from '../../components/MobileFooter';
 import ProtectedRoute from '../../components/ProtectedRoute';
 import { useWallet } from '../../contexts/WalletContext';
+import { useCustomerAuth } from '../../contexts/CustomerAuthContext';
 import walletApi from '../../api/walletApi';
 import { useToast } from '../../contexts/ToastContext';
 import ScratchCard from '../../components/ScratchCard';
 import scratchCardApi from '../../api/scratchCardApi';
 import ReferAndEarn from '../../components/ReferAndEarn';
 import NotificationCenter from '../../components/NotificationCenter';
-import SmartSuggestions from '../../components/SmartSuggestions';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { Bell } from 'lucide-react';
 import { formatPrice } from '../../utils/priceFormatter';
 
 function WalletPageContent() {
   const router = useRouter();
+  const { isAuthenticated, isLoading: isAuthLoading } = useCustomerAuth();
   const { balance, totalEarned, totalSpent, fetchBalance } = useWallet();
   const { showError } = useToast();
   const { isNotificationCenterOpen, openNotificationCenter, closeNotificationCenter, unreadCount } = useNotifications();
@@ -48,10 +49,11 @@ function WalletPageContent() {
   const [activeTab, setActiveTab] = useState('overview'); // overview, transactions, scratchCards, referEarn
 
   useEffect(() => {
+    if (isAuthLoading || !isAuthenticated) return;
     fetchTransactions();
     fetchStats();
     fetchScratchCards();
-  }, [filter]);
+  }, [filter, isAuthenticated, isAuthLoading]);
 
   const fetchTransactions = async () => {
     try {
@@ -142,7 +144,8 @@ function WalletPageContent() {
       review_reward: 'Review Reward',
       festival_offer: 'Festival Offer',
       order_redemption: 'Order Redemption',
-      order_refund: 'Order Refund'
+      order_refund: 'Order Refund',
+      opening_balance: 'Opening Balance'
     };
     return labels[transactionType] || transactionType;
   };
@@ -172,9 +175,9 @@ function WalletPageContent() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="relative mb-8 lg:mb-12"
+          className="relative mb-6 lg:mb-8"
         >
-          <div className="bg-gradient-to-br from-pink-600 via-rose-600 to-pink-700 rounded-3xl p-6 sm:p-8 lg:p-10 shadow-xl dark:shadow-2xl dark:shadow-black/30 overflow-hidden">
+          <div className="bg-gradient-to-br from-pink-600 via-rose-600 to-pink-700 rounded-3xl p-4 sm:p-5 lg:p-6 shadow-xl dark:shadow-2xl dark:shadow-black/30 overflow-hidden">
             {/* Background Pattern - Reduced opacity */}
             <div className="absolute inset-0 opacity-5">
               <div className="absolute top-0 right-0 w-64 h-64 bg-white rounded-full -mr-32 -mt-32"></div>
@@ -182,47 +185,42 @@ function WalletPageContent() {
             </div>
 
             <div className="relative z-10">
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-4">
                 <div>
-                  <p className="text-pink-100 text-sm font-medium mb-3">Available Balance</p>
-                  <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold text-white mb-2 tracking-tight tabular-nums">
+                  <p className="text-pink-100 text-xs font-medium mb-2">Available Balance</p>
+                  <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-1 tracking-tight tabular-nums">
                     {formatPrice(balance)}
                   </h1>
                 </div>
-                <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white/20 rounded-full flex items-center justify-center">
-                  <Wallet className="w-10 h-10 sm:w-12 sm:h-12 text-white" />
+                <div className="w-14 h-14 sm:w-16 sm:h-16 bg-white/20 rounded-full flex items-center justify-center">
+                  <Wallet className="w-7 h-7 sm:w-8 sm:h-8 text-white" />
                 </div>
               </div>
 
               {/* Divider */}
-              <div className="border-t border-white/20 my-6"></div>
+              <div className="border-t border-white/20 my-4"></div>
 
               {/* Quick Stats */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white/20 rounded-xl p-4 sm:p-5 border border-white/30">
-                  <p className="text-pink-100 text-xs font-medium mb-2">Total Earned</p>
-                  <p className="text-white text-xl sm:text-2xl font-semibold tabular-nums">{formatPrice(totalEarned)}</p>
+                <div className="bg-white/20 rounded-xl p-3 sm:p-4 border border-white/30">
+                  <p className="text-pink-100 text-xs font-medium mb-1">Total Earned</p>
+                  <p className="text-white text-lg sm:text-xl font-semibold tabular-nums">{formatPrice(totalEarned)}</p>
                 </div>
-                <div className="bg-white/20 rounded-xl p-4 sm:p-5 border border-white/30">
-                  <p className="text-pink-100 text-xs font-medium mb-2">Total Spent</p>
-                  <p className="text-white text-xl sm:text-2xl font-semibold tabular-nums">{formatPrice(totalSpent)}</p>
+                <div className="bg-white/20 rounded-xl p-3 sm:p-4 border border-white/30">
+                  <p className="text-pink-100 text-xs font-medium mb-1">Total Spent</p>
+                  <p className="text-white text-lg sm:text-xl font-semibold tabular-nums">{formatPrice(totalSpent)}</p>
                 </div>
               </div>
             </div>
           </div>
         </motion.div>
 
-        {/* Smart Suggestions */}
-        <div className="mb-8 lg:mb-12">
-          <SmartSuggestions />
-        </div>
-
         {/* Refer & Earn Card - Below Available Balance */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="mb-8 lg:mb-12"
+          className="mb-6 lg:mb-8"
         >
           <ReferAndEarn 
             compact={true} 

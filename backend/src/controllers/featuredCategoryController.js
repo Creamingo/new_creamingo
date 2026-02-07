@@ -1,4 +1,11 @@
 const { query } = require('../config/db');
+const { applyUploadUrl } = require('../utils/urlHelpers');
+
+const mapFeaturedCategory = (req, item) => ({
+  ...item,
+  category_image: applyUploadUrl(req, item.category_image),
+  subcategory_image: applyUploadUrl(req, item.subcategory_image)
+});
 
 // Get all featured categories with their linked category/subcategory data
 const getFeaturedCategories = async (req, res) => {
@@ -45,10 +52,12 @@ const getFeaturedCategories = async (req, res) => {
     
     const result = await query(sql, params);
     
+    const items = result.rows.map((item) => mapFeaturedCategory(req, item));
+
     res.status(200).json({
       success: true,
-      data: result.rows,
-      count: result.rows.length
+      data: items,
+      count: items.length
     });
   } catch (error) {
     console.error('Error fetching featured categories:', error);
@@ -102,7 +111,7 @@ const getFeaturedCategory = async (req, res) => {
     
     res.status(200).json({
       success: true,
-      data: result.rows[0]
+      data: mapFeaturedCategory(req, result.rows[0])
     });
   } catch (error) {
     console.error('Error fetching featured category:', error);
@@ -230,7 +239,7 @@ const createFeaturedCategory = async (req, res) => {
         created_at, 
         updated_at
       )
-      VALUES (?, ?, ?, ?, 1, ?, ?, datetime('now'), datetime('now'))
+      VALUES (?, ?, ?, ?, 1, ?, ?, NOW(), NOW())
     `;
     
     const insertResult = await query(insertSql, [
@@ -274,7 +283,7 @@ const createFeaturedCategory = async (req, res) => {
     res.status(201).json({
       success: true,
       message: `${itemName} added to featured list successfully`,
-      data: newFeaturedItem.rows[0]
+      data: mapFeaturedCategory(req, newFeaturedItem.rows[0])
     });
   } catch (error) {
     console.error('Error creating featured item:', error);
@@ -336,7 +345,7 @@ const updateFeaturedCategory = async (req, res) => {
       });
     }
     
-    updateFields.push('updated_at = datetime(\'now\')');
+    updateFields.push('updated_at = NOW()');
     updateValues.push(id);
     
     const updateSql = `
@@ -379,7 +388,7 @@ const updateFeaturedCategory = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Featured category updated successfully',
-      data: updatedCategory.rows[0]
+      data: mapFeaturedCategory(req, updatedCategory.rows[0])
     });
   } catch (error) {
     console.error('Error updating featured category:', error);
@@ -520,7 +529,12 @@ const getAvailableCategories = async (req, res) => {
     }
     
     // Filter out already featured items
-    const availableItems = result.rows.filter(item => !item.is_featured);
+    const availableItems = result.rows
+      .filter(item => !item.is_featured)
+      .map((item) => ({
+        ...item,
+        image_url: applyUploadUrl(req, item.image_url)
+      }));
     
     res.status(200).json({
       success: true,
@@ -560,7 +574,7 @@ const toggleFeaturedCategoryStatus = async (req, res) => {
     
     // Update status
     await query(
-      'UPDATE featured_categories SET is_active = ?, updated_at = datetime(\'now\') WHERE id = ?',
+      'UPDATE featured_categories SET is_active = ?, updated_at = NOW() WHERE id = ?',
       [newStatus, id]
     );
     
@@ -598,7 +612,7 @@ const reorderFeaturedCategories = async (req, res) => {
     for (const category of categories) {
       if (category.id && category.display_order !== undefined) {
         await query(
-          'UPDATE featured_categories SET display_order = ?, updated_at = datetime(\'now\') WHERE id = ?',
+          'UPDATE featured_categories SET display_order = ?, updated_at = NOW() WHERE id = ?',
           [category.display_order, category.id]
         );
       }

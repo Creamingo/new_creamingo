@@ -1,4 +1,5 @@
 const { query } = require('../config/db');
+const { applyUploadUrl } = require('../utils/urlHelpers');
 
 /**
  * Get customer's wishlist
@@ -38,7 +39,7 @@ const getWishlist = async (req, res) => {
       price: parseFloat(item.base_price || 0),
       discount_percent: parseFloat(item.discount_percent || 0),
       discounted_price: parseFloat(item.discounted_price || item.base_price || 0),
-      image_url: item.image_url,
+      image_url: applyUploadUrl(req, item.image_url),
       slug: item.slug,
       is_active: item.product_active,
       category_name: item.category_name,
@@ -129,7 +130,7 @@ const addToWishlist = async (req, res) => {
     // Add to wishlist
     const result = await query(`
       INSERT INTO wishlist (customer_id, product_id, created_at, updated_at)
-      VALUES (?, ?, datetime('now'), datetime('now'))
+      VALUES (?, ?, NOW(), NOW())
     `, [customer_id, productId]);
 
     console.log('Wishlist insert result:', { lastID: result.lastID, changes: result.rowCount });

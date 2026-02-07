@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const {
+  checkEmail,
   register,
   login,
   getMe,
@@ -12,6 +13,7 @@ const { customerAuthMiddleware } = require('../middleware/customerAuth');
 const { validate, schemas } = require('../middleware/validation');
 
 // Public routes
+router.post('/check-email', validate(schemas.customerCheckEmail), checkEmail);
 router.post('/register', validate(schemas.customerRegister), register);
 router.post('/login', validate(schemas.customerLogin), login);
 

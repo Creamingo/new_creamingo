@@ -1,26 +1,47 @@
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 // Ensure uploads directory exists
-// Use absolute path if provided, otherwise resolve relative to project root
-const uploadDir = process.env.UPLOAD_PATH || './uploads';
-const resolvedUploadDir = path.isAbsolute(uploadDir) ? uploadDir : path.resolve(__dirname, '../', uploadDir);
+const {
+  getGalleryPath,
+  getGallerySubdir,
+  ensureDirExists,
+  sanitizeSegment,
+  getGalleryRoot,
+} = require('../utils/uploadPath');
+const resolvedGalleryRoot = getGalleryRoot();
 
-if (!fs.existsSync(resolvedUploadDir)) {
-  fs.mkdirSync(resolvedUploadDir, { recursive: true });
+if (!fs.existsSync(resolvedGalleryRoot)) {
+  fs.mkdirSync(resolvedGalleryRoot, { recursive: true });
 }
+
+const resolveUploadType = (req) => {
+  return req.uploadType || req.body?.type || req.query?.type || 'misc';
+};
+
+const randomHash = () => {
+  const length = Math.floor(Math.random() * 5) + 8; // 8-12 chars
+  return crypto.randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length);
+};
 
 // Configure storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, resolvedUploadDir);
+    const type = resolveUploadType(req);
+    const targetDir = getGalleryPath(type);
+    ensureDirExists(targetDir);
+    cb(null, targetDir);
   },
   filename: (req, file, cb) => {
     // Generate unique filename
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const extension = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + extension);
+    const type = resolveUploadType(req);
+    const prefixSource = req.body?.prefix || req.body?.name || req.body?.slug || type || 'file';
+    const prefix = sanitizeSegment(prefixSource) || getGallerySubdir(type);
+    const hash = randomHash();
+    cb(null, `${prefix}-${hash}${extension}`);
   }
 });
 

@@ -9,6 +9,7 @@ const {
   setPrimaryCategory,
   setPrimarySubcategory
 } = require('../utils/productCategoryHelpers');
+const { getBaseUrl, normalizeUploadUrl, buildPublicUrlWithBase } = require('../utils/urlHelpers');
 
 // Helper function to normalize search terms (remove punctuation)
 const normalizeSearchTerm = (term) => {
@@ -45,62 +46,83 @@ const getProducts = async (req, res) => {
       sort_order = 'DESC'
     } = req.query;
 
-    const offset = (page - 1) * limit;
+    // Convert to integers for MySQL
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
+    const offset = (pageNum - 1) * limitNum;
     let whereConditions = [];
     let queryParams = [];
-    let paramCount = 1;
 
     // Build WHERE conditions
+    // Use JOIN instead of subquery for MySQL prepared statement compatibility
     if (category_id) {
-      whereConditions.push(`p.id IN (
-        SELECT DISTINCT product_id 
-        FROM product_categories 
-        WHERE category_id = ?
-      )`);
-      queryParams.push(category_id);
+      const categoryIdInt = parseInt(category_id, 10);
+      if (!isNaN(categoryIdInt)) {
+        whereConditions.push(`EXISTS (
+          SELECT 1 
+          FROM product_categories pc 
+          WHERE pc.product_id = p.id AND pc.category_id = ?
+        )`);
+        queryParams.push(categoryIdInt);
+      }
     }
 
     if (subcategory_id) {
-      whereConditions.push(`p.id IN (
-        SELECT DISTINCT product_id 
-        FROM product_subcategories 
-        WHERE subcategory_id = ?
-      )`);
-      queryParams.push(subcategory_id);
+      const subcategoryIdInt = parseInt(subcategory_id, 10);
+      if (!isNaN(subcategoryIdInt)) {
+        whereConditions.push(`EXISTS (
+          SELECT 1 
+          FROM product_subcategories ps 
+          WHERE ps.product_id = p.id AND ps.subcategory_id = ?
+        )`);
+        queryParams.push(subcategoryIdInt);
+      }
     }
 
     // Handle multiple categories filter
     if (category_ids) {
       const categoryIdArray = Array.isArray(category_ids) ? category_ids : category_ids.split(',');
-      const categoryPlaceholders = categoryIdArray.map(() => '?').join(',');
-      whereConditions.push(`p.id IN (
-        SELECT DISTINCT product_id 
-        FROM product_categories 
-        WHERE category_id IN (${categoryPlaceholders})
-      )`);
-      queryParams.push(...categoryIdArray);
+      // Convert all to integers for MySQL
+      const categoryIdInts = categoryIdArray.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+      if (categoryIdInts.length > 0) {
+        const categoryPlaceholders = categoryIdInts.map(() => '?').join(',');
+        whereConditions.push(`EXISTS (
+          SELECT 1 
+          FROM product_categories pc 
+          WHERE pc.product_id = p.id AND pc.category_id IN (${categoryPlaceholders})
+        )`);
+        queryParams.push(...categoryIdInts);
+      }
     }
 
     // Handle multiple subcategories filter
     if (subcategory_ids) {
       const subcategoryIdArray = Array.isArray(subcategory_ids) ? subcategory_ids : subcategory_ids.split(',');
-      const subcategoryPlaceholders = subcategoryIdArray.map(() => '?').join(',');
-      whereConditions.push(`p.id IN (
-        SELECT DISTINCT product_id 
-        FROM product_subcategories 
-        WHERE subcategory_id IN (${subcategoryPlaceholders})
-      )`);
-      queryParams.push(...subcategoryIdArray);
+      // Convert all to integers for MySQL
+      const subcategoryIdInts = subcategoryIdArray.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+      if (subcategoryIdInts.length > 0) {
+        const subcategoryPlaceholders = subcategoryIdInts.map(() => '?').join(',');
+        whereConditions.push(`EXISTS (
+          SELECT 1 
+          FROM product_subcategories ps 
+          WHERE ps.product_id = p.id AND ps.subcategory_id IN (${subcategoryPlaceholders})
+        )`);
+        queryParams.push(...subcategoryIdInts);
+      }
     }
 
-    if (is_active !== undefined) {
+    if (is_active !== undefined && is_active !== null && is_active !== '') {
       whereConditions.push(`p.is_active = ?`);
-      queryParams.push(is_active === 'true' ? 1 : 0);
+      // Convert to integer: 'true', '1', 1 → 1, everything else → 0
+      const isActiveValue = (is_active === 'true' || is_active === '1' || is_active === 1 || is_active === true) ? 1 : 0;
+      queryParams.push(isActiveValue);
     }
 
-    if (is_featured !== undefined) {
+    if (is_featured !== undefined && is_featured !== null && is_featured !== '') {
       whereConditions.push(`p.is_featured = ?`);
-      queryParams.push(is_featured === 'true' ? 1 : 0);
+      // Convert to integer: 'true', '1', 1 → 1, everything else → 0
+      const isFeaturedValue = (is_featured === 'true' || is_featured === '1' || is_featured === 1 || is_featured === true) ? 1 : 0;
+      queryParams.push(isFeaturedValue);
     }
 
     if (search) {
@@ -126,10 +148,10 @@ const getProducts = async (req, res) => {
       
       const categoryId = categorySlugToIdMap[category];
       if (categoryId) {
-        whereConditions.push(`p.id IN (
-          SELECT DISTINCT product_id 
-          FROM product_categories 
-          WHERE category_id = ?
+        whereConditions.push(`EXISTS (
+          SELECT 1 
+          FROM product_categories pc 
+          WHERE pc.product_id = p.id AND pc.category_id = ?
         )`);
         queryParams.push(categoryId);
       }
@@ -206,10 +228,10 @@ const getProducts = async (req, res) => {
       
       const subcategoryId = subcategorySlugToIdMap[subcategory];
       if (subcategoryId) {
-        whereConditions.push(`p.id IN (
-          SELECT DISTINCT product_id 
-          FROM product_subcategories 
-          WHERE subcategory_id = ?
+        whereConditions.push(`EXISTS (
+          SELECT 1 
+          FROM product_subcategories ps 
+          WHERE ps.product_id = p.id AND ps.subcategory_id = ?
         )`);
         queryParams.push(subcategoryId);
       }
@@ -222,7 +244,7 @@ const getProducts = async (req, res) => {
     const sortField = allowedSortFields.includes(sort_by) ? sort_by : 'created_at';
     const sortDirection = sort_order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
-    // Get total count
+    // Get total count (use a copy of queryParams to avoid modifying the original)
     const countQuery = `
       SELECT COUNT(*) as total
       FROM products p
@@ -231,10 +253,48 @@ const getProducts = async (req, res) => {
       ${whereClause}
     `;
 
-    const countResult = await query(countQuery, queryParams);
+    const countResult = await query(countQuery, [...queryParams]);
     const total = parseInt(countResult.rows[0].total);
 
     // Get products (without variants for now - we'll fetch them separately)
+    // Create a new array with limit and offset for the products query
+    // Ensure limitNum and offset are integers - convert explicitly
+    const finalLimit = Number.isInteger(limitNum) && limitNum > 0 ? limitNum : 10;
+    const finalOffset = Number.isInteger(offset) && offset >= 0 ? offset : 0;
+    
+    // Ensure all parameters are properly typed (no undefined, null, or NaN)
+    // Filter out undefined and NaN, but keep null (MySQL accepts null)
+    const safeQueryParams = queryParams.filter(p => {
+      if (p === undefined) {
+        console.error('⚠️ Filtering out undefined parameter');
+        return false;
+      }
+      if (typeof p === 'number' && isNaN(p)) {
+        console.error('⚠️ Filtering out NaN parameter');
+        return false;
+      }
+      return true;
+    });
+    
+    // Build final parameter array (limit/offset are inlined below)
+    const productsQueryParams = [
+      ...safeQueryParams
+    ];
+    
+    // Log parameter construction
+    console.error('🔍 [DEBUG] Parameter construction:', {
+      queryParamsLength: queryParams.length,
+      queryParams: queryParams,
+      safeQueryParamsLength: safeQueryParams.length,
+      safeQueryParams: safeQueryParams,
+      finalLimit: finalLimit,
+      finalOffset: finalOffset,
+      finalLimitType: typeof finalLimit,
+      finalOffsetType: typeof finalOffset,
+      productsQueryParamsLength: productsQueryParams.length,
+      productsQueryParams: productsQueryParams
+    });
+    
     const productsQuery = `
       SELECT 
         p.id,
@@ -268,35 +328,104 @@ const getProducts = async (req, res) => {
       LEFT JOIN subcategories sc ON p.subcategory_id = sc.id
       ${whereClause}
       ORDER BY p.${sortField} ${sortDirection}
-      LIMIT ? OFFSET ?
+      LIMIT ${finalLimit} OFFSET ${finalOffset}
     `;
 
-    queryParams.push(limit, offset);
-    const productsResult = await query(productsQuery, queryParams);
-
-    // Get product IDs for fetching categories and subcategories
-    const productIds = productsResult.rows.map(p => p.id);
+    // Debug: Log query and params count for troubleshooting
+    const placeholderCount = (productsQuery.match(/\?/g) || []).length;
     
-    // Fetch products with their categories, subcategories, variants, and gallery images
-    const products = await getProductsWithCategories(productIds);
-
-    res.json({
-      success: true,
-      data: {
-        products,
-        pagination: {
-          current_page: parseInt(page),
-          per_page: parseInt(limit),
-          total,
-          total_pages: Math.ceil(total / limit)
+    // Filter out any undefined or null values and ensure all are properly typed
+    const sanitizedParams = productsQueryParams
+      .filter((param, index) => {
+        // Remove undefined, but keep null (MySQL accepts null)
+        if (param === undefined) {
+          console.error(`⚠️ Removing undefined parameter at index ${index}`);
+          return false;
         }
+        // Check for NaN
+        if (typeof param === 'number' && isNaN(param)) {
+          console.error(`⚠️ Removing NaN parameter at index ${index}`);
+          return false;
+        }
+        return true;
+      });
+    
+    // Always log query details for debugging - use console.error to ensure it shows in error log
+    console.error('🔍 [DEBUG] Executing products query:', {
+      placeholderCount,
+      paramCount: sanitizedParams.length,
+      params: sanitizedParams,
+      whereClause: whereClause || 'NO WHERE CLAUSE',
+      whereConditionsCount: whereConditions.length,
+      whereConditions: whereConditions,
+      queryParamsLength: queryParams.length,
+      safeQueryParamsLength: safeQueryParams.length,
+      finalLimit,
+      finalOffset,
+      reqQuery: {
+        category_id,
+        is_active,
+        limit,
+        page
       }
     });
+    console.error('🔍 [DEBUG] Full query:', productsQuery);
+    console.error('🔍 [DEBUG] All params (JSON):', JSON.stringify(sanitizedParams));
+
+    if (placeholderCount !== sanitizedParams.length) {
+      console.error('❌ Parameter mismatch detected:', {
+        placeholderCount,
+        paramCount: sanitizedParams.length,
+        originalParamCount: productsQueryParams.length,
+        params: sanitizedParams,
+        originalParams: productsQueryParams,
+        whereClause,
+        whereConditions,
+        fullQuery: productsQuery
+      });
+      return res.status(500).json({
+        success: false,
+        message: 'Internal server error: Parameter count mismatch',
+        error: `Expected ${placeholderCount} placeholders but got ${sanitizedParams.length} parameters`
+      });
+    }
+
+    try {
+      const productsResult = await query(productsQuery, sanitizedParams);
+
+      // Get product IDs for fetching categories and subcategories
+      const productIds = productsResult.rows.map(p => p.id);
+      
+      // Fetch products with their categories, subcategories, variants, and gallery images
+      const products = await getProductsWithCategories(productIds, getBaseUrl(req));
+
+      res.json({
+        success: true,
+        data: {
+          products,
+          pagination: {
+            current_page: pageNum,
+            per_page: limitNum,
+            total,
+            total_pages: Math.ceil(total / limitNum)
+          }
+        }
+      });
+    } catch (queryError) {
+      console.error('❌ Query execution error:', queryError);
+      console.error('❌ Query:', productsQuery.substring(0, 500));
+      console.error('❌ Params:', sanitizedParams);
+      console.error('❌ Placeholder count:', placeholderCount);
+      console.error('❌ Param count:', sanitizedParams.length);
+      throw queryError; // Re-throw to be caught by outer catch
+    }
   } catch (error) {
     console.error('Get products error:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -306,7 +435,7 @@ const getProduct = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const product = await getProductWithCategories(id);
+    const product = await getProductWithCategories(id, getBaseUrl(req));
 
     if (!product) {
       return res.status(404).json({
@@ -387,7 +516,9 @@ const getProductBySlug = async (req, res) => {
       });
     }
 
+    const baseUrl = getBaseUrl(req);
     const product = productResult.rows[0];
+    product.image_url = buildPublicUrlWithBase(baseUrl, normalizeUploadUrl(product.image_url));
 
     // Get product categories and subcategories
     const categoriesQuery = `
@@ -405,7 +536,10 @@ const getProductBySlug = async (req, res) => {
     `;
     
     const categoriesResult = await query(categoriesQuery, [product.id]);
-    product.categories = categoriesResult.rows || [];
+    product.categories = (categoriesResult.rows || []).map((category) => ({
+      ...category,
+      image_url: buildPublicUrlWithBase(baseUrl, normalizeUploadUrl(category.image_url))
+    }));
 
     // Get product subcategories
     const subcategoriesQuery = `
@@ -424,7 +558,10 @@ const getProductBySlug = async (req, res) => {
     `;
     
     const subcategoriesResult = await query(subcategoriesQuery, [product.id]);
-    product.subcategories = subcategoriesResult.rows || [];
+    product.subcategories = (subcategoriesResult.rows || []).map((subcategory) => ({
+      ...subcategory,
+      image_url: buildPublicUrlWithBase(baseUrl, normalizeUploadUrl(subcategory.image_url))
+    }));
 
     // Get product variants
     const variantsQuery = `
@@ -456,7 +593,8 @@ const getProductBySlug = async (req, res) => {
     `;
     
     const galleryResult = await query(galleryQuery, [product.id]);
-    product.gallery_images = galleryResult.rows.map(row => row.image_url) || [];
+    product.gallery_images = (galleryResult.rows.map(row => row.image_url) || [])
+      .map((url) => buildPublicUrlWithBase(baseUrl, normalizeUploadUrl(url)));
 
     // Get product attributes
     const attributesQuery = `
@@ -523,6 +661,8 @@ const getRelatedProducts = async (req, res) => {
   try {
     const { id } = req.params;
     const { limit = 6 } = req.query;
+    const limitNum = Number.isFinite(parseInt(limit, 10)) ? parseInt(limit, 10) : 6;
+    const safeLimit = Math.max(1, Math.min(limitNum, 50));
 
     // First get the product's category and subcategory
     const productQuery = `
@@ -570,14 +710,13 @@ const getRelatedProducts = async (req, res) => {
         AND p.is_active = 1
         AND (p.category_id = ? OR p.subcategory_id = ?)
       ORDER BY p.rating DESC, p.review_count DESC
-      LIMIT ?
+      LIMIT ${safeLimit}
     `;
 
     const relatedResult = await query(relatedQuery, [
-      id, 
-      product.category_id, 
-      product.subcategory_id, 
-      parseInt(limit)
+      id,
+      product.category_id,
+      product.subcategory_id
     ]);
 
     res.json({
@@ -589,6 +728,20 @@ const getRelatedProducts = async (req, res) => {
     });
   } catch (error) {
     console.error('Get related products error:', error);
+    const schemaErrorCodes = new Set(['ER_BAD_FIELD_ERROR', 'ER_NO_SUCH_TABLE', 'ER_PARSE_ERROR']);
+    if (schemaErrorCodes.has(error.code)) {
+      console.warn('Related products query failed due to schema mismatch; returning empty list.', {
+        code: error.code,
+        message: error.message
+      });
+      return res.json({
+        success: true,
+        data: {
+          products: [],
+          count: 0
+        }
+      });
+    }
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -601,7 +754,11 @@ const getProductReviews = async (req, res) => {
   try {
     const { id } = req.params;
     const { page = 1, limit = 10 } = req.query;
-    const offset = (page - 1) * limit;
+    const pageNum = Number.isFinite(parseInt(page, 10)) ? parseInt(page, 10) : 1;
+    const limitNum = Number.isFinite(parseInt(limit, 10)) ? parseInt(limit, 10) : 10;
+    const safeLimit = Math.max(1, Math.min(limitNum, 50));
+    const safePage = Math.max(1, pageNum);
+    const offset = (safePage - 1) * safeLimit;
 
     // Get reviews with pagination
     const reviewsQuery = `
@@ -616,10 +773,10 @@ const getProductReviews = async (req, res) => {
       FROM product_reviews 
       WHERE product_id = ? AND is_approved = 1
       ORDER BY created_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT ${safeLimit} OFFSET ${offset}
     `;
     
-    const reviewsResult = await query(reviewsQuery, [id, parseInt(limit), offset]);
+    const reviewsResult = await query(reviewsQuery, [id]);
 
     // Get total count
     const countQuery = `
@@ -647,11 +804,13 @@ const getProductReviews = async (req, res) => {
       reviewImages = imagesResult.rows;
     }
 
+    const baseUrl = getBaseUrl(req);
+
     // Attach images to reviews and parse category data
     const reviewsWithImages = reviewsResult.rows.map(review => {
       review.images = reviewImages
         .filter(img => img.review_id === review.id)
-        .map(img => img.image_url);
+        .map(img => buildPublicUrlWithBase(baseUrl, normalizeUploadUrl(img.image_url)));
       
       // Parse category data if it exists in review_text
       try {
@@ -763,6 +922,32 @@ const getProductReviews = async (req, res) => {
     });
   } catch (error) {
     console.error('Get product reviews error:', error);
+    const schemaErrorCodes = new Set(['ER_BAD_FIELD_ERROR', 'ER_NO_SUCH_TABLE', 'ER_PARSE_ERROR']);
+    if (schemaErrorCodes.has(error.code)) {
+      console.warn('Product reviews query failed due to schema mismatch; returning empty reviews.', {
+        code: error.code,
+        message: error.message
+      });
+      return res.json({
+        success: true,
+        data: {
+          reviews: [],
+          ratingBreakdown: {
+            taste: 0,
+            presentation: 0,
+            freshness: 0,
+            valueForMoney: 0,
+            deliveryExperience: 0
+          },
+          pagination: {
+            current_page: parseInt(page),
+            per_page: parseInt(limit),
+            total: 0,
+            total_pages: 0
+          }
+        }
+      });
+    }
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -858,15 +1043,20 @@ const createProduct = async (req, res) => {
     const legacyCategoryId = categoriesToUse.length > 0 ? categoriesToUse[0] : null;
     const legacySubcategoryId = subcategoriesToUse.length > 0 ? subcategoriesToUse[0] : null;
 
+    const normalizedImageUrl = normalizeUploadUrl(image_url);
+    const normalizedGalleryImages = Array.isArray(req.body.gallery_images)
+      ? req.body.gallery_images.map((url) => normalizeUploadUrl(url))
+      : [];
+
     const result = await query(`
       INSERT INTO products (
         name, slug, description, short_description, category_id, subcategory_id, base_price, base_weight, discount_percent, discounted_price,
         image_url, is_active, is_featured, is_top_product, is_bestseller, is_eggless,
         preparation_time, serving_size, care_storage, delivery_guidelines, shape, country_of_origin, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `, [
       name, slug, description, short_description, legacyCategoryId, legacySubcategoryId, base_price, base_weight, discount_percent, discountedPrice,
-      image_url, is_active, is_featured, is_top_product, is_bestseller, (req.body.is_eggless ? 1 : 0),
+      normalizedImageUrl, is_active, is_featured, is_top_product, is_bestseller, (req.body.is_eggless ? 1 : 0),
       preparation_time, serving_size, care_storage, delivery_guidelines, req.body.shape || 'Round', req.body.country_of_origin || 'India'
     ]);
 
@@ -896,7 +1086,7 @@ const createProduct = async (req, res) => {
           INSERT INTO product_variants (
             product_id, name, weight, price, discount_percent, discounted_price, 
             stock_quantity, is_available, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
         `, [
           productId,
           `${req.body.name} - ${weight}`, // Use product name + weight as variant name
@@ -911,13 +1101,13 @@ const createProduct = async (req, res) => {
     }
 
     // Handle product gallery images if provided
-    if (req.body.gallery_images && Array.isArray(req.body.gallery_images) && req.body.gallery_images.length > 0) {
-      for (let i = 0; i < req.body.gallery_images.length; i++) {
-        const imageUrl = req.body.gallery_images[i];
+    if (normalizedGalleryImages.length > 0) {
+      for (let i = 0; i < normalizedGalleryImages.length; i++) {
+        const imageUrl = normalizedGalleryImages[i];
         await query(`
           INSERT INTO product_gallery_images (
             product_id, image_url, display_order, created_at, updated_at
-          ) VALUES (?, ?, ?, datetime('now'), datetime('now'))
+          ) VALUES (?, ?, ?, NOW(), NOW())
         `, [
           productId,
           imageUrl,
@@ -927,7 +1117,7 @@ const createProduct = async (req, res) => {
     }
 
     // Fetch the created product with all details including categories, subcategories, variations and gallery images
-    const product = await getProductWithCategories(productId);
+    const product = await getProductWithCategories(productId, getBaseUrl(req));
 
     res.status(201).json({
       success: true,
@@ -947,7 +1137,13 @@ const createProduct = async (req, res) => {
 const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const updateData = { ...req.body };
+    if (updateData.image_url) {
+      updateData.image_url = normalizeUploadUrl(updateData.image_url);
+    }
+    const normalizedGalleryImages = Array.isArray(updateData.gallery_images)
+      ? updateData.gallery_images.map((url) => normalizeUploadUrl(url))
+      : [];
 
     // Validate discount_percent if provided
     if (updateData.discount_percent !== undefined) {
@@ -1058,7 +1254,7 @@ const updateProduct = async (req, res) => {
       values.push(discountedPrice);
     }
 
-    updates.push('updated_at = datetime(\'now\')');
+    updates.push('updated_at = NOW()');
     values.push(id);
 
     const queryText = `
@@ -1120,7 +1316,7 @@ const updateProduct = async (req, res) => {
             INSERT INTO product_variants (
               product_id, name, weight, price, discount_percent, discounted_price, 
               stock_quantity, is_available, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
           `, [
             id,
             `${updateData.name || 'Product'} - ${weight}`, // Use updated name or fallback
@@ -1138,20 +1334,20 @@ const updateProduct = async (req, res) => {
     }
 
     // Handle product gallery images if provided
-    if (req.body.gallery_images !== undefined) {
+    if (updateData.gallery_images !== undefined) {
       // Only update gallery images if the array is explicitly provided and not empty
       // This prevents accidental deletion of gallery images when frontend sends empty array
-      if (Array.isArray(req.body.gallery_images) && req.body.gallery_images.length > 0) {
+      if (normalizedGalleryImages.length > 0) {
         // Delete existing gallery images
         await query('DELETE FROM product_gallery_images WHERE product_id = ?', [id]);
         
         // Insert new gallery images
-        for (let i = 0; i < req.body.gallery_images.length; i++) {
-          const imageUrl = req.body.gallery_images[i];
+        for (let i = 0; i < normalizedGalleryImages.length; i++) {
+          const imageUrl = normalizedGalleryImages[i];
           await query(`
             INSERT INTO product_gallery_images (
               product_id, image_url, display_order, created_at, updated_at
-            ) VALUES (?, ?, ?, datetime('now'), datetime('now'))
+            ) VALUES (?, ?, ?, NOW(), NOW())
           `, [
             id,
             imageUrl,
@@ -1162,6 +1358,8 @@ const updateProduct = async (req, res) => {
       // If gallery_images is an empty array, we don't delete existing gallery images
       // This preserves existing gallery images when frontend sends empty array
     }
+
+    const baseUrl = getBaseUrl(req);
 
     // Fetch the updated product with all details
     const productResult = await query(`
@@ -1236,7 +1434,8 @@ const updateProduct = async (req, res) => {
     `;
     
     const galleryResult = await query(galleryQuery, [id]);
-    product.gallery_images = galleryResult.rows.map(row => row.image_url) || [];
+    product.gallery_images = (galleryResult.rows.map(row => row.image_url) || [])
+      .map((url) => buildPublicUrlWithBase(baseUrl, normalizeUploadUrl(url)));
 
     res.json({
       success: true,
@@ -1245,9 +1444,22 @@ const updateProduct = async (req, res) => {
     });
   } catch (error) {
     console.error('Update product error:', error);
+    const isDev = process.env.NODE_ENV !== 'production';
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorDetails = error && typeof error === 'object'
+      ? { code: error.code, errno: error.errno, sqlMessage: error.sqlMessage, sqlState: error.sqlState }
+      : {};
+
+    if (isDev) {
+      console.error('Update product error details:', {
+        message: errorMessage,
+        ...errorDetails
+      });
+    }
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Internal server error',
+      ...(isDev ? { error: errorMessage, details: errorDetails } : {})
     });
   }
 };
@@ -1347,7 +1559,7 @@ const createProductVariant = async (req, res) => {
     const result = await query(`
       INSERT INTO product_variants (
         product_id, name, weight, price, stock_quantity, is_available, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, datetime(\'now\'), datetime(\'now\'))
+      ) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
     `, [id, name, weight, price, stock_quantity, is_available]);
 
     res.status(201).json({
@@ -1402,7 +1614,7 @@ const updateProductVariant = async (req, res) => {
       });
     }
 
-    updates.push('updated_at = datetime(\'now\')');
+    updates.push('updated_at = NOW()');
     values.push(variantId);
 
     const queryText = `
@@ -1514,7 +1726,7 @@ const getTopProducts = async (req, res) => {
     const productIds = result.rows.map(p => p.id);
     
     // Fetch products with their categories, subcategories, variants, and gallery images
-    const products = productIds.length > 0 ? await getProductsWithCategories(productIds) : [];
+    const products = productIds.length > 0 ? await getProductsWithCategories(productIds, getBaseUrl(req)) : [];
 
     res.json({
       success: true,
@@ -1555,7 +1767,7 @@ const toggleTopProduct = async (req, res) => {
 
     // Update the product
     await query(
-      'UPDATE products SET is_top_product = ?, updated_at = datetime(\'now\') WHERE id = ? ',
+      'UPDATE products SET is_top_product = ?, updated_at = NOW() WHERE id = ? ',
       [newStatus, id]
     );
 
@@ -1677,7 +1889,7 @@ const getBestsellers = async (req, res) => {
     }
 
     // Use getProductsWithCategories to get full product data with variants, ratings, etc.
-    const products = await getProductsWithCategories(productIds);
+    const products = await getProductsWithCategories(productIds, getBaseUrl(req));
 
     res.json({
       success: true,
@@ -1718,7 +1930,7 @@ const toggleBestseller = async (req, res) => {
 
     // Update the product
     await query(
-      'UPDATE products SET is_bestseller = ?, updated_at = datetime(\'now\') WHERE id = ? ',
+      'UPDATE products SET is_bestseller = ?, updated_at = NOW() WHERE id = ? ',
       [newStatus, id]
     );
 
@@ -1836,7 +2048,7 @@ const toggleFeatured = async (req, res) => {
 
     // Update the product
     await query(
-      'UPDATE products SET is_featured = ?, updated_at = datetime(\'now\') WHERE id = ? ',
+      'UPDATE products SET is_featured = ?, updated_at = NOW() WHERE id = ? ',
       [newStatus, id]
     );
 
@@ -1954,7 +2166,7 @@ const toggleActive = async (req, res) => {
 
     // Update the product
     await query(
-      'UPDATE products SET is_active = ?, updated_at = datetime(\'now\') WHERE id = ? ',
+      'UPDATE products SET is_active = ?, updated_at = NOW() WHERE id = ? ',
       [newStatus, id]
     );
 
@@ -2011,8 +2223,20 @@ const toggleActive = async (req, res) => {
 
 // Search products by query
 const searchProducts = async (req, res) => {
+  const { q, page = 1, limit = 20, sort_by = 'created_at', sort_order = 'DESC' } = req.query;
+  const allowedSortColumns = new Set([
+    'created_at',
+    'updated_at',
+    'name',
+    'base_price',
+    'discounted_price',
+    'rating',
+    'order_index'
+  ]);
+  const safeSortBy = allowedSortColumns.has(sort_by) ? sort_by : 'created_at';
+  const safeSortOrder = String(sort_order).toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
   try {
-    const { q, page = 1, limit = 20, sort_by = 'created_at', sort_order = 'DESC' } = req.query;
 
     if (!q) {
       return res.status(400).json({
@@ -2248,7 +2472,7 @@ const searchProducts = async (req, res) => {
         SELECT DISTINCT p.id
         FROM products p
         WHERE p.is_active = 1 AND (${whereClause})
-        ORDER BY p.${sort_by} ${sort_order}
+        ORDER BY p.${safeSortBy} ${safeSortOrder}
         LIMIT ? OFFSET ?
       `;
       productIdsParams = [...queryParams, limit, offset];
@@ -2286,7 +2510,7 @@ const searchProducts = async (req, res) => {
           (${relevanceCases}) as relevance_score
         FROM products p
         WHERE p.is_active = 1 AND (${whereClause})
-        ORDER BY relevance_score DESC, p.${sort_by} ${sort_order}
+        ORDER BY relevance_score DESC, p.${safeSortBy} ${safeSortOrder}
         LIMIT ? OFFSET ?
       `;
       productIdsParams = [...queryParams, ...relevanceParams, limit, offset];
@@ -2332,7 +2556,7 @@ const searchProducts = async (req, res) => {
            LIMIT 1) as subcategory_name
         FROM products p
         WHERE p.id IN (${placeholders})
-        ORDER BY p.${sort_by} ${sort_order}
+        ORDER BY p.${safeSortBy} ${safeSortOrder}
       `;
     } else {
       // For text searches, maintain relevance order
@@ -2385,10 +2609,72 @@ const searchProducts = async (req, res) => {
     });
   } catch (error) {
     console.error('Search products error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
+    try {
+      const trimmedQuery = (q || '').trim();
+      if (!trimmedQuery) {
+        return res.status(400).json({
+          success: false,
+          message: 'Search query is required'
+        });
+      }
+
+      const pageNum = parseInt(page, 10) || 1;
+      const limitNum = parseInt(limit, 10) || 20;
+      const offset = (pageNum - 1) * limitNum;
+      const fallbackTerm = `%${trimmedQuery}%`;
+
+      const fallbackQuery = `
+        SELECT 
+          p.*,
+          (SELECT c.name FROM product_categories pc 
+           JOIN categories c ON pc.category_id = c.id 
+           WHERE pc.product_id = p.id 
+           ORDER BY pc.is_primary DESC, pc.display_order ASC 
+           LIMIT 1) as category_name,
+          (SELECT sc.name FROM product_subcategories psc 
+           JOIN subcategories sc ON psc.subcategory_id = sc.id 
+           WHERE psc.product_id = p.id 
+           ORDER BY psc.is_primary DESC, psc.display_order ASC 
+           LIMIT 1) as subcategory_name
+        FROM products p
+        WHERE p.is_active = 1 AND (p.name LIKE ? OR p.description LIKE ?)
+        ORDER BY p.${safeSortBy} ${safeSortOrder}
+        LIMIT ? OFFSET ?
+      `;
+
+      const countQuery = `
+        SELECT COUNT(DISTINCT p.id) as total
+        FROM products p
+        WHERE p.is_active = 1 AND (p.name LIKE ? OR p.description LIKE ?)
+      `;
+
+      const [productsResult, countResult] = await Promise.all([
+        query(fallbackQuery, [fallbackTerm, fallbackTerm, limitNum, offset]),
+        query(countQuery, [fallbackTerm, fallbackTerm])
+      ]);
+
+      const total = countResult.rows[0]?.total || 0;
+      const totalPages = Math.ceil(total / limitNum);
+
+      return res.json({
+        success: true,
+        data: {
+          products: productsResult.rows,
+          pagination: {
+            currentPage: pageNum,
+            totalPages,
+            totalItems: total,
+            itemsPerPage: limitNum
+          }
+        }
+      });
+    } catch (fallbackError) {
+      console.error('Search fallback error:', fallbackError);
+      return res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
   }
 };
 
@@ -2668,7 +2954,14 @@ const searchProductsByOccasionAndFlavor = async (req, res) => {
       });
     }
 
-    const offset = (page - 1) * limit;
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 20;
+    const safeLimit = Math.max(1, Math.min(limitNum, 100));
+    const offset = (pageNum - 1) * safeLimit;
+
+    const allowedSortFields = ['name', 'base_price', 'created_at', 'updated_at'];
+    const sortField = allowedSortFields.includes(sort_by) ? sort_by : 'created_at';
+    const sortDirection = sort_order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
     const searchQuery = `
       SELECT 
@@ -2687,8 +2980,8 @@ const searchProductsByOccasionAndFlavor = async (req, res) => {
           p.description LIKE ? OR
           p.description LIKE ?
         )
-      ORDER BY p.${sort_by} ${sort_order}
-      LIMIT ? OFFSET ?
+      ORDER BY p.${sortField} ${sortDirection}
+      LIMIT ${safeLimit} OFFSET ${offset}
     `;
 
     const countQuery = `
@@ -2711,7 +3004,7 @@ const searchProductsByOccasionAndFlavor = async (req, res) => {
     const flavorTerm = `%${flavor}%`;
 
     const [productsResult, countResult] = await Promise.all([
-      query(searchQuery, [occasionTerm, flavorTerm, occasionTerm, flavorTerm, occasionTerm, flavorTerm, limit, offset]),
+      query(searchQuery, [occasionTerm, flavorTerm, occasionTerm, flavorTerm, occasionTerm, flavorTerm]),
       query(countQuery, [occasionTerm, flavorTerm, occasionTerm, flavorTerm, occasionTerm, flavorTerm])
     ]);
 
@@ -2723,10 +3016,10 @@ const searchProductsByOccasionAndFlavor = async (req, res) => {
       data: {
         products: productsResult.rows,
         pagination: {
-          currentPage: parseInt(page),
+          currentPage: pageNum,
           totalPages,
           totalItems: total,
-          itemsPerPage: parseInt(limit)
+          itemsPerPage: safeLimit
         }
       }
     });
@@ -2779,7 +3072,7 @@ const addProductToCategories = async (req, res) => {
     await assignProductToCategories(id, category_ids, primary_category_id);
 
     // Fetch updated product
-    const product = await getProductWithCategories(id);
+    const product = await getProductWithCategories(id, getBaseUrl(req));
 
     res.json({
       success: true,
@@ -2813,7 +3106,7 @@ const removeProductFromCategoryController = async (req, res) => {
     await query('DELETE FROM product_categories WHERE product_id = ? AND category_id = ?', [id, categoryId]);
 
     // Fetch updated product
-    const product = await getProductWithCategories(id);
+    const product = await getProductWithCategories(id, getBaseUrl(req));
 
     res.json({
       success: true,
@@ -2868,7 +3161,7 @@ const setPrimaryCategoryController = async (req, res) => {
     await setPrimaryCategory(id, category_id);
 
     // Fetch updated product
-    const product = await getProductWithCategories(id);
+    const product = await getProductWithCategories(id, getBaseUrl(req));
 
     res.json({
       success: true,
@@ -2924,7 +3217,7 @@ const addProductToSubcategories = async (req, res) => {
     await assignProductToSubcategories(id, subcategory_ids, primary_subcategory_id);
 
     // Fetch updated product
-    const product = await getProductWithCategories(id);
+    const product = await getProductWithCategories(id, getBaseUrl(req));
 
     res.json({
       success: true,
@@ -2958,7 +3251,7 @@ const removeProductFromSubcategoryController = async (req, res) => {
     await query('DELETE FROM product_subcategories WHERE product_id = ? AND subcategory_id = ?', [id, subcategoryId]);
 
     // Fetch updated product
-    const product = await getProductWithCategories(id);
+    const product = await getProductWithCategories(id, getBaseUrl(req));
 
     res.json({
       success: true,
@@ -3013,7 +3306,7 @@ const setPrimarySubcategoryController = async (req, res) => {
     await setPrimarySubcategory(id, subcategory_id);
 
     // Fetch updated product
-    const product = await getProductWithCategories(id);
+    const product = await getProductWithCategories(id, getBaseUrl(req));
 
     res.json({
       success: true,
@@ -3089,11 +3382,12 @@ const createReview = async (req, res) => {
     // Insert review images if provided
     if (images && images.length > 0) {
       for (let i = 0; i < images.length; i++) {
+        const normalizedImageUrl = normalizeUploadUrl(images[i]);
         const insertImageQuery = `
           INSERT INTO product_review_images (review_id, image_url, display_order)
           VALUES (?, ?, ?)
         `;
-        await query(insertImageQuery, [reviewId, images[i], i + 1]);
+        await query(insertImageQuery, [reviewId, normalizedImageUrl, i + 1]);
       }
     }
 
@@ -3475,7 +3769,8 @@ module.exports = {
       }
 
       if (image_url) {
-        await query('INSERT INTO product_review_images (review_id, image_url, display_order) VALUES (?, ?, 1)', [reviewId, image_url]);
+        const normalizedImageUrl = normalizeUploadUrl(image_url);
+        await query('INSERT INTO product_review_images (review_id, image_url, display_order) VALUES (?, ?, 1)', [reviewId, normalizedImageUrl]);
       }
 
       return res.status(201).json({ success: true, message: 'Review submitted. Pending approval.', data: { review_id: reviewId } });

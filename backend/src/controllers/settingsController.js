@@ -4,7 +4,7 @@ const { clearFreeDeliveryThresholdCache } = require('../utils/deliverySettingsCa
 // Get all settings
 const getSettings = async (req, res) => {
   try {
-    const result = await query('SELECT * FROM settings ORDER BY key');
+    const result = await query('SELECT * FROM settings ORDER BY `key`');
 
     // Convert array to object for easier access
     const settings = {};
@@ -37,7 +37,7 @@ const getSetting = async (req, res) => {
     const { key } = req.params;
 
     const result = await query(
-      'SELECT * FROM settings WHERE key = ?',
+      'SELECT * FROM settings WHERE `key` = ?',
       [key]
     );
 
@@ -71,20 +71,20 @@ const updateSettings = async (req, res) => {
     for (const [key, value] of Object.entries(settingsData)) {
       // Check if setting exists
       const existingSetting = await query(
-        'SELECT id FROM settings WHERE key = ?',
+        'SELECT id FROM settings WHERE `key` = ?',
         [key]
       );
 
       if (existingSetting.rows.length > 0) {
         // Update existing setting
         await query(
-          'UPDATE settings SET value = ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?',
+          'UPDATE settings SET value = ?, updated_at = CURRENT_TIMESTAMP WHERE `key` = ?',
           [JSON.stringify(value), key]
         );
       } else {
         // Create new setting
         await query(
-          'INSERT INTO settings (key, value, created_at, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)',
+          'INSERT INTO settings (`key`, value, created_at, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)',
           [key, JSON.stringify(value)]
         );
       }
@@ -119,19 +119,19 @@ const updateSetting = async (req, res) => {
 
     // Check if setting exists
     const existingSetting = await query(
-      'SELECT id FROM settings WHERE key = ?',
+      'SELECT id FROM settings WHERE `key` = ?',
       [key]
     );
 
     if (existingSetting.rows.length > 0) {
       // Update existing setting
       await query(
-        'UPDATE settings SET value = ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?',
+        'UPDATE settings SET value = ?, updated_at = CURRENT_TIMESTAMP WHERE `key` = ?',
         [JSON.stringify(value), key]
       );
 
       const result = await query(
-        'SELECT * FROM settings WHERE key = ?',
+        'SELECT * FROM settings WHERE `key` = ?',
         [key]
       );
 
@@ -148,12 +148,12 @@ const updateSetting = async (req, res) => {
     } else {
       // Create new setting
       await query(
-        'INSERT INTO settings (key, value, created_at, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)',
+        'INSERT INTO settings (`key`, value, created_at, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)',
         [key, JSON.stringify(value)]
       );
 
       const result = await query(
-        'SELECT * FROM settings WHERE key = ?',
+        'SELECT * FROM settings WHERE `key` = ?',
         [key]
       );
 
@@ -184,7 +184,7 @@ const deleteSetting = async (req, res) => {
 
     // Check if setting exists
     const existingSetting = await query(
-      'SELECT id FROM settings WHERE key = ?',
+      'SELECT id FROM settings WHERE `key` = ?',
       [key]
     );
 
@@ -195,7 +195,7 @@ const deleteSetting = async (req, res) => {
       });
     }
 
-    await query('DELETE FROM settings WHERE key = ?', [key]);
+    await query('DELETE FROM settings WHERE `key` = ?', [key]);
 
     res.json({
       success: true,

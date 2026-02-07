@@ -10,6 +10,7 @@ interface FileUploadProps {
   maxFiles?: number;
   className?: string;
   disabled?: boolean;
+  uploadType?: string;
 }
 
 export const ProductFileUpload: React.FC<FileUploadProps> = ({
@@ -20,7 +21,8 @@ export const ProductFileUpload: React.FC<FileUploadProps> = ({
   accept = 'image/*,video/*',
   maxFiles = 10,
   className = '',
-  disabled = false
+  disabled = false,
+  uploadType = 'products'
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -76,7 +78,7 @@ export const ProductFileUpload: React.FC<FileUploadProps> = ({
 
     try {
       const uploadPromises = filesToProcess.map(async (file, index) => {
-        const response = await uploadService.uploadSingle(file);
+        const response = await uploadService.uploadSingle(file, uploadType);
         setUploadProgress(((index + 1) / filesToProcess.length) * 100);
         return response.data?.url || '';
       });

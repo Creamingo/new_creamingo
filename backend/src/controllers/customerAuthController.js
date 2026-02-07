@@ -11,6 +11,41 @@ const generateToken = (customerId) => {
   );
 };
 
+// Check if customer email exists
+const checkEmail = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    const result = await query(
+      'SELECT id, name, is_active FROM customers WHERE email = ?',
+      [email]
+    );
+
+    const exists = result.rows.length > 0;
+    const customer = exists ? result.rows[0] : null;
+
+    res.json({
+      success: true,
+      data: {
+        exists,
+        customer: customer
+          ? {
+              id: customer.id,
+              name: customer.name,
+              is_active: customer.is_active
+            }
+          : null
+      }
+    });
+  } catch (error) {
+    console.error('Check email error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
 // Register new customer
 const register = async (req, res) => {
   try {
@@ -44,7 +79,7 @@ const register = async (req, res) => {
     // Create customer
     const result = await query(
       `INSERT INTO customers (name, email, password, phone, address, is_active, created_at, updated_at) 
-       VALUES (?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))`,
+       VALUES (?, ?, ?, ?, ?, 1, NOW(), NOW())`,
       [
         name,
         email,
@@ -165,7 +200,7 @@ const login = async (req, res) => {
 
     // Update last login
     await query(
-      'UPDATE customers SET last_login = datetime(\'now\') WHERE id = ?',
+      'UPDATE customers SET last_login = NOW() WHERE id = ?',
       [customer.id]
     );
 
@@ -294,7 +329,7 @@ const updateProfile = async (req, res) => {
       });
     }
 
-    updates.push('updated_at = datetime(\'now\')');
+    updates.push('updated_at = NOW()');
     values.push(customerId);
 
     const queryStr = `UPDATE customers SET ${updates.join(', ')} WHERE id = ?`;
@@ -382,7 +417,7 @@ const changePassword = async (req, res) => {
 
     // Update password
     await query(
-      'UPDATE customers SET password = ?, updated_at = datetime(\'now\') WHERE id = ?',
+      'UPDATE customers SET password = ?, updated_at = NOW() WHERE id = ?',
       [hashedNewPassword, customerId]
     );
 
@@ -418,6 +453,7 @@ const logout = async (req, res) => {
 };
 
 module.exports = {
+  checkEmail,
   register,
   login,
   getMe,

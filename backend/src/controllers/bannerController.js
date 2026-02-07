@@ -1,4 +1,9 @@
 const { query } = require('../config/db');
+const { mapUploadFields, normalizeUploadUrl } = require('../utils/urlHelpers');
+
+const mapBanner = (req, banner) => (
+  mapUploadFields(req, banner, ['image_url'])
+);
 
 // Get all banners
 const getBanners = async (req, res) => {
@@ -34,7 +39,7 @@ const getBanners = async (req, res) => {
 
     res.json({
       success: true,
-      data: { banners: result.rows }
+      data: { banners: result.rows.map((banner) => mapBanner(req, banner)) }
     });
   } catch (error) {
     console.error('Get banners error:', error);
@@ -75,7 +80,7 @@ const getBanner = async (req, res) => {
 
     res.json({
       success: true,
-      data: { banner: result.rows[0] }
+      data: { banner: mapBanner(req, result.rows[0]) }
     });
   } catch (error) {
     console.error('Get banner error:', error);
@@ -98,6 +103,7 @@ const createBanner = async (req, res) => {
       is_active = true, 
       order_index = 0 
     } = req.body;
+    const normalizedImageUrl = normalizeUploadUrl(image_url);
 
     // Validate required fields
     if (!title || !image_url) {
@@ -109,8 +115,8 @@ const createBanner = async (req, res) => {
 
     const result = await query(`
       INSERT INTO banners (title, subtitle, button_text, button_url, image_url, is_active, order_index, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-    `, [title, subtitle, button_text, button_url, image_url, is_active ? 1 : 0, order_index]);
+      VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    `, [title, subtitle, button_text, button_url, normalizedImageUrl, is_active ? 1 : 0, order_index]);
 
     const bannerId = result.lastID;
 
@@ -131,7 +137,7 @@ const createBanner = async (req, res) => {
       WHERE id = ?
     `, [bannerId]);
 
-    const banner = bannerResult.rows[0];
+    const banner = mapBanner(req, bannerResult.rows[0]);
 
     res.status(201).json({
       success: true,
@@ -151,7 +157,10 @@ const createBanner = async (req, res) => {
 const updateBanner = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const updateData = { ...req.body };
+    if (updateData.image_url) {
+      updateData.image_url = normalizeUploadUrl(updateData.image_url);
+    }
 
     // Check if banner exists
     const existingBanner = await query(
@@ -189,7 +198,7 @@ const updateBanner = async (req, res) => {
       });
     }
 
-    updates.push('updated_at = datetime(\'now\')');
+    updates.push('updated_at = NOW()');
     values.push(id);
 
     const queryText = `
@@ -217,7 +226,7 @@ const updateBanner = async (req, res) => {
       WHERE id = ?
     `, [id]);
 
-    const banner = bannerResult.rows[0];
+    const banner = mapBanner(req, bannerResult.rows[0]);
 
     res.json({
       success: true,
@@ -288,7 +297,7 @@ const toggleBannerStatus = async (req, res) => {
     const newStatus = currentStatus ? 0 : 1;
 
     await query(
-      'UPDATE banners SET is_active = ?, updated_at = datetime(\'now\') WHERE id = ?',
+      'UPDATE banners SET is_active = ?, updated_at = NOW() WHERE id = ?',
       [newStatus, id]
     );
 
@@ -309,7 +318,7 @@ const toggleBannerStatus = async (req, res) => {
       WHERE id = ?
     `, [id]);
 
-    const banner = bannerResult.rows[0];
+    const banner = mapBanner(req, bannerResult.rows[0]);
 
     res.json({
       success: true,
@@ -341,7 +350,7 @@ const updateBannerOrder = async (req, res) => {
     for (const banner of banners) {
       if (banner.id && banner.order_index !== undefined) {
         await query(
-          'UPDATE banners SET order_index = ?, updated_at = datetime(\'now\') WHERE id = ?',
+          'UPDATE banners SET order_index = ?, updated_at = NOW() WHERE id = ?',
           [banner.order_index, banner.id]
         );
       }
@@ -413,7 +422,7 @@ const getBannerAnalytics = async (req, res) => {
         `SELECT COUNT(*) as total_views
          FROM banner_analytics
          WHERE banner_id = ? AND event_type = 'view'
-         AND created_at >= datetime('now', '-' || ? || ' days')`,
+         AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)`,
         [id, period]
       );
     } catch (error) {
@@ -428,7 +437,7 @@ const getBannerAnalytics = async (req, res) => {
         `SELECT COUNT(*) as total_clicks
          FROM banner_analytics
          WHERE banner_id = ? AND event_type = 'click'
-         AND created_at >= datetime('now', '-' || ? || ' days')`,
+         AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)`,
         [id, period]
       );
     } catch (error) {
@@ -444,7 +453,7 @@ const getBannerAnalytics = async (req, res) => {
                 COALESCE(SUM(revenue), 0) as total_revenue
          FROM banner_analytics
          WHERE banner_id = ? AND event_type = 'conversion'
-         AND created_at >= datetime('now', '-' || ? || ' days')`,
+         AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)`,
         [id, period]
       );
     } catch (error) {
@@ -477,7 +486,7 @@ const getBannerAnalytics = async (req, res) => {
           SUM(CASE WHEN event_type = 'conversion' THEN 1 ELSE 0 END) as conversions,
           COALESCE(SUM(CASE WHEN event_type = 'conversion' THEN revenue ELSE 0 END), 0) as revenue
          FROM banner_analytics
-         WHERE banner_id = ? AND created_at >= datetime('now', '-' || ? || ' days')
+         WHERE banner_id = ? AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
          GROUP BY DATE(created_at)
          ORDER BY date ASC`,
         [id, period]
@@ -553,7 +562,7 @@ const trackBannerView = async (req, res) => {
     // Insert view event
     await query(
       `INSERT INTO banner_analytics (banner_id, event_type, customer_id, ip_address, user_agent, referrer_url, created_at)
-       VALUES (?, 'view', ?, ?, ?, ?, datetime('now'))`,
+       VALUES (?, 'view', ?, ?, ?, ?, NOW())`,
       [id, customer_id || null, ip_address, user_agent, referrer_url]
     );
 
@@ -596,7 +605,7 @@ const trackBannerClick = async (req, res) => {
     // Insert click event
     await query(
       `INSERT INTO banner_analytics (banner_id, event_type, customer_id, ip_address, user_agent, referrer_url, created_at)
-       VALUES (?, 'click', ?, ?, ?, ?, datetime('now'))`,
+       VALUES (?, 'click', ?, ?, ?, ?, NOW())`,
       [id, customer_id || null, ip_address, user_agent, referrer_url]
     );
 
@@ -642,7 +651,7 @@ const trackBannerConversion = async (req, res) => {
     // Insert conversion event
     await query(
       `INSERT INTO banner_analytics (banner_id, event_type, customer_id, ip_address, user_agent, referrer_url, revenue, created_at)
-       VALUES (?, 'conversion', ?, ?, ?, ?, ?, datetime('now'))`,
+       VALUES (?, 'conversion', ?, ?, ?, ?, ?, NOW())`,
       [id, customer_id || null, ip_address, user_agent, referrer_url, revenue || 0]
     );
 

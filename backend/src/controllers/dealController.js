@@ -719,7 +719,7 @@ const updateDealPerformanceCache = async (dealId) => {
             total_views = ?, total_clicks = ?, total_adds = ?, total_redemptions = ?,
             total_revenue = ?, conversion_rate = ?, click_through_rate = ?,
             add_to_cart_rate = ?, redemption_rate = ?, avg_cart_value = ?,
-            unique_customers = ?, last_updated = datetime('now')
+            unique_customers = ?, last_updated = NOW()
           WHERE deal_id = ?
         `, [
           totalViews, totalClicks, totalAdds, totalRedemptions,
@@ -732,7 +732,7 @@ const updateDealPerformanceCache = async (dealId) => {
             deal_id, total_views, total_clicks, total_adds, total_redemptions,
             total_revenue, conversion_rate, click_through_rate, add_to_cart_rate,
             redemption_rate, avg_cart_value, unique_customers, last_updated
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         `, [
           dealId, totalViews, totalClicks, totalAdds, totalRedemptions,
           totalRevenue, conversionRate, clickThroughRate, addToCartRate,

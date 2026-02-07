@@ -132,7 +132,7 @@ const revealScratchCard = async (req, res) => {
     // Update scratch card status to revealed
     const updateResult = await query(
       `UPDATE scratch_cards 
-      SET status = 'revealed', revealed_at = datetime('now'), updated_at = datetime('now')
+      SET status = 'revealed', revealed_at = NOW(), updated_at = NOW()
       WHERE id = ?`,
       [scratchCardId]
     );
@@ -192,7 +192,7 @@ const autoCreditScratchCardsForOrder = async (orderId) => {
         if (currentStatus === 'pending') {
           await query(
             `UPDATE scratch_cards 
-            SET status = 'revealed', revealed_at = datetime('now'), updated_at = datetime('now')
+            SET status = 'revealed', revealed_at = NOW(), updated_at = NOW()
             WHERE id = ?`,
             [card.id]
           );
@@ -219,7 +219,7 @@ const autoCreditScratchCardsForOrder = async (orderId) => {
         // Update scratch card status to credited
         await query(
           `UPDATE scratch_cards 
-          SET status = 'credited', credited_at = datetime('now'), updated_at = datetime('now')
+          SET status = 'credited', credited_at = NOW(), updated_at = NOW()
           WHERE id = ?`,
           [card.id]
         );
@@ -228,7 +228,7 @@ const autoCreditScratchCardsForOrder = async (orderId) => {
         await query(
           `INSERT INTO wallet_transactions 
           (customer_id, type, amount, order_id, description, status, transaction_type, created_at, updated_at)
-          VALUES (?, 'credit', ?, ?, ?, 'completed', 'order_cashback', datetime('now'), datetime('now'))`,
+          VALUES (?, 'credit', ?, ?, ?, 'completed', 'order_cashback', NOW(), NOW())`,
           [customerId, amount, orderId, `Cashback (Order ${orderNum})`]
         );
 
@@ -352,7 +352,7 @@ const creditScratchCard = async (req, res) => {
     // Update scratch card status and credit wallet
     await query(
       `UPDATE scratch_cards 
-      SET status = 'credited', credited_at = datetime('now'), updated_at = datetime('now')
+      SET status = 'credited', credited_at = NOW(), updated_at = NOW()
       WHERE id = ?`,
       [scratchCardId]
     );
@@ -368,7 +368,7 @@ const creditScratchCard = async (req, res) => {
     await query(
       `INSERT INTO wallet_transactions 
       (customer_id, type, amount, order_id, description, status, transaction_type, created_at, updated_at)
-      VALUES (?, 'credit', ?, ?, ?, 'completed', 'order_cashback', datetime('now'), datetime('now'))`,
+      VALUES (?, 'credit', ?, ?, ?, 'completed', 'order_cashback', NOW(), NOW())`,
       [customerId, amount, card.order_id, `Cashback (Order ${orderNum})`]
     );
 
@@ -447,7 +447,7 @@ const createScratchCardForOrder = async (orderId, customerId, orderTotal) => {
     const result = await query(
       `INSERT INTO scratch_cards 
       (customer_id, order_id, amount, status, created_at, updated_at)
-      VALUES (?, ?, ?, 'pending', datetime('now'), datetime('now'))`,
+      VALUES (?, ?, ?, 'pending', NOW(), NOW())`,
       [customerId, orderId, finalAmount]
     );
 

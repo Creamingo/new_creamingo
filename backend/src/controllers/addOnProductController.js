@@ -1,4 +1,10 @@
 const { query } = require('../config/db');
+const { applyUploadUrl, normalizeUploadUrl } = require('../utils/urlHelpers');
+
+const mapAddOnProduct = (req, product) => ({
+  ...product,
+  image_url: applyUploadUrl(req, product.image_url)
+});
 
 // Get all add-on products with category info
 const getAllAddOnProducts = async (req, res) => {
@@ -25,7 +31,7 @@ const getAllAddOnProducts = async (req, res) => {
     res.status(200).json({
       success: true,
       data: {
-        products: result.rows
+        products: result.rows.map((product) => mapAddOnProduct(req, product))
       }
     });
   } catch (error) {
@@ -53,7 +59,7 @@ const getAddOnProductsByCategory = async (req, res) => {
     res.status(200).json({
       success: true,
       data: {
-        products: result.rows
+        products: result.rows.map((product) => mapAddOnProduct(req, product))
       }
     });
   } catch (error) {
@@ -87,7 +93,7 @@ const getAddOnProductById = async (req, res) => {
     res.status(200).json({
       success: true,
       data: {
-        product: result.rows[0]
+        product: mapAddOnProduct(req, result.rows[0])
       }
     });
   } catch (error) {
@@ -103,6 +109,7 @@ const getAddOnProductById = async (req, res) => {
 const createAddOnProduct = async (req, res) => {
   try {
     const { category_id, name, description, price, discount_percentage, discounted_price, image_url, display_order } = req.body;
+    const normalizedImageUrl = normalizeUploadUrl(image_url);
 
     if (!category_id || !name || !price) {
       return res.status(400).json({
@@ -140,19 +147,19 @@ const createAddOnProduct = async (req, res) => {
     const result = await query(`
       INSERT INTO add_on_products (category_id, name, description, price, discount_percentage, discounted_price, image_url, display_order) 
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [category_id, name, description, price, discount_percentage || 0, discounted_price || price, image_url, display_order || 0]);
+    `, [category_id, name, description, price, discount_percentage || 0, discounted_price || price, normalizedImageUrl, display_order || 0]);
 
     const newProduct = await query(`
       SELECT p.*, c.name as category_name 
       FROM add_on_products p 
       JOIN add_on_categories c ON p.category_id = c.id 
       WHERE p.id = ?
-    `, [result.insertId]);
+    `, [result.lastID || result.insertId]);
 
     res.status(201).json({
       success: true,
       data: {
-        product: newProduct.rows[0]
+        product: mapAddOnProduct(req, newProduct.rows[0])
       }
     });
   } catch (error) {
@@ -169,6 +176,7 @@ const updateAddOnProduct = async (req, res) => {
   try {
     const { id } = req.params;
     const { category_id, name, description, price, discount_percentage, discounted_price, image_url, display_order, is_active } = req.body;
+    const normalizedImageUrl = normalizeUploadUrl(image_url);
 
     // Check if product exists
     const existingProduct = await query(`
@@ -214,6 +222,15 @@ const updateAddOnProduct = async (req, res) => {
       }
     }
 
+    const safeCategoryId = typeof category_id === 'undefined' ? null : category_id;
+    const safeDescription = typeof description === 'undefined' ? null : description;
+    const safePrice = typeof price === 'undefined' ? null : price;
+    const safeDiscountPercentage = typeof discount_percentage === 'undefined' ? null : discount_percentage;
+    const safeDiscountedPrice = typeof discounted_price === 'undefined' ? null : discounted_price;
+    const safeImageUrl = typeof normalizedImageUrl === 'undefined' ? null : normalizedImageUrl;
+    const safeDisplayOrder = typeof display_order === 'undefined' ? null : display_order;
+    const safeIsActive = typeof is_active === 'undefined' ? null : is_active;
+
     await query(`
       UPDATE add_on_products 
       SET category_id = COALESCE(?, category_id),
@@ -227,7 +244,7 @@ const updateAddOnProduct = async (req, res) => {
           is_active = COALESCE(?, is_active),
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `, [category_id, name, description, price, discount_percentage, discounted_price, image_url, display_order, is_active, id]);
+    `, [safeCategoryId, name, safeDescription, safePrice, safeDiscountPercentage, safeDiscountedPrice, safeImageUrl, safeDisplayOrder, safeIsActive, id]);
 
     const updatedProduct = await query(`
       SELECT p.*, c.name as category_name 
@@ -239,7 +256,7 @@ const updateAddOnProduct = async (req, res) => {
     res.status(200).json({
       success: true,
       data: {
-        product: updatedProduct.rows[0]
+        product: mapAddOnProduct(req, updatedProduct.rows[0])
       }
     });
   } catch (error) {

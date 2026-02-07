@@ -30,6 +30,11 @@ if (process.env.NODE_ENV === 'development') {
     
     return hasWebSocketKeyword && hasLocalhostPort;
   };
+
+  const isFindDomNodeWarning = (message: string): boolean => {
+    const msg = message?.toLowerCase() || '';
+    return msg.includes('finddomnode is deprecated') && msg.includes('reactquill');
+  };
   
   console.error = (...args: any[]) => {
     const errorMessage = args[0]?.toString() || '';
@@ -40,6 +45,7 @@ if (process.env.NODE_ENV === 'development') {
     if (
       isWebSocketError(errorMessage, errorSource) ||
       isWebSocketError(fullMessage) ||
+      isFindDomNodeWarning(fullMessage) ||
       errorSource.includes('WebSocketClient.js')
     ) {
       // Silently ignore these harmless HMR connection errors
@@ -57,6 +63,7 @@ if (process.env.NODE_ENV === 'development') {
     if (
       isWebSocketError(warnMessage, warnSource) ||
       isWebSocketError(fullMessage) ||
+      isFindDomNodeWarning(fullMessage) ||
       warnSource.includes('WebSocketClient.js')
     ) {
       // Silently ignore these harmless HMR connection warnings

@@ -3,10 +3,12 @@ import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 // import { categories as staticCategories } from './cakeData'
 import occasionCategoryAPI from '../api/occasionCategories'
+import { resolveImageUrl } from '../utils/imageUrl'
 
 export default function CakesForOccasion() {
   const router = useRouter()
   const [categories, setCategories] = useState([])
+  const [categoryTitle, setCategoryTitle] = useState('Cakes for Any Occasion')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -18,8 +20,8 @@ export default function CakesForOccasion() {
         if (response.success && response.data && response.data.subcategories) {
           // Transform database categories to use actual database images
           const transformedCategories = response.data.subcategories.map(category => {
-            // Use image_url directly from API (already full URLs)
-            const imageUrl = category.image_url;
+            // Resolve image URL (handles /uploads paths)
+            const imageUrl = resolveImageUrl(category.image_url);
             
             return {
               name: category.name,
@@ -27,6 +29,10 @@ export default function CakesForOccasion() {
             }
           })
           setCategories(transformedCategories)
+          const title = response.data.category?.name
+          if (title) {
+            setCategoryTitle(title)
+          }
         } else {
           setError('Failed to fetch occasion categories')
         }
@@ -123,6 +129,20 @@ export default function CakesForOccasion() {
     )
   }
 
+  const getTitleParts = (title) => {
+    const cleanTitle = (title || '').trim()
+    if (!cleanTitle) {
+      return { first: '', rest: '' }
+    }
+    const parts = cleanTitle.split(' ')
+    return {
+      first: parts[0],
+      rest: parts.slice(1).join(' ')
+    }
+  }
+
+  const { first: titleFirst, rest: titleRest } = getTitleParts(categoryTitle)
+
   return (
     <section className="bg-gradient-to-b from-white to-pink-50 dark:from-gray-900 dark:to-gray-800 pt-12 pb-8 lg:pt-12 lg:pb-12">
       <div className="w-full px-4 sm:px-6 lg:px-8">
@@ -136,8 +156,10 @@ export default function CakesForOccasion() {
                 <div className="w-12 h-px bg-gradient-to-r from-pink-400 to-purple-400 dark:from-pink-500 dark:to-purple-500"></div>
                </div>
               <h2 className="font-poppins text-2xl lg:text-3xl font-bold mb-1 leading-tight tracking-tight">
-              <span className="text-purple-700 dark:text-purple-400">Cakes</span>
-              <span className="text-pink-600 dark:text-pink-400"> for Any Occasion</span>
+                <span className="text-purple-700 dark:text-purple-400">{titleFirst}</span>
+                {titleRest && (
+                  <span className="text-pink-600 dark:text-pink-400"> {titleRest}</span>
+                )}
                </h2>
               <p className="font-inter text-gray-600 dark:text-gray-300 text-sm lg:text-lg max-w-2xl mx-auto leading-relaxed font-normal">
               Your celebrations, our speedy cake delivery

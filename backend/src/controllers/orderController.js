@@ -39,6 +39,25 @@ const generateNextOrderNumber = async () => {
   }
 };
 
+const normalizeDateTime = (value) => {
+  if (!value) {
+    return '';
+  }
+
+  if (typeof value === 'string') {
+    if (value.includes('T') || value.includes('Z')) {
+      return value;
+    }
+    return value.replace(' ', 'T') + 'Z';
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return String(value);
+};
+
 // Get all orders with pagination and filters
 const getOrders = async (req, res) => {
   try {
@@ -54,40 +73,40 @@ const getOrders = async (req, res) => {
       sort_order = 'DESC'
     } = req.query;
 
-    const offset = (page - 1) * limit;
+    // Convert to integers for MySQL
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
+    const offset = (pageNum - 1) * limitNum;
     let whereConditions = [];
     let queryParams = [];
-    let paramCount = 1;
 
-    // Build WHERE conditions
+    // Build WHERE conditions - use MySQL placeholders (?)
     if (status) {
-      whereConditions.push(`o.status = $${paramCount}`);
+      whereConditions.push(`o.status = ?`);
       queryParams.push(status);
-      paramCount++;
     }
 
     if (customer_id) {
-      whereConditions.push(`o.customer_id = $${paramCount}`);
-      queryParams.push(customer_id);
-      paramCount++;
+      const customerIdInt = parseInt(customer_id, 10);
+      if (!isNaN(customerIdInt)) {
+        whereConditions.push(`o.customer_id = ?`);
+        queryParams.push(customerIdInt);
+      }
     }
 
     if (date_from) {
-      whereConditions.push(`o.created_at >= $${paramCount}`);
+      whereConditions.push(`o.created_at >= ?`);
       queryParams.push(date_from);
-      paramCount++;
     }
 
     if (date_to) {
-      whereConditions.push(`o.created_at <= $${paramCount}`);
+      whereConditions.push(`o.created_at <= ?`);
       queryParams.push(date_to);
-      paramCount++;
     }
 
     if (delivery_date) {
-      whereConditions.push(`o.delivery_date = $${paramCount}`);
+      whereConditions.push(`o.delivery_date = ?`);
       queryParams.push(delivery_date);
-      paramCount++;
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
@@ -109,6 +128,10 @@ const getOrders = async (req, res) => {
     const total = parseInt(countResult.rows[0].total);
 
     // Get orders (SQLite compatible)
+    // Ensure limit and offset are integers (inline to avoid MySQL stmt issues)
+    const finalLimit = Number.isInteger(limitNum) && limitNum > 0 ? limitNum : 10;
+    const finalOffset = Number.isInteger(offset) && offset >= 0 ? offset : 0;
+
     const ordersQuery = `
       SELECT 
         o.id,
@@ -128,8 +151,8 @@ const getOrders = async (req, res) => {
         c.email as customer_email,
         c.phone as customer_phone,
         COALESCE(
-          json_group_array(
-            json_object(
+          JSON_ARRAYAGG(
+            JSON_OBJECT(
               'id', oi.id,
               'product_id', oi.product_id,
               'variant_id', oi.variant_id,
@@ -148,7 +171,7 @@ const getOrders = async (req, res) => {
               'cake_message', oi.cake_message
             )
           ), 
-          '[]'
+          JSON_ARRAY()
         ) as items
       FROM orders o
       LEFT JOIN customers c ON o.customer_id = c.id
@@ -160,16 +183,46 @@ const getOrders = async (req, res) => {
       ${whereClause}
       GROUP BY o.id, c.name, c.email, c.phone
       ORDER BY o.${sortField} ${sortDirection}
-      LIMIT $${paramCount} OFFSET $${paramCount + 1}
+      LIMIT ${finalLimit} OFFSET ${finalOffset}
     `;
 
-    queryParams.push(limit, offset);
+    const ordersQueryParams = [...queryParams];
+    
+    // Debug logging
+    const placeholderCount = (ordersQuery.match(/\?/g) || []).length;
+    console.error('🔍 [DEBUG] Executing orders query:', {
+      placeholderCount,
+      paramCount: ordersQueryParams.length,
+      params: ordersQueryParams,
+      whereClause: whereClause || 'NO WHERE CLAUSE',
+      whereConditionsCount: whereConditions.length,
+      reqQuery: { page, limit, status, customer_id, date_from, date_to, delivery_date }
+    });
+    
+    if (placeholderCount !== ordersQueryParams.length) {
+      console.error('❌ Orders parameter mismatch:', {
+        placeholderCount,
+        paramCount: ordersQueryParams.length,
+        query: ordersQuery.substring(0, 500),
+        params: ordersQueryParams
+      });
+      return res.status(500).json({
+        success: false,
+        message: 'Internal server error: Parameter count mismatch',
+        error: `Expected ${placeholderCount} placeholders but got ${ordersQueryParams.length} parameters`
+      });
+    }
     
     let ordersResult;
     try {
-      ordersResult = await query(ordersQuery, queryParams);
+      ordersResult = await query(ordersQuery, ordersQueryParams);
     } catch (error) {
       // If query fails, try with fallback (handles missing display_name column or other issues)
+      console.error('❌ Initial orders query failed:', error);
+      console.error('❌ Query:', ordersQuery.substring(0, 1000));
+      console.error('❌ Params:', ordersQueryParams);
+      console.error('❌ Placeholder count:', placeholderCount);
+      console.error('❌ Param count:', ordersQueryParams.length);
       console.error('Initial query failed, trying fallback query:', error.message);
       
       // First, try without display_name (for pre-migration databases)
@@ -192,8 +245,8 @@ const getOrders = async (req, res) => {
           c.email as customer_email,
           c.phone as customer_phone,
           COALESCE(
-            json_group_array(
-                json_object(
+            JSON_ARRAYAGG(
+                JSON_OBJECT(
                   'id', oi.id,
                   'product_id', oi.product_id,
                   'variant_id', oi.variant_id,
@@ -224,11 +277,14 @@ const getOrders = async (req, res) => {
         ${whereClause}
         GROUP BY o.id, c.name, c.email, c.phone
         ORDER BY o.${sortField} ${sortDirection}
-        LIMIT $${paramCount} OFFSET $${paramCount + 1}
+        LIMIT ${finalLimit} OFFSET ${finalOffset}
       `;
       
+      const finalLimit = Number.isInteger(limitNum) && limitNum > 0 ? limitNum : 10;
+      const finalOffset = Number.isInteger(offset) && offset >= 0 ? offset : 0;
+      const fallbackQueryParams = [...queryParams];
       try {
-        ordersResult = await query(fallbackQuery, queryParams);
+        ordersResult = await query(fallbackQuery, fallbackQueryParams);
       } catch (fallbackError) {
         // If that also fails, try without subcategory joins
         console.error('Fallback query also failed, trying without subcategory joins:', fallbackError.message);
@@ -251,8 +307,8 @@ const getOrders = async (req, res) => {
             c.email as customer_email,
             c.phone as customer_phone,
             COALESCE(
-              json_group_array(
-                json_object(
+              JSON_ARRAYAGG(
+                JSON_OBJECT(
                   'id', oi.id,
                   'product_id', oi.product_id,
                   'variant_id', oi.variant_id,
@@ -269,7 +325,7 @@ const getOrders = async (req, res) => {
                   'cake_message', oi.cake_message
                 )
               ), 
-              '[]'
+              JSON_ARRAY()
             ) as items
           FROM orders o
           LEFT JOIN customers c ON o.customer_id = c.id
@@ -279,9 +335,10 @@ const getOrders = async (req, res) => {
           ${whereClause}
           GROUP BY o.id, c.name, c.email, c.phone
           ORDER BY o.${sortField} ${sortDirection}
-          LIMIT $${paramCount} OFFSET $${paramCount + 1}
+          LIMIT ${finalLimit} OFFSET ${finalOffset}
         `;
-        ordersResult = await query(fallbackQuery, queryParams);
+        const fallbackQueryParams2 = [...queryParams];
+        ordersResult = await query(fallbackQuery, fallbackQueryParams2);
       }
     }
 
@@ -334,14 +391,9 @@ const getOrders = async (req, res) => {
         deliveryDate: order.delivery_date || '',
         deliveryTime: order.delivery_time || '',
         notes: order.special_instructions || '',
-        // Convert SQLite datetime to ISO format with UTC timezone indicator for frontend
-        // SQLite format: "2025-11-02 14:20:00" -> ISO UTC: "2025-11-02T14:20:00Z"
-        createdAt: order.created_at ? (order.created_at.includes('T') || order.created_at.includes('Z') 
-          ? order.created_at 
-          : order.created_at.replace(' ', 'T') + 'Z') : '',
-        updatedAt: order.updated_at ? (order.updated_at.includes('T') || order.updated_at.includes('Z')
-          ? order.updated_at
-          : order.updated_at.replace(' ', 'T') + 'Z') : ''
+        // Normalize datetime for frontend (string or Date object).
+        createdAt: normalizeDateTime(order.created_at),
+        updatedAt: normalizeDateTime(order.updated_at)
       };
     });
 
@@ -389,8 +441,8 @@ const getOrder = async (req, res) => {
         c.phone as customer_phone,
         c.address as customer_address,
         COALESCE(
-          json_group_array(
-            json_object(
+          JSON_ARRAYAGG(
+            JSON_OBJECT(
               'id', oi.id,
               'product_id', oi.product_id,
               'variant_id', oi.variant_id,
@@ -409,7 +461,7 @@ const getOrder = async (req, res) => {
               'cake_message', oi.cake_message
             )
           ), 
-          '[]'
+          JSON_ARRAY()
         ) as items
       FROM orders o
       LEFT JOIN customers c ON o.customer_id = c.id
@@ -473,12 +525,8 @@ const getOrder = async (req, res) => {
       deliveryDate: order.delivery_date || '',
       deliveryTime: order.delivery_time || '',
       notes: order.special_instructions || '',
-      createdAt: order.created_at ? (order.created_at.includes('T') || order.created_at.includes('Z') 
-        ? order.created_at 
-        : order.created_at.replace(' ', 'T') + 'Z') : '',
-      updatedAt: order.updated_at ? (order.updated_at.includes('T') || order.updated_at.includes('Z')
-        ? order.updated_at
-        : order.updated_at.replace(' ', 'T') + 'Z') : ''
+      createdAt: normalizeDateTime(order.created_at),
+      updatedAt: normalizeDateTime(order.updated_at)
     };
 
     res.json({
@@ -676,7 +724,7 @@ const createOrder = async (req, res) => {
         item_count, combo_count, wallet_amount_used, total_item_count,
         subtotal_after_promo, subtotal_after_wallet, final_delivery_charge,
         deal_items_total, regular_items_total, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `, [
       orderNumber, customer_id, 'pending', totalAmount, JSON.stringify(delivery_address),
       delivery_date, delivery_time, special_instructions, payment_method, 'pending',
@@ -728,7 +776,7 @@ const createOrder = async (req, res) => {
     if (actualWalletUsage > 0) {
       // Record wallet usage
       await query(
-        'INSERT INTO wallet_usage (order_id, customer_id, amount_used, created_at) VALUES (?, ?, ?, datetime("now"))',
+        'INSERT INTO wallet_usage (order_id, customer_id, amount_used, created_at) VALUES (?, ?, ?, NOW())',
         [orderId, customer_id, actualWalletUsage]
       );
 
@@ -736,7 +784,7 @@ const createOrder = async (req, res) => {
       await query(
         `INSERT INTO wallet_transactions 
         (customer_id, type, amount, order_id, description, status, transaction_type, created_at, updated_at)
-        VALUES (?, 'debit', ?, ?, ?, 'completed', 'order_redemption', datetime('now'), datetime('now'))`,
+        VALUES (?, 'debit', ?, ?, ?, 'completed', 'order_redemption', NOW(), NOW())`,
         [customer_id, actualWalletUsage, orderId, `Used on Order #${orderNumber}`]
       );
 
@@ -796,7 +844,7 @@ const createOrder = async (req, res) => {
           INSERT INTO order_items (
             order_id, product_id, variant_id, quantity, price, total, 
             flavor_id, tier, cake_message, display_name, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         `, [
           order.id, item.product_id, item.variant_id, item.quantity, item.price, 
           item.price * item.quantity, 
@@ -814,7 +862,7 @@ const createOrder = async (req, res) => {
             INSERT INTO order_items (
               order_id, product_id, variant_id, quantity, price, total, 
               flavor_id, tier, cake_message, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
           `, [
             order.id, item.product_id, item.variant_id, item.quantity, item.price, 
             item.price * item.quantity, 
@@ -887,7 +935,7 @@ const createOrder = async (req, res) => {
             INSERT INTO combo_selections (
               order_item_id, add_on_product_id, quantity, 
               price, discounted_price, total, product_name, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
           `, [
             orderItemId, 
             combo.add_on_product_id || combo.product_id, 
@@ -904,7 +952,7 @@ const createOrder = async (req, res) => {
       if (item.variant_id) {
         await query(`
           UPDATE product_variants 
-          SET stock_quantity = stock_quantity - ?, updated_at = datetime('now')
+          SET stock_quantity = stock_quantity - ?, updated_at = NOW()
           WHERE id = ?
         `, [item.quantity, item.variant_id]);
       }
@@ -1014,7 +1062,7 @@ const updateOrder = async (req, res) => {
       });
     }
 
-    updates.push('updated_at = datetime(\'now\')');
+    updates.push('updated_at = NOW()');
     values.push(id);
 
     const queryText = `
@@ -1089,8 +1137,8 @@ const updateOrder = async (req, res) => {
         c.email as customer_email,
         c.phone as customer_phone,
         COALESCE(
-          json_group_array(
-            json_object(
+          JSON_ARRAYAGG(
+            JSON_OBJECT(
               'id', oi.id,
               'product_id', oi.product_id,
               'variant_id', oi.variant_id,
@@ -1103,7 +1151,7 @@ const updateOrder = async (req, res) => {
               'product_base_weight', p.base_weight
             )
           ), 
-          '[]'
+          JSON_ARRAY()
         ) as items
       FROM orders o
       LEFT JOIN customers c ON o.customer_id = c.id
@@ -1179,13 +1227,8 @@ const updateOrder = async (req, res) => {
       deliveryDate: order.delivery_date || '',
       deliveryTime: order.delivery_time || '',
       notes: order.special_instructions || '',
-      // Convert SQLite datetime to ISO format with UTC timezone indicator for frontend
-      createdAt: order.created_at ? (order.created_at.includes('T') || order.created_at.includes('Z') 
-        ? order.created_at 
-        : order.created_at.replace(' ', 'T') + 'Z') : '',
-      updatedAt: order.updated_at ? (order.updated_at.includes('T') || order.updated_at.includes('Z')
-        ? order.updated_at
-        : order.updated_at.replace(' ', 'T') + 'Z') : ''
+      createdAt: normalizeDateTime(order.created_at),
+      updatedAt: normalizeDateTime(order.updated_at)
     };
 
     res.json({
@@ -1254,7 +1297,7 @@ const getOrderStats = async (req, res) => {
   try {
     const { period = '30' } = req.query; // days
 
-    // SQLite compatible date calculation
+    // MySQL compatible date calculation
     const daysAgo = parseInt(period) || 30;
     const statsQuery = `
       SELECT 
@@ -1269,10 +1312,10 @@ const getOrderStats = async (req, res) => {
         COALESCE(SUM(total_amount), 0) as total_revenue,
         COALESCE(AVG(total_amount), 0) as average_order_value
       FROM orders 
-      WHERE created_at >= datetime('now', '-${daysAgo} days')
+      WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
     `;
 
-    const result = await query(statsQuery);
+    const result = await query(statsQuery, [daysAgo]);
 
     res.json({
       success: true,
@@ -1280,9 +1323,11 @@ const getOrderStats = async (req, res) => {
     });
   } catch (error) {
     console.error('Get order stats error:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -1299,7 +1344,10 @@ const getMyOrders = async (req, res) => {
       sort_order = 'DESC'
     } = req.query;
 
-    const offset = (page - 1) * limit;
+    // Convert to integers for MySQL
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
+    const offset = (pageNum - 1) * limitNum;
     let whereConditions = ['o.customer_id = ?'];
     let queryParams = [customerId];
     let paramCount = 2;
@@ -1328,6 +1376,10 @@ const getMyOrders = async (req, res) => {
     const total = parseInt(countResult.rows[0].total);
 
     // Get orders with items
+    // Ensure limit and offset are integers (inline to avoid MySQL stmt issues)
+    const finalLimit3 = Number.isInteger(limitNum) && limitNum > 0 ? limitNum : 10;
+    const finalOffset3 = Number.isInteger(offset) && offset >= 0 ? offset : 0;
+
     const ordersQuery = `
       SELECT 
         o.id,
@@ -1346,11 +1398,11 @@ const getMyOrders = async (req, res) => {
       FROM orders o
       ${whereClause}
       ORDER BY o.${sortField} ${sortDirection}
-      LIMIT ? OFFSET ?
+      LIMIT ${finalLimit3} OFFSET ${finalOffset3}
     `;
 
-    queryParams.push(limit, offset);
-    const ordersResult = await query(ordersQuery, queryParams);
+    const ordersQueryParams = [...queryParams];
+    const ordersResult = await query(ordersQuery, ordersQueryParams);
 
     // Helper function to check if an item is a deal product
     const isDealProduct = async (productId, price) => {

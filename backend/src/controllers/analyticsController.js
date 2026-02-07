@@ -26,7 +26,7 @@ const getReferralAnalytics = async (req, res) => {
         COUNT(*) as count,
         COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_count
       FROM referrals
-      WHERE referrer_id = ? AND created_at >= datetime('now', '-' || ? || ' days')
+      WHERE referrer_id = ? AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
       GROUP BY DATE(created_at)
       ORDER BY date ASC`,
       [customerId, period]
@@ -39,18 +39,18 @@ const getReferralAnalytics = async (req, res) => {
         COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed,
         ROUND(COUNT(CASE WHEN status = 'completed' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0), 2) as conversion_rate
       FROM referrals
-      WHERE referrer_id = ? AND created_at >= datetime('now', '-' || ? || ' days')`,
+      WHERE referrer_id = ? AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)`,
       [customerId, period]
     );
 
     // Get earnings by month
     const earningsByMonth = await query(
       `SELECT 
-        strftime('%Y-%m', referrer_bonus_credited_at) as month,
+        DATE_FORMAT(referrer_bonus_credited_at, '%Y-%m') as month,
         SUM(referrer_bonus_amount) as earnings
       FROM referrals
       WHERE referrer_id = ? AND referrer_bonus_credited = 1 AND referrer_bonus_credited_at IS NOT NULL
-      GROUP BY strftime('%Y-%m', referrer_bonus_credited_at)
+      GROUP BY DATE_FORMAT(referrer_bonus_credited_at, '%Y-%m')
       ORDER BY month DESC
       LIMIT 12`,
       [customerId]
@@ -77,7 +77,7 @@ const getReferralAnalytics = async (req, res) => {
     // Get average time to conversion
     const avgConversionTime = await query(
       `SELECT 
-        AVG(julianday(updated_at) - julianday(created_at)) as avg_days
+        AVG(TIMESTAMPDIFF(DAY, created_at, updated_at)) as avg_days
       FROM referrals
       WHERE referrer_id = ? AND status = 'completed' AND first_order_id IS NOT NULL`,
       [customerId]

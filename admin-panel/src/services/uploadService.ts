@@ -33,24 +33,26 @@ class UploadService {
   /**
    * Upload single file
    */
-  async uploadSingle(file: File): Promise<UploadResponse> {
+  async uploadSingle(file: File, type?: string): Promise<UploadResponse> {
     const formData = new FormData();
     formData.append('image', file);
 
-    const response = await apiClient.uploadFile('/upload/single', file);
+    const typeQuery = type ? `?type=${encodeURIComponent(type)}` : '';
+    const response = await apiClient.uploadFile(`/upload/single${typeQuery}`, file);
     return response as UploadResponse;
   }
 
   /**
    * Upload multiple files
    */
-  async uploadMultiple(files: File[]): Promise<MultipleUploadResponse> {
+  async uploadMultiple(files: File[], type?: string): Promise<MultipleUploadResponse> {
     const formData = new FormData();
     files.forEach((file, index) => {
       formData.append('images', file);
     });
 
-    const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/upload/multiple`, {
+    const typeQuery = type ? `?type=${encodeURIComponent(type)}` : '';
+    const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/upload/multiple${typeQuery}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`,

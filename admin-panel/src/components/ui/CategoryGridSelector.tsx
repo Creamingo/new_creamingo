@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Star, Check } from 'lucide-react';
 import { Category, Subcategory } from '../../types';
 import { cn } from '../../utils/cn';
+import { resolveImageUrl } from '../../utils/imageUrl';
 
 export interface CategoryGridSelectorProps {
   categories: Category[];
@@ -182,7 +183,7 @@ export const CategoryGridSelector: React.FC<CategoryGridSelectorProps> = ({
                   <div className="w-full h-10 mb-1 rounded-md overflow-hidden bg-gray-100 dark:bg-gray-700">
                     {category.image_url ? (
                       <img
-                        src={category.image_url}
+                        src={resolveImageUrl(category.image_url)}
                         alt={category.name}
                         className="w-full h-full object-cover"
                         onError={(e) => {

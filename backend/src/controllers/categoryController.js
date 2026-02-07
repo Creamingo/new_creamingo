@@ -1,4 +1,48 @@
 const { query } = require('../config/db');
+const { mapUploadFields, applyUploadUrl, normalizeUploadUrl } = require('../utils/urlHelpers');
+
+const mapSubcategory = (req, subcategory) => (
+  mapUploadFields(req, subcategory, ['image_url'])
+);
+
+const mapCategory = (req, category) => {
+  if (!category) return category;
+
+  const mapped = mapUploadFields(req, category, ['image_url', 'icon_image_url']);
+
+  if (mapped.subcategories) {
+    let subcategories = mapped.subcategories;
+    if (typeof subcategories === 'string') {
+      try {
+        subcategories = JSON.parse(subcategories);
+      } catch (error) {
+        subcategories = [];
+      }
+    }
+    if (Array.isArray(subcategories)) {
+      mapped.subcategories = subcategories.map((sub) => mapSubcategory(req, sub));
+    }
+  }
+
+  return mapped;
+};
+
+const categorySlugToIdMap = {
+  'cakes-by-flavor': 19,
+  'cakes-for-occasion': 20,
+  'kids-cake-collection': 21,
+  'kids-favorite': 21,
+  'crowd-favorite-cakes': 22,
+  'crowd-favorite': 22,
+  'love-relationship-cakes': 23,
+  'love-relationship': 23,
+  'milestone-year-cakes': 24,
+  'milestone-year': 24,
+  'small-treats-desserts': 26,
+  'small-treats': 26,
+  'flowers': 27,
+  'sweets-dry-fruits': 28
+};
 
 // Get all categories
 const getCategories = async (req, res) => {
@@ -29,8 +73,8 @@ const getCategories = async (req, res) => {
         c.updated_at,
         ${include_subcategories === 'true' ? `
           COALESCE(
-            json_group_array(
-              json_object(
+            JSON_ARRAYAGG(
+              JSON_OBJECT(
                 'id', sc.id,
                 'name', sc.name,
                 'description', sc.description,
@@ -40,7 +84,7 @@ const getCategories = async (req, res) => {
                 'created_at', sc.created_at
               )
             ), 
-            '[]'
+            JSON_ARRAY()
           ) as subcategories
         ` : 'NULL as subcategories'}
       FROM categories c
@@ -51,10 +95,11 @@ const getCategories = async (req, res) => {
     `;
 
     const result = await query(categoriesQuery, queryParams);
+    const categories = result.rows.map((category) => mapCategory(req, category));
 
     res.json({
       success: true,
-      data: { categories: result.rows }
+      data: { categories }
     });
   } catch (error) {
     console.error('Get categories error:', error);
@@ -74,8 +119,8 @@ const getCategory = async (req, res) => {
       SELECT 
         c.*,
         COALESCE(
-          json_group_array(
-            json_object(
+          JSON_ARRAYAGG(
+            JSON_OBJECT(
               'id', sc.id,
               'name', sc.name,
               'description', sc.description,
@@ -85,7 +130,7 @@ const getCategory = async (req, res) => {
               'created_at', sc.created_at
             )
           ), 
-          '[]'
+          JSON_ARRAY()
         ) as subcategories
       FROM categories c
       LEFT JOIN subcategories sc ON c.id = sc.category_id
@@ -102,7 +147,7 @@ const getCategory = async (req, res) => {
 
     res.json({
       success: true,
-      data: { category: result.rows[0] }
+      data: { category: mapCategory(req, result.rows[0]) }
     });
   } catch (error) {
     console.error('Get category error:', error);
@@ -117,12 +162,14 @@ const getCategory = async (req, res) => {
 const createCategory = async (req, res) => {
   try {
     const { name, description, image_url, icon, icon_image_url, display_name, is_active = true, order_index = 0 } = req.body;
+    const normalizedImageUrl = normalizeUploadUrl(image_url);
+    const normalizedIconImageUrl = normalizeUploadUrl(icon_image_url);
     
 
     const result = await query(`
       INSERT INTO categories (name, description, image_url, icon, icon_image_url, display_name, is_active, order_index, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-    `, [name, description, image_url, icon, icon_image_url, display_name, is_active, order_index]);
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    `, [name, description, normalizedImageUrl, icon, normalizedIconImageUrl, display_name, is_active, order_index]);
 
     const categoryId = result.lastID;
 
@@ -131,7 +178,7 @@ const createCategory = async (req, res) => {
       SELECT * FROM categories WHERE id = ?
     `, [categoryId]);
 
-    const category = categoryResult.rows[0];
+    const category = mapCategory(req, categoryResult.rows[0]);
 
     res.status(201).json({
       success: true,
@@ -151,7 +198,13 @@ const createCategory = async (req, res) => {
 const updateCategory = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const updateData = { ...req.body };
+    if (updateData.image_url) {
+      updateData.image_url = normalizeUploadUrl(updateData.image_url);
+    }
+    if (updateData.icon_image_url) {
+      updateData.icon_image_url = normalizeUploadUrl(updateData.icon_image_url);
+    }
     
 
     // Check if category exists
@@ -185,7 +238,7 @@ const updateCategory = async (req, res) => {
       });
     }
 
-    updates.push('updated_at = datetime(\'now\')');
+    updates.push('updated_at = NOW()');
     values.push(id);
 
     const queryText = `
@@ -201,7 +254,7 @@ const updateCategory = async (req, res) => {
       SELECT * FROM categories WHERE id = ?
     `, [id]);
 
-    const category = categoryResult.rows[0];
+    const category = mapCategory(req, categoryResult.rows[0]);
 
     res.json({
       success: true,
@@ -279,11 +332,19 @@ const deleteCategory = async (req, res) => {
 // Get cake flavor category with its subcategories
 const getCakeFlavorCategory = async (req, res) => {
   try {
-    // First, find the "Pick a Cake by Flavor" category
-    const categoryResult = await query(
-      'SELECT * FROM categories WHERE name = ? AND is_active = 1',
-      ['Pick a Cake by Flavor']
+    const categoryId = categorySlugToIdMap['cakes-by-flavor'];
+    let categoryResult = await query(
+      'SELECT * FROM categories WHERE id = ? AND is_active = 1',
+      [categoryId]
     );
+
+    if (!categoryResult.rows || categoryResult.rows.length === 0) {
+      // Fallback to legacy name lookup
+      categoryResult = await query(
+        'SELECT * FROM categories WHERE name = ? AND is_active = 1',
+        ['Pick a Cake by Flavor']
+      );
+    }
 
     if (!categoryResult.rows || categoryResult.rows.length === 0) {
       return res.status(404).json({
@@ -292,7 +353,7 @@ const getCakeFlavorCategory = async (req, res) => {
       });
     }
 
-    const category = categoryResult.rows[0];
+    const category = mapCategory(req, categoryResult.rows[0]);
 
     // Get all subcategories for this category
     const subcategoriesResult = await query(
@@ -300,7 +361,7 @@ const getCakeFlavorCategory = async (req, res) => {
       [category.id]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
 
     res.json({
       success: true,
@@ -322,11 +383,19 @@ const getCakeFlavorCategory = async (req, res) => {
 // Get occasion categories for "Cakes for Any Occasion" section
 const getOccasionCategories = async (req, res) => {
   try {
-    // First, find the "Cakes for Any Occasion" category
-    const occasionCategoryResult = await query(
-      'SELECT * FROM categories WHERE name = ? AND is_active = 1',
-      ['Cakes for Any Occasion']
+    const categoryId = categorySlugToIdMap['cakes-for-occasion'];
+    let occasionCategoryResult = await query(
+      'SELECT * FROM categories WHERE id = ? AND is_active = 1',
+      [categoryId]
     );
+
+    if (!occasionCategoryResult.rows || occasionCategoryResult.rows.length === 0) {
+      // Fallback to legacy name lookup
+      occasionCategoryResult = await query(
+        'SELECT * FROM categories WHERE name = ? AND is_active = 1',
+        ['Cakes for Any Occasion']
+      );
+    }
 
     if (!occasionCategoryResult.rows || occasionCategoryResult.rows.length === 0) {
       return res.status(404).json({
@@ -335,7 +404,7 @@ const getOccasionCategories = async (req, res) => {
       });
     }
 
-    const occasionCategory = occasionCategoryResult.rows[0];
+    const occasionCategory = mapCategory(req, occasionCategoryResult.rows[0]);
 
     // Get all subcategories for this category - similar to milestone-year-cakes
     const subcategoriesResult = await query(
@@ -343,7 +412,7 @@ const getOccasionCategories = async (req, res) => {
       [occasionCategory.id]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
 
     res.json({
       success: true,
@@ -365,11 +434,19 @@ const getOccasionCategories = async (req, res) => {
 // Get Kid's Cake Collection category with its subcategories
 const getKidsCakeCollection = async (req, res) => {
   try {
-    // First, find the "Kid's Cake Collection" category
-    const kidsCategoryResult = await query(
-      'SELECT * FROM categories WHERE name = ? AND is_active = 1',
-      ['Kid\'s Cake Collection']
+    const categoryId = categorySlugToIdMap['kids-cake-collection'];
+    let kidsCategoryResult = await query(
+      'SELECT * FROM categories WHERE id = ? AND is_active = 1',
+      [categoryId]
     );
+
+    if (!kidsCategoryResult.rows || kidsCategoryResult.rows.length === 0) {
+      // Fallback to legacy name lookup
+      kidsCategoryResult = await query(
+        'SELECT * FROM categories WHERE name = ? AND is_active = 1',
+        ['Kid\'s Cake Collection']
+      );
+    }
 
     if (!kidsCategoryResult.rows || kidsCategoryResult.rows.length === 0) {
       return res.status(404).json({
@@ -378,7 +455,7 @@ const getKidsCakeCollection = async (req, res) => {
       });
     }
 
-    const kidsCategory = kidsCategoryResult.rows[0];
+    const kidsCategory = mapCategory(req, kidsCategoryResult.rows[0]);
 
     // Get all subcategories for this category
     const subcategoriesResult = await query(
@@ -386,7 +463,7 @@ const getKidsCakeCollection = async (req, res) => {
       [kidsCategory.id]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
 
     res.json({
       success: true,
@@ -408,11 +485,19 @@ const getKidsCakeCollection = async (req, res) => {
 // Get Crowd-Favorite Cakes category with its subcategories
 const getCrowdFavoriteCakes = async (req, res) => {
   try {
-    // First, find the "Crowd-Favorite Cakes" category
-    const crowdFavoriteResult = await query(
-      'SELECT * FROM categories WHERE name = ? AND is_active = 1',
-      ['Crowd-Favorite Cakes']
+    const categoryId = categorySlugToIdMap['crowd-favorite-cakes'];
+    let crowdFavoriteResult = await query(
+      'SELECT * FROM categories WHERE id = ? AND is_active = 1',
+      [categoryId]
     );
+
+    if (!crowdFavoriteResult.rows || crowdFavoriteResult.rows.length === 0) {
+      // Fallback to legacy name lookup
+      crowdFavoriteResult = await query(
+        'SELECT * FROM categories WHERE name = ? AND is_active = 1',
+        ['Crowd-Favorite Cakes']
+      );
+    }
 
     if (!crowdFavoriteResult.rows || crowdFavoriteResult.rows.length === 0) {
       return res.status(404).json({
@@ -421,7 +506,7 @@ const getCrowdFavoriteCakes = async (req, res) => {
       });
     }
 
-    const crowdFavoriteCategory = crowdFavoriteResult.rows[0];
+    const crowdFavoriteCategory = mapCategory(req, crowdFavoriteResult.rows[0]);
 
     // Get all subcategories for this category
     const subcategoriesResult = await query(
@@ -429,7 +514,7 @@ const getCrowdFavoriteCakes = async (req, res) => {
       [crowdFavoriteCategory.id]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
 
     res.json({
       success: true,
@@ -451,11 +536,19 @@ const getCrowdFavoriteCakes = async (req, res) => {
 // Get Love and Relationship Cakes category with its subcategories
 const getLoveAndRelationshipCakes = async (req, res) => {
   try {
-    // First, find the "Love and Relationship Cakes" category
-    const loveRelationshipResult = await query(
-      'SELECT * FROM categories WHERE name = ? AND is_active = 1',
-      ['Love and Relationship Cakes']
+    const categoryId = categorySlugToIdMap['love-relationship-cakes'];
+    let loveRelationshipResult = await query(
+      'SELECT * FROM categories WHERE id = ? AND is_active = 1',
+      [categoryId]
     );
+
+    if (!loveRelationshipResult.rows || loveRelationshipResult.rows.length === 0) {
+      // Fallback to legacy name lookup
+      loveRelationshipResult = await query(
+        'SELECT * FROM categories WHERE name = ? AND is_active = 1',
+        ['Love and Relationship Cakes']
+      );
+    }
 
     if (!loveRelationshipResult.rows || loveRelationshipResult.rows.length === 0) {
       return res.status(404).json({
@@ -464,7 +557,7 @@ const getLoveAndRelationshipCakes = async (req, res) => {
       });
     }
 
-    const loveRelationshipCategory = loveRelationshipResult.rows[0];
+    const loveRelationshipCategory = mapCategory(req, loveRelationshipResult.rows[0]);
 
     // Get all subcategories for this category
     const subcategoriesResult = await query(
@@ -472,7 +565,7 @@ const getLoveAndRelationshipCakes = async (req, res) => {
       [loveRelationshipCategory.id]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
 
     res.json({
       success: true,
@@ -494,11 +587,19 @@ const getLoveAndRelationshipCakes = async (req, res) => {
 // Get Cakes for Every Milestone Year category with its subcategories
 const getCakesForEveryMilestoneYear = async (req, res) => {
   try {
-    // First, find the "Cakes for Every Milestone Year" category
-    const milestoneResult = await query(
-      'SELECT * FROM categories WHERE name = ? AND is_active = 1',
-      ['Cakes for Every Milestone Year']
+    const categoryId = categorySlugToIdMap['milestone-year-cakes'];
+    let milestoneResult = await query(
+      'SELECT * FROM categories WHERE id = ? AND is_active = 1',
+      [categoryId]
     );
+
+    if (!milestoneResult.rows || milestoneResult.rows.length === 0) {
+      // Fallback to legacy name lookup
+      milestoneResult = await query(
+        'SELECT * FROM categories WHERE name = ? AND is_active = 1',
+        ['Cakes for Every Milestone Year']
+      );
+    }
 
     if (!milestoneResult.rows || milestoneResult.rows.length === 0) {
       return res.status(404).json({
@@ -507,7 +608,7 @@ const getCakesForEveryMilestoneYear = async (req, res) => {
       });
     }
 
-    const milestoneCategory = milestoneResult.rows[0];
+    const milestoneCategory = mapCategory(req, milestoneResult.rows[0]);
 
     // Get all subcategories for this category
     const subcategoriesResult = await query(
@@ -515,7 +616,7 @@ const getCakesForEveryMilestoneYear = async (req, res) => {
       [milestoneCategory.id]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
 
     res.json({
       success: true,
@@ -537,11 +638,19 @@ const getCakesForEveryMilestoneYear = async (req, res) => {
 // Get Flowers category with its subcategories
 const getFlowers = async (req, res) => {
   try {
-    // First, find the "Flowers" category
-    const flowersResult = await query(
-      'SELECT * FROM categories WHERE name = ? AND is_active = 1',
-      ['Flowers']
+    const categoryId = categorySlugToIdMap['flowers'];
+    let flowersResult = await query(
+      'SELECT * FROM categories WHERE id = ? AND is_active = 1',
+      [categoryId]
     );
+
+    if (!flowersResult.rows || flowersResult.rows.length === 0) {
+      // Fallback to legacy name lookup
+      flowersResult = await query(
+        'SELECT * FROM categories WHERE name = ? AND is_active = 1',
+        ['Flowers']
+      );
+    }
 
     if (!flowersResult.rows || flowersResult.rows.length === 0) {
       return res.status(404).json({
@@ -550,7 +659,7 @@ const getFlowers = async (req, res) => {
       });
     }
 
-    const flowersCategory = flowersResult.rows[0];
+    const flowersCategory = mapCategory(req, flowersResult.rows[0]);
 
     // Get all subcategories for this category
     const subcategoriesResult = await query(
@@ -558,7 +667,7 @@ const getFlowers = async (req, res) => {
       [flowersCategory.id]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
 
     res.json({
       success: true,
@@ -580,11 +689,19 @@ const getFlowers = async (req, res) => {
 // Get Sweets and Dry Fruits category with its subcategories
 const getSweetsAndDryFruits = async (req, res) => {
   try {
-    // First, find the "Sweets and Dry Fruits" category
-    const sweetsResult = await query(
-      'SELECT * FROM categories WHERE name = ? AND is_active = 1',
-      ['Sweets and Dry Fruits']
+    const categoryId = categorySlugToIdMap['sweets-dry-fruits'];
+    let sweetsResult = await query(
+      'SELECT * FROM categories WHERE id = ? AND is_active = 1',
+      [categoryId]
     );
+
+    if (!sweetsResult.rows || sweetsResult.rows.length === 0) {
+      // Fallback to legacy name lookup
+      sweetsResult = await query(
+        'SELECT * FROM categories WHERE name = ? AND is_active = 1',
+        ['Sweets and Dry Fruits']
+      );
+    }
 
     if (!sweetsResult.rows || sweetsResult.rows.length === 0) {
       return res.status(404).json({
@@ -593,7 +710,7 @@ const getSweetsAndDryFruits = async (req, res) => {
       });
     }
 
-    const sweetsCategory = sweetsResult.rows[0];
+    const sweetsCategory = mapCategory(req, sweetsResult.rows[0]);
 
     // Get all subcategories for this category
     const subcategoriesResult = await query(
@@ -601,7 +718,7 @@ const getSweetsAndDryFruits = async (req, res) => {
       [sweetsCategory.id]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
 
     res.json({
       success: true,
@@ -626,20 +743,8 @@ const getSubcategoriesByCategorySlug = async (req, res) => {
     const { categorySlug } = req.params;
 
     // Map slugs directly to category IDs
-    const slugToCategoryIdMap = {
-      'cakes-by-flavor': 19,
-      'cakes-for-occasion': 20,
-      'kids-favorite': 21,
-      'crowd-favorite': 22,
-      'love-relationship': 23,
-      'milestone-year': 24,
-      'small-treats': 26,
-      'flowers': 27,
-      'sweets-dry-fruits': 28
-    };
-
     // Get the category ID from the slug
-    const categoryId = slugToCategoryIdMap[categorySlug];
+    const categoryId = categorySlugToIdMap[categorySlug];
 
     if (!categoryId) {
       return res.status(404).json({
@@ -661,7 +766,7 @@ const getSubcategoriesByCategorySlug = async (req, res) => {
       });
     }
 
-    const category = categoryResult.rows[0];
+    const category = mapCategory(req, categoryResult.rows[0]);
 
     // Get all subcategories for this category
     const subcategoriesResult = await query(
@@ -669,7 +774,7 @@ const getSubcategoriesByCategorySlug = async (req, res) => {
       [categoryId]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
 
     res.json({
       success: true,
@@ -692,22 +797,12 @@ const getSubcategoriesByCategorySlug = async (req, res) => {
 const getSubcategoryBySlugs = async (req, res) => {
   try {
     const { categorySlug, subCategorySlug } = req.params;
+    
+    console.log('getSubcategoryBySlugs called with:', { categorySlug, subCategorySlug });
 
     // Map slugs directly to category IDs
-    const slugToCategoryIdMap = {
-      'cakes-by-flavor': 19,
-      'cakes-for-occasion': 20,
-      'kids-cake-collection': 21,
-      'crowd-favorite-cakes': 22,
-      'love-relationship-cakes': 23,
-      'milestone-year-cakes': 24,
-      'small-treats-desserts': 26,
-      'flowers': 27,
-      'sweets-dry-fruits': 28
-    };
-
     // Get the category ID from the slug
-    const categoryId = slugToCategoryIdMap[categorySlug];
+    const categoryId = categorySlugToIdMap[categorySlug];
 
     if (!categoryId) {
       return res.status(404).json({
@@ -729,7 +824,7 @@ const getSubcategoryBySlugs = async (req, res) => {
       });
     }
 
-    const category = categoryResult.rows[0];
+    const category = mapCategory(req, categoryResult.rows[0]);
 
     // Find the specific subcategory by matching the slug
     const subcategoriesResult = await query(
@@ -737,18 +832,35 @@ const getSubcategoryBySlugs = async (req, res) => {
       [categoryId]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
     
     // Find the subcategory that matches the slug
+    // First try to match using the slug column if it exists, otherwise generate from name
     const subcategory = subcategories.find(sub => {
-      const subSlug = sub.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and');
-      return subSlug === subCategorySlug;
+      // If slug column exists and is not null, use it
+      if (sub.slug && sub.slug.trim() !== '') {
+        return sub.slug.toLowerCase() === subCategorySlug.toLowerCase();
+      }
+      // Otherwise, generate slug from name
+      const subSlug = sub.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and').replace(/'/g, '');
+      return subSlug === subCategorySlug.toLowerCase();
     });
 
     if (!subcategory) {
+      // Return available subcategories for debugging
+      const availableSlugs = subcategories.map(sub => {
+        if (sub.slug && sub.slug.trim() !== '') {
+          return sub.slug;
+        }
+        return sub.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and').replace(/'/g, '');
+      });
+      
       return res.status(404).json({
         success: false,
-        message: 'Subcategory not found'
+        message: 'Subcategory not found',
+        requestedSlug: subCategorySlug,
+        availableSlugs: availableSlugs,
+        availableSubcategories: subcategories.map(sub => ({ id: sub.id, name: sub.name, slug: sub.slug }))
       });
     }
 
@@ -785,7 +897,7 @@ const updateCategoryOrder = async (req, res) => {
     for (const category of categories) {
       if (category.id && category.order_index !== undefined) {
         await query(
-          'UPDATE categories SET order_index = ?, updated_at = datetime(\'now\') WHERE id = ?',
+          'UPDATE categories SET order_index = ?, updated_at = NOW() WHERE id = ?',
           [category.order_index, category.id]
         );
       }
@@ -807,11 +919,19 @@ const updateCategoryOrder = async (req, res) => {
 // Get Small Treats Desserts category with its subcategories
 const getSmallTreatsDesserts = async (req, res) => {
   try {
-    // First, find the "Small Treats Desserts" category
-    const treatsResult = await query(
-      'SELECT * FROM categories WHERE name = ? AND is_active = 1',
-      ['Small Treats Desserts']
+    const categoryId = categorySlugToIdMap['small-treats-desserts'];
+    let treatsResult = await query(
+      'SELECT * FROM categories WHERE id = ? AND is_active = 1',
+      [categoryId]
     );
+
+    if (!treatsResult.rows || treatsResult.rows.length === 0) {
+      // Fallback to legacy name lookup
+      treatsResult = await query(
+        'SELECT * FROM categories WHERE name = ? AND is_active = 1',
+        ['Small Treats Desserts']
+      );
+    }
 
     if (!treatsResult.rows || treatsResult.rows.length === 0) {
       return res.status(404).json({
@@ -820,7 +940,7 @@ const getSmallTreatsDesserts = async (req, res) => {
       });
     }
 
-    const treatsCategory = treatsResult.rows[0];
+    const treatsCategory = mapCategory(req, treatsResult.rows[0]);
 
     // Get all subcategories for this category
     const subcategoriesResult = await query(
@@ -828,7 +948,7 @@ const getSmallTreatsDesserts = async (req, res) => {
       [treatsCategory.id]
     );
 
-    const subcategories = subcategoriesResult.rows || [];
+    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
 
     res.json({
       success: true,
@@ -870,7 +990,7 @@ const getAllMainCategories = async (req, res) => {
 
     res.json({
       success: true,
-      data: { categories: result.rows }
+      data: { categories: result.rows.map((category) => mapCategory(req, category)) }
     });
   } catch (error) {
     console.error('Get all main categories error:', error);

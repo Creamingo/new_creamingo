@@ -221,6 +221,10 @@ const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
                 'Refer now'
               )}
             </button>
+            <p className="mt-3 text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
+              Terms: Referral rewards apply after your friend completes their first order and are
+              subject to eligibility and limits.
+            </p>
           </div>
           <div className="hidden sm:block flex-shrink-0">
             <div className="relative w-24 h-24 sm:w-28 sm:h-28">
@@ -609,6 +613,15 @@ const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
             <span>When they complete their first order, you get ₹50 in your wallet!</span>
           </div>
         </div>
+      </div>
+
+      {/* Terms & Conditions */}
+      <div className="mt-6 pt-6 border-t border-pink-200 dark:border-pink-700">
+        <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Terms & Conditions</h4>
+        <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+          Referral rewards are credited after the referred friend completes their first order.
+          Eligibility rules, limits, and reward values may change at any time.
+        </p>
       </div>
 
       {/* Recent Referrals */}

@@ -266,11 +266,18 @@ class ProductService {
   /**
    * Format currency
    */
-  formatCurrency(amount: number | null | undefined, currencySymbol: string = '₹'): string {
-    if (amount === null || amount === undefined || isNaN(amount)) {
+  formatCurrency(amount: number | string | null | undefined, currencySymbol: string = '₹'): string {
+    if (amount === null || amount === undefined || amount === '') {
       return `${currencySymbol}0.00`;
     }
-    return `${currencySymbol}${amount.toFixed(2)}`;
+
+    const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+
+    if (Number.isNaN(numAmount)) {
+      return `${currencySymbol}0.00`;
+    }
+
+    return `${currencySymbol}${numAmount.toFixed(2)}`;
   }
 
   /**

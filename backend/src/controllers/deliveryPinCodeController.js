@@ -73,7 +73,9 @@ const checkPinCodeAvailability = async (req, res) => {
 const getDeliveryPinCodes = async (req, res) => {
   try {
     const { status, search, page = 1, limit = 10 } = req.query;
-    const offset = (page - 1) * limit;
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
+    const offset = (pageNum - 1) * limitNum;
 
     let sqlQuery = `
       SELECT 
@@ -104,8 +106,8 @@ const getDeliveryPinCodes = async (req, res) => {
     }
 
     // Add ordering and pagination
-    sqlQuery += ' ORDER BY order_index ASC, created_at DESC LIMIT ? OFFSET ?';
-    params.push(parseInt(limit), parseInt(offset));
+    // Inline limit/offset to avoid MySQL stmt issues
+    sqlQuery += ` ORDER BY order_index ASC, created_at DESC LIMIT ${limitNum} OFFSET ${offset}`;
 
     const result = await query(sqlQuery, params);
     const pinCodes = result.rows;
@@ -140,10 +142,10 @@ const getDeliveryPinCodes = async (req, res) => {
           createdAt: pc.created_at
         })),
         pagination: {
-          currentPage: parseInt(page),
-          totalPages: Math.ceil(total / limit),
+          currentPage: pageNum,
+          totalPages: Math.ceil(total / limitNum),
           totalItems: total,
-          itemsPerPage: parseInt(limit)
+          itemsPerPage: limitNum
         }
       }
     });

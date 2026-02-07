@@ -3,7 +3,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
-require('dotenv').config();
+// Load environment variables from root .env file
+require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
@@ -35,6 +36,8 @@ const scratchCardRoutes = require('./routes/scratchCardRoutes');
 const referralRoutes = require('./routes/referralRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const dealRoutes = require('./routes/dealRoutes');
+const schemaHealthRoutes = require('./routes/schemaHealthRoutes');
+const { runSchemaHealthCheck } = require('./controllers/schemaHealthController');
 
 // Import middleware
 const { errorHandler, notFound } = require('./middleware/errorHandler');
@@ -62,16 +65,52 @@ app.use(helmet({
 }));
 
 // CORS configuration
-const corsOptions = {
-  origin: [
-    process.env.CORS_ORIGIN || 'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:3002',
-    'http://localhost:3003'
-  ],
-  credentials: true,
-  optionsSuccessStatus: 200
+// Parse comma-separated origins from .env
+const parseOrigins = (originsString) => {
+  if (!originsString) {
+    // Default to localhost for development if not set
+    return process.env.NODE_ENV === 'production' 
+      ? [] 
+      : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'];
+  }
+  return originsString.split(',').map(origin => origin.trim()).filter(Boolean);
 };
+
+const allowedOrigins = parseOrigins(process.env.CORS_ORIGIN);
+const allowAllOrigins = allowedOrigins.length === 0;
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+
+    if (allowAllOrigins) {
+      return callback(null, true);
+    }
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`CORS: Blocked origin: ${origin}`);
+      console.warn(`Allowed origins: ${allowedOrigins.join(', ')}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Cache-Control', 'Pragma', 'Expires']
+};
+
+// Log CORS configuration on startup
+console.log(
+  '🌐 CORS configured for origins:',
+  allowAllOrigins ? 'All origins (CORS_ORIGIN not set)' : allowedOrigins.join(', ')
+);
+if (allowAllOrigins && process.env.NODE_ENV === 'production') {
+  console.warn('⚠️  CORS_ORIGIN is not set in production; all origins are allowed.');
+}
+
 app.use(cors(corsOptions));
 
 // Rate limiting - more lenient for development
@@ -113,12 +152,11 @@ app.use('/api/customer-auth', authLimiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Serve static files (uploads) with comprehensive CORS headers
-// Use UPLOAD_PATH environment variable for absolute path support (VPS-ready)
-const uploadDir = process.env.UPLOAD_PATH || path.join(__dirname, '../uploads');
-const staticUploadPath = path.isAbsolute(uploadDir) ? uploadDir : path.resolve(__dirname, '../', uploadDir);
+// Serve static files (gallery) with comprehensive CORS headers
+const { getGalleryRoot } = require('./utils/uploadPath');
+const staticGalleryPath = getGalleryRoot();
 
-app.use('/uploads', (req, res, next) => {
+app.use('/gallery', (req, res, next) => {
   // Set comprehensive CORS headers for static files
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -137,7 +175,7 @@ app.use('/uploads', (req, res, next) => {
   }
   
   next();
-}, express.static(staticUploadPath, {
+}, express.static(staticGalleryPath, {
   setHeaders: (res, path) => {
     // Additional headers for static files
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -148,6 +186,20 @@ app.use('/uploads', (req, res, next) => {
     res.removeHeader('Cross-Origin-Opener-Policy');
   }
 }));
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Creamingo API',
+    version: '1.0.0',
+    endpoints: {
+      health: '/health',
+      api: '/api'
+    },
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -226,6 +278,31 @@ app.use('/api/scratch-cards', scratchCardRoutes);
 app.use('/api/referrals', referralRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/deals', dealRoutes);
+app.use('/api/schema-health', schemaHealthRoutes);
+
+// Run schema diagnostics on startup
+setImmediate(async () => {
+  try {
+    const data = await runSchemaHealthCheck();
+    if (!data.ok) {
+      console.warn('⚠️  Schema health check failed. Missing tables/columns detected.');
+      Object.entries(data.tables).forEach(([tableName, info]) => {
+        if (!info.exists) {
+          console.warn(`- Missing table: ${tableName}`);
+          console.warn(`  Expected columns: ${info.missingColumns.join(', ')}`);
+          return;
+        }
+        if (info.missingColumns.length > 0) {
+          console.warn(`- Missing columns in ${tableName}: ${info.missingColumns.join(', ')}`);
+        }
+      });
+    } else {
+      console.log('✅ Schema health check passed.');
+    }
+  } catch (error) {
+    console.error('Schema health startup check failed:', error);
+  }
+});
 
 // 404 handler
 app.use(notFound);

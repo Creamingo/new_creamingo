@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Star, Heart, ChevronLeft, ChevronRight, Share2, Trophy, TrendingUp } from 'lucide-react';
 import { useWishlist } from '../../../../contexts/WishlistContext';
+import { resolveImageUrl } from '../../../../utils/imageUrl';
 
 const RelatedProducts = ({ products, currentProductId }) => {
   const { isInWishlist, toggleWishlist } = useWishlist();
@@ -55,7 +56,11 @@ const RelatedProducts = ({ products, currentProductId }) => {
   };
 
   const formatPrice = (price) => {
-    return `₹${price % 1 === 0 ? price.toFixed(0) : price.toFixed(2)}`;
+    const numericPrice = typeof price === 'number' ? price : Number(price);
+    if (!Number.isFinite(numericPrice)) {
+      return '₹0';
+    }
+    return `₹${numericPrice % 1 === 0 ? numericPrice.toFixed(0) : numericPrice.toFixed(2)}`;
   };
 
   // Check scroll position for mobile navigation
@@ -195,12 +200,14 @@ const RelatedProducts = ({ products, currentProductId }) => {
                 <div className="relative aspect-square overflow-hidden">
                   <Link href={`/product/${sanitizedProduct.slug}`} className="absolute inset-0">
                     <Image
-                      src={sanitizedProduct.image_url}
+                      src={resolveImageUrl(sanitizedProduct.image_url)}
                       alt={sanitizedProduct.name}
                       fill
                       sizes="(max-width: 1024px) 160px, 200px"
                       className="object-cover group-hover:scale-105 transition-transform duration-300"
-                      loading="lazy"
+                      loading={isFirstVisible ? 'eager' : 'lazy'}
+                      priority={isFirstVisible}
+                      unoptimized
                     />
                   </Link>
                   

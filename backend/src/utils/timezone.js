@@ -37,10 +37,19 @@ const getCurrentIST = () => {
  */
 const convertToIST = (dateString) => {
   if (!dateString) return null;
+
+  // MySQL driver can return Date objects
+  if (dateString instanceof Date) {
+    return dateString.toISOString();
+  }
   
   // If already in ISO format, return as is
-  if (dateString.includes('T') || dateString.includes('Z')) {
+  if (typeof dateString === 'string' && (dateString.includes('T') || dateString.includes('Z'))) {
     return dateString;
+  }
+  
+  if (typeof dateString !== 'string') {
+    return null;
   }
   
   // SQLite format: 'YYYY-MM-DD HH:MM:SS'

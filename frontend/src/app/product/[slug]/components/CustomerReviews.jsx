@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Star, ThumbsUp, MessageCircle, Camera, Send, Filter, SortAsc, ChevronDown, ChevronUp, X } from 'lucide-react';
 import Image from 'next/image';
 import productApi from '../../../../api/productApi';
+import { resolveImageUrl } from '../../../../utils/imageUrl';
 
 // Modern Category Rating Component - Always Visible Stars
 const CategorySelector = ({ selectedCategories, onCategoryToggle, categories, categoryRatings, onCategoryRatingChange, overallRating = 0 }) => {
@@ -676,12 +677,12 @@ const CustomerReviews = ({ productId }) => {
   return (
     <div id="customer-reviews" className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-amber-500 dark:border-amber-400 border border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-xl dark:shadow-black/30 scroll-mt-20 overflow-hidden transition-all duration-300 hover:shadow-xl dark:hover:shadow-2xl dark:hover:shadow-black/40 hover:border-amber-400 dark:hover:border-amber-300">
       {/* Header Section */}
-      <div className="p-3 sm:p-4 lg:p-5">
-        <div className="flex items-center gap-2 pb-3 border-b border-gray-200 dark:border-gray-700 mb-4">
+      <div className="p-3.5 sm:p-4 lg:p-5">
+        <div className="flex items-center gap-2 pb-2.5 border-b border-gray-200 dark:border-gray-700 mb-3.5">
           <div className="p-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/30">
             <Star className="w-4 h-4 text-amber-600 dark:text-amber-400 fill-amber-600 dark:fill-amber-400" />
           </div>
-          <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">Customer Reviews</h3>
+          <h3 className="text-[15px] sm:text-lg font-semibold text-gray-900 dark:text-gray-100 tracking-tight">Customer Reviews</h3>
         </div>
         
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0">
@@ -690,7 +691,7 @@ const CustomerReviews = ({ productId }) => {
             <div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto">
               <div className="flex items-center gap-2">
                 {renderStars(overallStats.averageRating || 0, 14)}
-                <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                <span className="text-[13px] font-semibold text-gray-900 dark:text-gray-100">
                   {overallStats.averageRating ? overallStats.averageRating.toFixed(1) : '0.0'}
                 </span>
               </div>
@@ -704,7 +705,7 @@ const CustomerReviews = ({ productId }) => {
                       setShowReviewForm(!showReviewForm);
                     }
                   }}
-                  className="text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 transition-colors"
+                  className="text-[13px] font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 transition-colors"
                 >
                   Write Review
                 </button>
@@ -717,13 +718,13 @@ const CustomerReviews = ({ productId }) => {
                       setShowReviewsList(!showReviewsList);
                     }
                   }}
-                  className="text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 transition-colors"
+                  className="text-[13px] font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 transition-colors"
                 >
                   View All
                 </button>
               </div>
             </div>
-            <span className="text-sm text-gray-500 dark:text-gray-400 sm:ml-0">
+            <span className="text-xs text-gray-500 dark:text-gray-400 sm:ml-0">
               ({overallStats.totalReviews} {overallStats.totalReviews === 1 ? 'review' : 'reviews'})
             </span>
           </div>
@@ -741,7 +742,7 @@ const CustomerReviews = ({ productId }) => {
                   setShowReviewForm(!showReviewForm);
                 }
               }}
-              className="text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 transition-colors"
+              className="text-[13px] font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 transition-colors"
             >
               Write Review
             </button>
@@ -758,7 +759,7 @@ const CustomerReviews = ({ productId }) => {
                   setShowReviewsList(!showReviewsList);
                 }
               }}
-              className="text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 transition-colors"
+              className="text-[13px] font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 transition-colors"
             >
               View All
             </button>
@@ -767,14 +768,14 @@ const CustomerReviews = ({ productId }) => {
       </div>
 
       {/* Content Section */}
-      <div className="px-3 sm:px-4 lg:px-5 pb-3 sm:pb-4 lg:pb-5 bg-white dark:bg-gray-800">
+      <div className="px-3.5 sm:px-4 lg:px-5 pb-3.5 sm:pb-4 lg:pb-5 bg-white dark:bg-gray-800">
         <div className="space-y-3">
 
           {/* Review Previews - Always Visible (2 reviews) */}
           {previewReviews.length > 0 && (
             <div className="space-y-3">
               {previewReviews.map((review) => (
-                <div key={review.id} className="bg-gray-50/50 dark:bg-gray-700/30 rounded-xl p-3.5 sm:p-4 border border-gray-200/60 dark:border-gray-600/60 hover:border-gray-300 dark:hover:border-gray-500 transition-colors">
+                <div key={review.id} className="bg-gray-50/50 dark:bg-gray-700/30 rounded-xl p-3 sm:p-3.5 border border-gray-200/60 dark:border-gray-600/60 hover:border-gray-300 dark:hover:border-gray-500 transition-colors">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       <div className="w-8 h-8 bg-gradient-to-br from-pink-400 to-rose-500 dark:from-pink-500 dark:to-rose-600 rounded-full flex items-center justify-center text-white font-semibold text-xs flex-shrink-0">
@@ -782,34 +783,35 @@ const CustomerReviews = ({ productId }) => {
             </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+                          <h5 className="text-[13px] font-semibold text-gray-900 dark:text-gray-100 truncate">
                             {review.customerName || review.customer_name || 'Guest User'}
                           </h5>
                           {renderStars(review.ratings?.overall || 0, 12)}
                           {(review.verifiedPurchase || review.is_verified_purchase) && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 flex-shrink-0">
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 flex-shrink-0">
                               ✓ Verified
                             </span>
                           )}
                         </div>
                       </div>
                     </div>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0 ml-2">
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 flex-shrink-0 ml-2">
                       {formatTimeAgo(review.timestamp || review.created_at)}
                     </span>
                   </div>
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300 line-clamp-2 leading-relaxed">
+                  <p className="text-[13px] font-normal text-gray-700 dark:text-gray-300 line-clamp-2 leading-relaxed">
                     {review.reviewText || review.review_text || 'No review text provided.'}
                   </p>
                   {(review.imageUrl || review.image_url) && (
                     <div className="mt-2">
                       <Image
-                        src={review.imageUrl || review.image_url}
+                        src={resolveImageUrl(review.imageUrl || review.image_url)}
                         alt="Review photo"
                         width={80}
                         height={60}
                         className="rounded object-cover"
                         loading="lazy"
+                        unoptimized
                       />
                     </div>
                   )}
@@ -826,7 +828,7 @@ const CustomerReviews = ({ productId }) => {
                       setShowReviewsList(!showReviewsList);
                     }
                   }}
-                  className="w-full text-center text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 py-2.5 transition-colors"
+                  className="w-full text-center text-[13px] font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 py-2 transition-colors"
                 >
                   View All {overallStats.totalReviews} Reviews
                 </button>
@@ -836,8 +838,8 @@ const CustomerReviews = ({ productId }) => {
 
           {/* Empty State for Reviews */}
           {previewReviews.length === 0 && (
-            <div className="text-center py-6">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">No reviews yet. Be the first to review!</p>
+            <div className="text-center py-5">
+              <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mb-3">No reviews yet. Be the first to review!</p>
             </div>
           )}
 
@@ -1165,12 +1167,13 @@ const CustomerReviews = ({ productId }) => {
                   {(review.imageUrl || review.image_url) && (
                     <div className="mb-3">
                       <Image
-                        src={review.imageUrl || review.image_url}
+                        src={resolveImageUrl(review.imageUrl || review.image_url)}
                         alt="Review photo"
                         width={200}
                         height={150}
                         className="rounded-lg object-cover"
                         loading="lazy"
+                        unoptimized
                       />
                     </div>
                   )}
@@ -1347,12 +1350,13 @@ const CustomerReviews = ({ productId }) => {
               {(review.imageUrl || review.image_url) && (
                       <div className="mb-3">
                   <Image
-                    src={review.imageUrl || review.image_url}
+                    src={resolveImageUrl(review.imageUrl || review.image_url)}
                     alt="Review photo"
                     width={200}
                     height={150}
                     className="rounded-lg object-cover"
                     loading="lazy"
+                    unoptimized
                   />
                 </div>
               )}

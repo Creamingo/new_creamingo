@@ -120,7 +120,7 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
     <>
       {/* Expandable Help Menu */}
       {isHelpExpanded && (
-        <div className="fixed bottom-20 right-4 z-40">
+        <div className="fixed bottom-[4.5rem] right-4 z-40">
           <div className="flex flex-col space-y-2 mb-4">
             {helpOptions.map((option, index) => (
               <button
@@ -138,7 +138,7 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
         </div>
       )}
 
-      <footer className="fixed bottom-0 left-0 right-0 w-full bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-t-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 z-50 border border-white/20 dark:border-gray-700/50 border-t-2 border-t-pink-200 dark:border-t-pink-700 h-16 max-w-full">
+      <footer className="fixed bottom-0 left-0 right-0 w-full bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-t-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 z-50 border border-white/20 dark:border-gray-700/50 border-t-2 border-t-pink-200 dark:border-t-pink-700 h-[3.6rem] max-w-full">
         <div className="flex items-center justify-around h-full px-2 gap-1">
           {footerItems.map((item, index) => {
             const isActive = activeTab === item.id
@@ -146,14 +146,14 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
               <button
                 key={index}
                 onClick={() => handleTabClick(item.id, item.href)}
-                className={`flex flex-col items-center justify-center p-1 rounded-xl transition-all duration-300 group relative min-w-[56px] px-2 ${
+                className={`flex flex-col items-center justify-center p-1 rounded-xl transition-all duration-300 group relative min-w-[52px] px-2 ${
                   isActive 
                     ? 'bg-pink-500/20 dark:bg-pink-500/30 backdrop-blur-sm text-pink-600 dark:text-pink-400 scale-110 shadow-sm' 
                     : 'text-gray-600 dark:text-gray-300 hover:text-pink-500 dark:hover:text-pink-400 hover:scale-105 hover:bg-white/30 dark:hover:bg-gray-700/30'
                 } ${item.desktopOnly ? 'hidden lg:flex' : 'flex'}`}
               >
                 <div className="relative flex items-center justify-center">
-                  <item.icon className={`w-6 h-6 transition-all duration-300 flex-shrink-0 ${
+                  <item.icon className={`w-[22px] h-[22px] transition-all duration-300 flex-shrink-0 ${
                     isActive ? 'text-pink-600 dark:text-pink-400' : 'text-gray-600 dark:text-gray-300 group-hover:text-pink-500 dark:group-hover:text-pink-400'
                   }`} />
                   {item.badge !== undefined && item.badge > 0 && (

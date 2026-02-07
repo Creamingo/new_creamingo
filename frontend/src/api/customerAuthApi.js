@@ -74,6 +74,32 @@ const customerAuthApi = {
   },
 
   /**
+   * Check if a customer email exists
+   * @param {Object} payload - { email }
+   */
+  async checkEmail(payload) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/customer-auth/check-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to check email');
+      }
+
+      return data.data;
+    } catch (error) {
+      console.error('Check email error:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Get current customer (requires authentication)
    */
   async getCurrentCustomer() {

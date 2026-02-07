@@ -1,3 +1,7 @@
+// Load environment variables from root .env file
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Use default Next.js behavior
@@ -21,7 +25,57 @@ const nextConfig = {
         port: '5000',
         pathname: '/uploads/**',
       },
+      {
+        protocol: 'http',
+        hostname: '72.61.242.230',
+        port: '5000',
+        pathname: '/uploads/**',
+      },
+      {
+        protocol: 'https',
+        hostname: '72.61.242.230',
+        port: '5000',
+        pathname: '/uploads/**',
+      },
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+        port: '5000',
+        pathname: '/gallery/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'localhost',
+        port: '5000',
+        pathname: '/gallery/**',
+      },
+      {
+        protocol: 'http',
+        hostname: '72.61.242.230',
+        port: '5000',
+        pathname: '/gallery/**',
+      },
+      {
+        protocol: 'https',
+        hostname: '72.61.242.230',
+        port: '5000',
+        pathname: '/gallery/**',
+      },
     ],
+  },
+  // Expose environment variables to the client
+  env: {
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+    NEXT_PUBLIC_ENVIRONMENT: process.env.NEXT_PUBLIC_ENVIRONMENT,
+  },
+  async rewrites() {
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${apiBaseUrl}/:path*`,
+      },
+    ];
   },
 }
 
