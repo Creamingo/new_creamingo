@@ -4,6 +4,7 @@ import { Eye, EyeOff, Lock, Mail, AlertCircle, X } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { useAuth } from '../contexts/AuthContext';
+import { useToastContext } from '../contexts/ToastContext';
 
 export const Login: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -15,8 +16,11 @@ export const Login: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const { login, isAuthenticated, error, clearError } = useAuth();
+  const { showInfo } = useToastContext();
   const navigate = useNavigate();
   const location = useLocation();
+  const supportEmail = process.env.REACT_APP_SUPPORT_EMAIL || 'support@creamingo.com';
+  const supportMailto = `mailto:${supportEmail}?subject=Creamingo%20Admin%20Password%20Reset`;
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -208,6 +212,10 @@ export const Login: React.FC = () => {
               </label>
               <button
                 type="button"
+                onClick={() => {
+                  showInfo('Password reset', `Please contact support at ${supportEmail}.`);
+                  window.location.href = supportMailto;
+                }}
                 className="text-sm text-amber-600 dark:text-amber-400 hover:text-amber-500 dark:hover:text-amber-300 transition-colors"
                 disabled={isSubmitting}
               >

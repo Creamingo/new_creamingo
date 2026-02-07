@@ -99,9 +99,57 @@ const ensureTokenBlacklistTable = async () => {
   `);
 };
 
+const ensureUsersSchema = async () => {
+  const columnsResult = await query(
+    `
+    SELECT COLUMN_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'
+    `
+  );
+
+  const existingColumns = new Set((columnsResult.rows || []).map(row => row.COLUMN_NAME));
+  if (existingColumns.size === 0) {
+    return;
+  }
+
+  const addColumnIfMissing = async (columnName, definition) => {
+    if (!existingColumns.has(columnName)) {
+      await query(`ALTER TABLE users ADD COLUMN ${definition}`);
+      existingColumns.add(columnName);
+    }
+  };
+
+  await addColumnIfMissing('order_index', 'order_index INT DEFAULT 0');
+  await addColumnIfMissing('owned_bike', 'owned_bike BOOLEAN DEFAULT 0');
+  await addColumnIfMissing('driving_license_number', 'driving_license_number VARCHAR(50)');
+  await addColumnIfMissing('contact_number', 'contact_number VARCHAR(20)');
+
+  const indexResult = await query(
+    `
+    SELECT INDEX_NAME
+    FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'
+    `
+  );
+  const existingIndexes = new Set((indexResult.rows || []).map(row => row.INDEX_NAME));
+
+  if (!existingIndexes.has('idx_users_order_index') && existingColumns.has('order_index')) {
+    await query('CREATE INDEX idx_users_order_index ON users(order_index)');
+  }
+  if (!existingIndexes.has('idx_users_contact_number') && existingColumns.has('contact_number')) {
+    await query('CREATE INDEX idx_users_contact_number ON users(contact_number)');
+  }
+  if (!existingIndexes.has('idx_users_driving_license') && existingColumns.has('driving_license_number')) {
+    await query('CREATE INDEX idx_users_driving_license ON users(driving_license_number)');
+  }
+};
+
 const runSchemaHealthCheck = async () => {
   const results = {};
   const tables = Object.keys(expectedSchema);
+
+  await ensureUsersSchema();
 
   const tablesResult = await query(
     `

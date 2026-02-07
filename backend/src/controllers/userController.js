@@ -13,7 +13,9 @@ const getUsers = async (req, res) => {
       sort_order = 'DESC'
     } = req.query;
 
-    const offset = (page - 1) * limit;
+    const pageNumber = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNumber = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 200);
+    const offset = (pageNumber - 1) * limitNumber;
     let whereConditions = [];
     let queryParams = [];
     let paramCount = 1;
@@ -26,7 +28,7 @@ const getUsers = async (req, res) => {
     }
 
     if (search) {
-      whereConditions.push(`(name ILIKE $${paramCount} OR email ILIKE $${paramCount})`);
+      whereConditions.push(`(LOWER(name) LIKE LOWER($${paramCount}) OR LOWER(email) LIKE LOWER($${paramCount}))`);
       queryParams.push(`%${search}%`);
       paramCount++;
     }
@@ -60,10 +62,9 @@ const getUsers = async (req, res) => {
         END,
         order_index ASC,
         created_at ASC
-      LIMIT $${paramCount} OFFSET $${paramCount + 1}
+      LIMIT ${limitNumber} OFFSET ${offset}
     `;
 
-    queryParams.push(limit, offset);
     const usersResult = await query(usersQuery, queryParams);
 
     res.json({
@@ -71,10 +72,10 @@ const getUsers = async (req, res) => {
       data: usersResult.rows,
       count: usersResult.rows.length,
       pagination: {
-        current_page: parseInt(page),
-        per_page: parseInt(limit),
+        current_page: pageNumber,
+        per_page: limitNumber,
         total,
-        total_pages: Math.ceil(total / limit)
+        total_pages: Math.ceil(total / limitNumber)
       }
     });
   } catch (error) {

@@ -1,6 +1,5 @@
 import { User } from '../types';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+import apiClient from './api';
 
 export interface CreateUserData {
   name: string;
@@ -37,28 +36,14 @@ export interface UsersResponse {
 }
 
 class UserService {
-  private getAuthHeaders(): HeadersInit {
-    const token = localStorage.getItem('auth_token');
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    };
-  }
-
   // Get all users
   async getUsers(): Promise<UsersResponse> {
     try {
-      const response = await fetch(`${API_BASE_URL}/users`, {
-        method: 'GET',
-        headers: this.getAuthHeaders()
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to fetch users');
+      const response = await apiClient.get<User[]>('/users');
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to fetch users');
       }
-
-      return await response.json();
+      return response as UsersResponse;
     } catch (error) {
       console.error('Error fetching users:', error);
       throw error;
@@ -68,17 +53,11 @@ class UserService {
   // Get single user by ID
   async getUserById(id: string): Promise<UserResponse> {
     try {
-      const response = await fetch(`${API_BASE_URL}/users/${id}`, {
-        method: 'GET',
-        headers: this.getAuthHeaders()
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to fetch user');
+      const response = await apiClient.get<User>(`/users/${id}`);
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to fetch user');
       }
-
-      return await response.json();
+      return response as UserResponse;
     } catch (error) {
       console.error('Error fetching user:', error);
       throw error;
@@ -88,18 +67,11 @@ class UserService {
   // Create new user
   async createUser(userData: CreateUserData): Promise<UserResponse> {
     try {
-      const response = await fetch(`${API_BASE_URL}/users`, {
-        method: 'POST',
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify(userData)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to create user');
+      const response = await apiClient.post<User>('/users', userData);
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to create user');
       }
-
-      return await response.json();
+      return response as UserResponse;
     } catch (error) {
       console.error('Error creating user:', error);
       throw error;
@@ -109,18 +81,11 @@ class UserService {
   // Update user
   async updateUser(id: string, userData: UpdateUserData): Promise<UserResponse> {
     try {
-      const response = await fetch(`${API_BASE_URL}/users/${id}`, {
-        method: 'PUT',
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify(userData)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to update user');
+      const response = await apiClient.put<User>(`/users/${id}`, userData);
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to update user');
       }
-
-      return await response.json();
+      return response as UserResponse;
     } catch (error) {
       console.error('Error updating user:', error);
       throw error;
@@ -130,17 +95,11 @@ class UserService {
   // Delete user
   async deleteUser(id: string): Promise<{ success: boolean; message?: string }> {
     try {
-      const response = await fetch(`${API_BASE_URL}/users/${id}`, {
-        method: 'DELETE',
-        headers: this.getAuthHeaders()
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to delete user');
+      const response = await apiClient.delete(`/users/${id}`);
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to delete user');
       }
-
-      return await response.json();
+      return response as { success: boolean; message?: string };
     } catch (error) {
       console.error('Error deleting user:', error);
       throw error;
@@ -150,18 +109,11 @@ class UserService {
   // Toggle user active status
   async toggleUserStatus(id: string, isActive: boolean): Promise<UserResponse> {
     try {
-      const response = await fetch(`${API_BASE_URL}/users/${id}/status`, {
-        method: 'PATCH',
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify({ is_active: isActive })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to update user status');
+      const response = await apiClient.patch<User>(`/users/${id}/status`, { is_active: isActive });
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to update user status');
       }
-
-      return await response.json();
+      return response as UserResponse;
     } catch (error) {
       console.error('Error updating user status:', error);
       throw error;
@@ -171,18 +123,11 @@ class UserService {
   // Change user password
   async changePassword(id: string, newPassword: string): Promise<{ success: boolean; message?: string }> {
     try {
-      const response = await fetch(`${API_BASE_URL}/users/${id}/password`, {
-        method: 'PATCH',
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify({ password: newPassword })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to change password');
+      const response = await apiClient.patch(`/users/${id}/password`, { password: newPassword });
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to change password');
       }
-
-      return await response.json();
+      return response as { success: boolean; message?: string };
     } catch (error) {
       console.error('Error changing password:', error);
       throw error;
@@ -192,19 +137,11 @@ class UserService {
   // Update user order
   async updateUserOrder(userOrders: UserOrderUpdate[]): Promise<{ updatedCount: number }> {
     try {
-      const response = await fetch(`${API_BASE_URL}/users/update-order`, {
-        method: 'PATCH',
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify({ userOrders })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to update user order');
+      const response = await apiClient.patch<{ updatedCount: number }>('/users/update-order', { userOrders });
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to update user order');
       }
-
-      const result = await response.json();
-      return result.data;
+      return response.data || { updatedCount: 0 };
     } catch (error) {
       console.error('Error updating user order:', error);
       throw error;
@@ -223,17 +160,26 @@ class UserService {
     };
   }> {
     try {
-      const response = await fetch(`${API_BASE_URL}/users/stats`, {
-        method: 'GET',
-        headers: this.getAuthHeaders()
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to fetch user statistics');
+      const response = await apiClient.get<{
+        total: number;
+        active: number;
+        inactive: number;
+        superAdmins: number;
+        staff: number;
+      }>('/users/stats');
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to fetch user statistics');
       }
-
-      return await response.json();
+      return response as {
+        success: boolean;
+        data: {
+          total: number;
+          active: number;
+          inactive: number;
+          superAdmins: number;
+          staff: number;
+        };
+      };
     } catch (error) {
       console.error('Error fetching user statistics:', error);
       throw error;
