@@ -27,7 +27,6 @@ import DeliverySlots from './pages/DeliverySlots';
 import { PromoCodes } from './pages/PromoCodes';
 import { OneRupeeDeals } from './pages/OneRupeeDeals';
 import BakeryProduction from './pages/BakeryProduction';
-import './utils/debugAuth'; // Import debug utility
 
 function App() {
   return (

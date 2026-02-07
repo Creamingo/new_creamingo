@@ -113,7 +113,31 @@ if (allowAllOrigins && process.env.NODE_ENV === 'production') {
 
 app.use(cors(corsOptions));
 
-// Rate limiting disabled (per request)
+const authRateLimitWindowMs = Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000;
+const authRateLimitMax = Number(process.env.AUTH_RATE_LIMIT_MAX) || 20;
+const customerAuthRateLimitMax = Number(process.env.CUSTOMER_AUTH_RATE_LIMIT_MAX) || authRateLimitMax;
+
+const authLimiter = rateLimit({
+  windowMs: authRateLimitWindowMs,
+  max: authRateLimitMax,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many authentication attempts. Please try again later.'
+  }
+});
+
+const customerAuthLimiter = rateLimit({
+  windowMs: authRateLimitWindowMs,
+  max: customerAuthRateLimitMax,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many authentication attempts. Please try again later.'
+  }
+});
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -216,8 +240,8 @@ app.get('/api', (req, res) => {
 });
 
 // API routes
-app.use('/api/auth', authRoutes);
-app.use('/api/customer-auth', customerAuthRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/customer-auth', customerAuthLimiter, customerAuthRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/subcategories', subcategoryRoutes);

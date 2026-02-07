@@ -1,6 +1,22 @@
 const { query } = require('../config/db');
 
 const expectedSchema = {
+  auth_refresh_tokens: [
+    'id',
+    'user_id',
+    'token_id',
+    'expires_at',
+    'revoked_at',
+    'last_used_at',
+    'is_persistent',
+    'created_at'
+  ],
+  token_blacklist: [
+    'id',
+    'token_id',
+    'expires_at',
+    'created_at'
+  ],
   products: [
     'id',
     'name',
@@ -54,6 +70,35 @@ const ensureWeightTierMappingsTable = async () => {
   `);
 };
 
+const ensureAuthRefreshTokensTable = async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS auth_refresh_tokens (
+      id INT PRIMARY KEY AUTO_INCREMENT,
+      user_id INT NOT NULL,
+      token_id VARCHAR(64) NOT NULL UNIQUE,
+      expires_at DATETIME NOT NULL,
+      revoked_at DATETIME NULL,
+      last_used_at DATETIME NULL,
+      is_persistent BOOLEAN DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_auth_refresh_tokens_user_id (user_id),
+      INDEX idx_auth_refresh_tokens_expires_at (expires_at)
+    )
+  `);
+};
+
+const ensureTokenBlacklistTable = async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS token_blacklist (
+      id INT PRIMARY KEY AUTO_INCREMENT,
+      token_id VARCHAR(64) NOT NULL UNIQUE,
+      expires_at DATETIME NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_token_blacklist_expires_at (expires_at)
+    )
+  `);
+};
+
 const runSchemaHealthCheck = async () => {
   const results = {};
   const tables = Object.keys(expectedSchema);
@@ -70,9 +115,19 @@ const runSchemaHealthCheck = async () => {
   const existingTables = new Set((tablesResult.rows || []).map(row => row.TABLE_NAME));
 
   for (const tableName of tables) {
-    if (!existingTables.has(tableName) && tableName === 'weight_tier_mappings') {
-      await ensureWeightTierMappingsTable();
-      existingTables.add(tableName);
+    if (!existingTables.has(tableName)) {
+      if (tableName === 'weight_tier_mappings') {
+        await ensureWeightTierMappingsTable();
+        existingTables.add(tableName);
+      }
+      if (tableName === 'auth_refresh_tokens') {
+        await ensureAuthRefreshTokensTable();
+        existingTables.add(tableName);
+      }
+      if (tableName === 'token_blacklist') {
+        await ensureTokenBlacklistTable();
+        existingTables.add(tableName);
+      }
     }
 
     if (!existingTables.has(tableName)) {

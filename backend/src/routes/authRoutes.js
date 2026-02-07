@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   register,
   login,
+  refresh,
   getMe,
   updateProfile,
   changePassword,
@@ -14,6 +15,7 @@ const { validate, schemas } = require('../middleware/validation');
 // Public routes
 router.post('/register', validate(schemas.register), register);
 router.post('/login', validate(schemas.login), login);
+router.post('/refresh', validate(schemas.refreshToken), refresh);
 
 // Protected routes
 router.get('/me', authMiddleware, getMe);

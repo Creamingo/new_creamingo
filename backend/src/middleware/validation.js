@@ -49,6 +49,11 @@ const schemas = {
     rememberMe: Joi.boolean().optional()
   }),
 
+  refreshToken: Joi.object({
+    refreshToken: Joi.string().optional(),
+    refresh_token: Joi.string().optional()
+  }).or('refreshToken', 'refresh_token'),
+
   // Customer auth schemas
   customerRegister: Joi.object({
     name: Joi.string().min(2).max(100).required(),
