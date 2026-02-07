@@ -496,7 +496,7 @@ const ProductTabs = ({ product, selectedVariant, customizations = {}, dynamicCon
                  </div>
                  <div className="min-w-0 flex-1">
                    <p className="text-xs font-semibold text-blue-900 dark:text-blue-300">Same Day Delivery</p>
-                   <p className="text-[10px] text-blue-700 dark:text-blue-400">Choose from available time slots today</p>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-400">Select a time slot at checkout</p>
                  </div>
                </div>
               

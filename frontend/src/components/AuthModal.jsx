@@ -171,13 +171,13 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
       <button
         type="button"
         onClick={onClose}
-        className={`absolute inset-0 bg-black/40 backdrop-blur-[1px] transition-opacity duration-500 ${
+        className={`absolute inset-x-0 top-0 bottom-[3.6rem] lg:bottom-0 bg-black/40 backdrop-blur-[1px] transition-opacity duration-500 ${
           isPanelVisible ? 'opacity-100' : 'opacity-0'
         }`}
         aria-label="Close authentication"
       />
       <div
-        className={`relative w-full max-w-md bg-white dark:bg-gray-800 rounded-t-3xl border border-pink-200/60 dark:border-pink-700/40 shadow-2xl pb-2 mb-[3.6rem] lg:mb-0 lg:h-full lg:rounded-l-3xl lg:rounded-tr-none lg:ml-auto transform transition-transform duration-500 ease-out ${
+        className={`relative w-full max-w-md bg-white dark:bg-gray-800 rounded-t-3xl border border-pink-200/60 dark:border-pink-700/40 border-b-0 lg:border-b shadow-2xl pb-2 mb-[3.6rem] lg:mb-0 lg:h-full lg:rounded-l-3xl lg:rounded-tr-none lg:ml-auto transform transition-transform duration-500 ease-out ${
           isPanelVisible ? 'translate-y-0 lg:translate-x-0' : 'translate-y-full lg:translate-x-full'
         }`}
       >
@@ -206,7 +206,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
           </div>
         </div>
 
-        <div className="px-5 pb-6 pt-5 max-h-[calc(100vh-10rem)] lg:max-h-full lg:pt-8 lg:pb-10 overflow-y-auto">
+        <div className="px-5 pb-4 pt-5 max-h-[calc(100vh-10rem)] lg:max-h-full lg:pt-8 lg:pb-10 overflow-y-auto">
           {authError && (
             <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-xs text-red-700 dark:text-red-300 flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-red-500 mt-0.5" />
@@ -233,7 +233,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
                   />
                 </div>
               </div>
-              <div className="sticky bottom-0 pt-2 bg-white/95 dark:bg-gray-800/95 backdrop-blur">
+              <div className="sticky bottom-0 pt-3 bg-white/95 dark:bg-gray-800/95 backdrop-blur">
                 <button
                   type="submit"
                   disabled={authLoading || !isEmailValid}
@@ -241,7 +241,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
                 >
                   {authLoading ? 'Checking...' : 'Continue & Get Cashback'}
                 </button>
-                <div className="mt-2 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-pink-600 dark:text-pink-300">
+                <div className="mt-4 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-pink-600 dark:text-pink-300">
                   <Wallet className="w-3.5 h-3.5" />
                   Sign up & get wallet cashback up to ₹100.
                 </div>

@@ -12,6 +12,7 @@ const getActiveDeals = async (req, res) => {
         d.id,
         d.deal_title,
         d.product_id,
+        d.variant_id,
         d.threshold_amount,
         d.deal_price,
         d.max_quantity_per_order,
@@ -23,9 +24,15 @@ const getActiveDeals = async (req, res) => {
         p.base_price as product_base_price,
         p.base_weight as product_base_weight,
         p.discounted_price as product_discounted_price,
-        p.is_active as product_is_active
+        p.is_active as product_is_active,
+        pv.weight as variant_weight,
+        pv.price as variant_price,
+        pv.discounted_price as variant_discounted_price,
+        pv.discount_percent as variant_discount_percent
       FROM one_rupee_deals d
       INNER JOIN products p ON d.product_id = p.id
+      LEFT JOIN product_variants pv 
+        ON pv.id = d.variant_id
       WHERE d.is_active = 1 AND p.is_active = 1
       ORDER BY d.priority ASC, d.threshold_amount ASC
     `;
@@ -36,12 +43,23 @@ const getActiveDeals = async (req, res) => {
     // Transform deals and determine status
     const eligibleDeals = deals.map(deal => {
       const isUnlocked = cartAmount >= parseFloat(deal.threshold_amount);
-      const originalPrice = parseFloat(deal.product_discounted_price) || parseFloat(deal.product_base_price);
+      const variantPrice = deal.variant_price !== null ? parseFloat(deal.variant_price) : null;
+      const variantDiscounted = deal.variant_discounted_price !== null ? parseFloat(deal.variant_discounted_price) : null;
+      const variantDiscountPercent = deal.variant_discount_percent !== null ? parseFloat(deal.variant_discount_percent) : 0;
+      const variantCurrentPrice = variantPrice
+        ? (variantDiscounted || (variantDiscountPercent > 0 ? variantPrice * (1 - variantDiscountPercent / 100) : variantPrice))
+        : null;
+      const baseCurrentPrice = deal.product_base_weight
+        ? (parseFloat(deal.product_discounted_price) || parseFloat(deal.product_base_price))
+        : null;
+      const currentPrice = variantCurrentPrice || (deal.variant_id ? null : baseCurrentPrice);
+      const originalPrice = currentPrice;
 
       return {
         deal_id: deal.id,
         deal_title: deal.deal_title,
         product_id: deal.product_id,
+        variant_id: deal.variant_id || null,
         product: {
           id: deal.product_id,
           name: deal.product_name,
@@ -49,8 +67,10 @@ const getActiveDeals = async (req, res) => {
           base_price: parseFloat(deal.product_base_price),
           base_weight: deal.product_base_weight,
           discounted_price: parseFloat(deal.product_discounted_price),
-          original_price: originalPrice
+          variant_weight: deal.variant_weight || null,
+          current_price: currentPrice
         },
+        original_price: originalPrice,
         deal_price: parseFloat(deal.deal_price),
         threshold: parseFloat(deal.threshold_amount),
         max_quantity: parseInt(deal.max_quantity_per_order) || 1,
@@ -95,9 +115,12 @@ const getAllDeals = async (req, res) => {
         p.name as product_name,
         p.image_url as product_image,
         p.base_price as product_base_price,
-        p.is_active as product_is_active
+        p.base_weight as product_base_weight,
+        p.is_active as product_is_active,
+        pv.weight as variant_weight
       FROM one_rupee_deals d
       LEFT JOIN products p ON d.product_id = p.id
+      LEFT JOIN product_variants pv ON pv.id = d.variant_id
       ORDER BY d.priority ASC, d.threshold_amount ASC
     `;
 
@@ -114,6 +137,8 @@ const getAllDeals = async (req, res) => {
         name: deal.product_name,
         image_url: deal.product_image,
         base_price: parseFloat(deal.product_base_price),
+        base_weight: deal.product_base_weight,
+        variant_weight: deal.variant_weight || null,
         is_active: Boolean(deal.product_is_active)
       } : null
     }));
@@ -142,9 +167,12 @@ const getDealById = async (req, res) => {
         p.name as product_name,
         p.image_url as product_image,
         p.base_price as product_base_price,
-        p.is_active as product_is_active
+        p.base_weight as product_base_weight,
+        p.is_active as product_is_active,
+        pv.weight as variant_weight
       FROM one_rupee_deals d
       LEFT JOIN products p ON d.product_id = p.id
+      LEFT JOIN product_variants pv ON pv.id = d.variant_id
       WHERE d.id = ?
     `;
 
@@ -170,6 +198,8 @@ const getDealById = async (req, res) => {
         name: deal.product_name,
         image_url: deal.product_image,
         base_price: parseFloat(deal.product_base_price),
+        base_weight: deal.product_base_weight,
+        variant_weight: deal.variant_weight || null,
         is_active: Boolean(deal.product_is_active)
       } : null
     };
@@ -194,6 +224,7 @@ const createDeal = async (req, res) => {
       deal_title,
       product_id,
       threshold_amount,
+      variant_id,
       deal_price = 1.00,
       max_quantity_per_order = 1,
       priority = 0,
@@ -236,6 +267,21 @@ const createDeal = async (req, res) => {
       });
     }
 
+    // Validate variant if provided
+    const normalizedVariantId = variant_id ? Number(variant_id) : null;
+    if (normalizedVariantId) {
+      const variantCheck = await get(
+        'SELECT id, product_id FROM product_variants WHERE id = ?',
+        [normalizedVariantId]
+      );
+      if (!variantCheck || Number(variantCheck.product_id) !== Number(product_id)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Selected variant does not belong to the product'
+        });
+      }
+    }
+
     // Check for duplicate (same product at same threshold)
     const duplicateCheck = await get(
       'SELECT id FROM one_rupee_deals WHERE product_id = ? AND threshold_amount = ?',
@@ -252,15 +298,16 @@ const createDeal = async (req, res) => {
     // Insert deal
     const insertQuery = `
       INSERT INTO one_rupee_deals (
-        deal_title, product_id, threshold_amount, deal_price,
+        deal_title, product_id, threshold_amount, variant_id, deal_price,
         max_quantity_per_order, priority, is_active, description
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const result = await query(insertQuery, [
       deal_title.trim(),
       product_id,
       threshold_amount,
+      normalizedVariantId,
       deal_price,
       max_quantity_per_order,
       priority,
@@ -277,9 +324,12 @@ const createDeal = async (req, res) => {
         p.name as product_name,
         p.image_url as product_image,
         p.base_price as product_base_price,
-        p.is_active as product_is_active
+        p.base_weight as product_base_weight,
+        p.is_active as product_is_active,
+        pv.weight as variant_weight
       FROM one_rupee_deals d
       LEFT JOIN products p ON d.product_id = p.id
+      LEFT JOIN product_variants pv ON pv.id = d.variant_id
       WHERE d.id = ?
     `;
     const dealResult = await query(dealQuery, [dealId]);
@@ -297,6 +347,8 @@ const createDeal = async (req, res) => {
         name: createdDeal.product_name,
         image_url: createdDeal.product_image,
         base_price: parseFloat(createdDeal.product_base_price),
+        base_weight: createdDeal.product_base_weight,
+        variant_weight: createdDeal.variant_weight || null,
         is_active: Boolean(createdDeal.product_is_active)
       } : null
     };
@@ -323,6 +375,7 @@ const updateDeal = async (req, res) => {
       deal_title,
       product_id,
       threshold_amount,
+      variant_id,
       deal_price,
       max_quantity_per_order,
       priority,
@@ -388,6 +441,23 @@ const updateDeal = async (req, res) => {
       });
     }
 
+    if (variant_id !== undefined) {
+      const normalizedVariantId = variant_id ? Number(variant_id) : null;
+      if (normalizedVariantId) {
+        const targetProductId = product_id !== undefined ? product_id : existingDeal.product_id;
+        const variantCheck = await get(
+          'SELECT id, product_id FROM product_variants WHERE id = ?',
+          [normalizedVariantId]
+        );
+        if (!variantCheck || Number(variantCheck.product_id) !== Number(targetProductId)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Selected variant does not belong to the product'
+          });
+        }
+      }
+    }
+
     // Build update query dynamically
     const updates = [];
     const params = [];
@@ -403,6 +473,10 @@ const updateDeal = async (req, res) => {
     if (threshold_amount !== undefined) {
       updates.push('threshold_amount = ?');
       params.push(threshold_amount);
+    }
+    if (variant_id !== undefined) {
+      updates.push('variant_id = ?');
+      params.push(variant_id ? Number(variant_id) : null);
     }
     if (deal_price !== undefined) {
       updates.push('deal_price = ?');
@@ -443,9 +517,12 @@ const updateDeal = async (req, res) => {
         p.name as product_name,
         p.image_url as product_image,
         p.base_price as product_base_price,
-        p.is_active as product_is_active
+        p.base_weight as product_base_weight,
+        p.is_active as product_is_active,
+        pv.weight as variant_weight
       FROM one_rupee_deals d
       LEFT JOIN products p ON d.product_id = p.id
+      LEFT JOIN product_variants pv ON pv.id = d.variant_id
       WHERE d.id = ?
     `;
     const dealResult = await query(dealQuery, [id]);
@@ -463,6 +540,8 @@ const updateDeal = async (req, res) => {
         name: updatedDeal.product_name,
         image_url: updatedDeal.product_image,
         base_price: parseFloat(updatedDeal.product_base_price),
+        base_weight: updatedDeal.product_base_weight,
+        variant_weight: updatedDeal.variant_weight || null,
         is_active: Boolean(updatedDeal.product_is_active)
       } : null
     };

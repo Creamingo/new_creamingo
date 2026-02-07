@@ -1742,64 +1742,62 @@ export default function CartPage() {
                                   
                                   return (
                                   <div
-                                      key={comboId}
-                                    className="flex items-center justify-between gap-2 bg-gray-50 dark:bg-gray-800/60 rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-700"
-                                    >
-                                      {/* Combo Item Info */}
-                                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                                        <Package className="w-4 h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
-                                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                                          {combo.product_name}
+                                    key={comboId}
+                                    className="flex flex-col gap-2 bg-gray-50 dark:bg-gray-800/60 rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-700 items-start"
+                                  >
+                                    {/* Combo Item Title */}
+                                    <div className="flex items-center gap-2 min-w-0 w-full">
+                                      <Package className="w-4 h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
+                                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap overflow-x-auto no-scrollbar">
+                                        {combo.product_name}
+                                      </span>
+                                    </div>
+
+                                    {/* Controls Row */}
+                                    <div className="flex items-center gap-2 flex-wrap justify-start w-full">
+                                      <div className="flex items-center gap-1 border border-gray-300 dark:border-gray-600 rounded-lg p-1 bg-white dark:bg-gray-700">
+                                        <button
+                                          onClick={() => handleComboQuantityChange(item.id, comboId, combo.quantity - 1)}
+                                          disabled={isRemoving}
+                                          className="w-7 h-7 flex items-center justify-center bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded transition-colors disabled:opacity-50 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
+                                          title="Decrease quantity"
+                                        >
+                                          <Minus className="w-3.5 h-3.5" />
+                                        </button>
+                                        <span className="w-8 text-center text-xs font-semibold text-gray-900 dark:text-gray-100">
+                                          {combo.quantity}
+                                        </span>
+                                        <button
+                                          onClick={() => handleComboQuantityChange(item.id, comboId, combo.quantity + 1)}
+                                          disabled={isRemoving}
+                                          className="w-7 h-7 flex items-center justify-center bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded transition-colors disabled:opacity-50 text-pink-600 dark:text-pink-400 hover:text-pink-700 dark:hover:text-pink-300"
+                                          title="Increase quantity"
+                                        >
+                                          <Plus className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+
+                                      <div className="flex items-center gap-1.5">
+                                        {hasDiscount && (
+                                          <span className="text-xs text-gray-400 dark:text-gray-500 line-through">
+                                            {formatPrice(originalTotal)}
+                                          </span>
+                                        )}
+                                        <span className="text-sm font-semibold text-purple-600 dark:text-purple-400">
+                                          {formatPrice(comboTotal)}
                                         </span>
                                       </div>
 
-                                      {/* Quantity Controls */}
-                                      <div className="flex items-center gap-2">
-                                        <div className="flex items-center gap-1 border border-gray-300 dark:border-gray-600 rounded-lg p-1 bg-white dark:bg-gray-700">
-                                          <button
-                                            onClick={() => handleComboQuantityChange(item.id, comboId, combo.quantity - 1)}
-                                            disabled={isRemoving}
-                                            className="w-7 h-7 flex items-center justify-center bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded transition-colors disabled:opacity-50 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
-                                            title="Decrease quantity"
-                                          >
-                                            <Minus className="w-3.5 h-3.5" />
-                                          </button>
-                                          <span className="w-8 text-center text-xs font-semibold text-gray-900 dark:text-gray-100">
-                                            {combo.quantity}
-                                          </span>
-                                          <button
-                                            onClick={() => handleComboQuantityChange(item.id, comboId, combo.quantity + 1)}
-                                            disabled={isRemoving}
-                                            className="w-7 h-7 flex items-center justify-center bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded transition-colors disabled:opacity-50 text-pink-600 dark:text-pink-400 hover:text-pink-700 dark:hover:text-pink-300"
-                                            title="Increase quantity"
-                                          >
-                                            <Plus className="w-3.5 h-3.5" />
-                                          </button>
-                                        </div>
-
-                                        {/* Price */}
-                                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                                          {hasDiscount && (
-                                            <span className="text-xs text-gray-400 dark:text-gray-500 line-through">
-                                              {formatPrice(originalTotal)}
-                                            </span>
-                                          )}
-                                          <span className="text-sm font-semibold text-purple-600 dark:text-purple-400">
-                                            {formatPrice(comboTotal)}
-                                          </span>
-                                        </div>
-
-                                        {/* Delete Button */}
-                                        <button
-                                          onClick={() => handleRemoveComboItem(item.id, comboId)}
-                                          disabled={isRemoving}
-                                          className="p-1.5 text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
-                                          title="Remove combo item"
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                      </div>
+                                      <button
+                                        onClick={() => handleRemoveComboItem(item.id, comboId)}
+                                        disabled={isRemoving}
+                                        className="p-1.5 text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
+                                        title="Remove combo item"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
                                     </div>
+                                  </div>
                                   );
                                 })}
                               </div>
@@ -1987,18 +1985,18 @@ export default function CartPage() {
                                     return (
                                       <div
                                         key={comboId}
-                                        className="flex items-center justify-between gap-2 bg-gray-50 dark:bg-gray-800/60 rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-700"
+                                        className="flex flex-col gap-2 bg-gray-50 dark:bg-gray-800/60 rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-700 items-start"
                                       >
-                                        {/* Combo Item Info */}
-                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                        {/* Combo Item Title */}
+                                        <div className="flex items-center gap-2 min-w-0 w-full">
                                           <Package className="w-4 h-4 sm:w-4 sm:h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
-                                          <span className="text-sm sm:text-base font-medium text-gray-900 dark:text-gray-100 truncate">
+                                          <span className="text-sm sm:text-base font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap overflow-x-auto no-scrollbar">
                                             {combo.product_name}
                                           </span>
                                         </div>
 
-                                        {/* Quantity Controls */}
-                                        <div className="flex items-center gap-2">
+                                        {/* Controls Row */}
+                                        <div className="flex items-center gap-2 flex-wrap justify-start w-full">
                                           <div className="flex items-center gap-1 border border-gray-300 dark:border-gray-600 rounded-lg p-1 bg-white dark:bg-gray-700">
                                             <button
                                               onClick={() => handleComboQuantityChange(item.id, comboId, combo.quantity - 1)}
@@ -2021,8 +2019,7 @@ export default function CartPage() {
                                             </button>
                                           </div>
 
-                                          {/* Price */}
-                                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                                          <div className="flex items-center gap-1.5">
                                             {hasDiscount && (
                                               <span className="text-xs sm:text-sm text-gray-400 dark:text-gray-500 line-through">
                                                 {formatPrice(originalTotal)}
@@ -2033,11 +2030,10 @@ export default function CartPage() {
                                             </span>
                                           </div>
 
-                                          {/* Delete Button */}
                                           <button
                                             onClick={() => handleRemoveComboItem(item.id, comboId)}
                                             disabled={isRemoving}
-                                            className="p-1.5 text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
+                                            className="p-1.5 text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
                                             title="Remove combo item"
                                           >
                                             <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />

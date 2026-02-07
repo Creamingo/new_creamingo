@@ -16,8 +16,7 @@ import {
 } from 'lucide-react';
 import { usePinCode } from '../../../../contexts/PinCodeContext';
 import { useWishlist } from '../../../../contexts/WishlistContext';
-import DeliverySlotSelector from '../../../../components/DeliverySlotSelector';
-import OrderSlotManager from '../../../../utils/orderSlotManager';
+import DeliverySlotPreview from '../../../../components/DeliverySlotPreview';
 import ProductCombos from './ProductCombos';
 import FlavorSelector from './FlavorSelector';
 import MakeItAComboModal from './MakeItAComboModal';
@@ -48,7 +47,6 @@ const ProductSummary = ({
   const [showShareMenu, setShowShareMenu] = useState(false);
   const MESSAGE_LIMIT = 25;
   const [cakeMessage, setCakeMessage] = useState('');
-  const [selectedDeliverySlot, setSelectedDeliverySlot] = useState(null);
   const [selectedCombos, setSelectedCombos] = useState([]);
   const [showComboModal, setShowComboModal] = useState(false);
   // Load global combo selections synchronously on initial render to prevent layout shift
@@ -72,9 +70,7 @@ const ProductSummary = ({
   });
   const [showToast, setShowToast] = useState(false);
   const [showAddToCartConfirm, setShowAddToCartConfirm] = useState(false);
-  const [showTimeSlotNotification, setShowTimeSlotNotification] = useState(false);
-  const [pendingAction, setPendingAction] = useState(null); // 'combo' | 'cart' | null
-  const deliverySlotRef = useRef(null);
+  const [showDeliveryNotification, setShowDeliveryNotification] = useState(false);
   const pinCodeRef = useRef(null);
 
   // Sync combo selections from localStorage on mount (backup for SSR/hydration)
@@ -123,8 +119,15 @@ const ProductSummary = ({
     }
   }, [comboSelections.length]); // Only trigger when combo count changes
 
+  // Clear delivery notification once pincode is available
+  useEffect(() => {
+    if (currentPinCode) {
+      setShowDeliveryNotification(false);
+    }
+  }, [currentPinCode]);
+
   // Check if all required fields are completed for Add to Cart
-  const isAddToCartEnabled = currentPinCode && selectedDeliverySlot;
+  const isAddToCartEnabled = !!currentPinCode;
   const [dynamicContent, setDynamicContent] = useState(null);
   const [isPriceSectionVisible, setIsPriceSectionVisible] = useState(true);
   const priceSectionRef = useRef(null);
@@ -188,25 +191,24 @@ const ProductSummary = ({
     return product.base_price;
   };
 
-  // Helper: check if both pincode and time slot are selected
+  // Helper: check if delivery details are selected
   const areDeliveryDetailsComplete = () => {
-    return !!currentPinCode && !!selectedDeliverySlot;
+    return !!currentPinCode;
   };
 
   const scrollToMissingDeliveryDetail = () => {
     try {
-      const targetRef = !currentPinCode ? pinCodeRef : deliverySlotRef;
-      targetRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      pinCodeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) {
       console.error('Error scrolling to missing delivery detail:', e);
     }
   };
 
-  // Enhanced order handlers with slot management
+  // Enhanced order handlers with delivery detail checks
   const handleAddToCart = async (orderData) => {
     try {
-      // Check if delivery details are complete (pincode + time slot)
-      if (isDeliveryAvailable && !areDeliveryDetailsComplete()) {
+      // Check if delivery details are complete (pincode)
+      if (isDeliveryAvailable() && !areDeliveryDetailsComplete()) {
         setShowToast(true);
         setTimeout(() => setShowToast(false), 4000);
         scrollToMissingDeliveryDetail();
@@ -253,32 +255,6 @@ const ProductSummary = ({
         });
       }
 
-      // If delivery slot is selected, decrement available orders
-      if (orderData.deliverySlot) {
-        // Handle different slot object structures
-        const slotId = orderData.deliverySlot.slotId || orderData.deliverySlot.slot?.id;
-        const deliveryDate = orderData.deliverySlot.deliveryDate || orderData.deliverySlot.date;
-        const formattedDate = OrderSlotManager.formatDeliveryDate(deliveryDate);
-        
-        // Only proceed if we have both slotId and valid date
-        if (slotId && formattedDate) {
-          const slotResult = await OrderSlotManager.handleOrderPlacement({
-            deliverySlotId: slotId,
-            deliveryDate: formattedDate,
-            quantity: quantity
-          });
-
-          if (!slotResult.success) {
-            console.warn('Failed to update delivery slot availability:', slotResult.message);
-          }
-        } else {
-          console.warn('OrderSlotManager: Missing slotId or deliveryDate', {
-            slotId,
-            deliveryDate,
-            formattedDate
-          });
-        }
-      }
     } catch (error) {
       console.error('Error in handleAddToCart:', error);
       throw error;
@@ -292,32 +268,6 @@ const ProductSummary = ({
         await onBuyNow(orderData);
       }
 
-      // If delivery slot is selected, decrement available orders
-      if (orderData.deliverySlot) {
-        // Handle different slot object structures
-        const slotId = orderData.deliverySlot.slotId || orderData.deliverySlot.slot?.id;
-        const deliveryDate = orderData.deliverySlot.deliveryDate || orderData.deliverySlot.date;
-        const formattedDate = OrderSlotManager.formatDeliveryDate(deliveryDate);
-        
-        // Only proceed if we have both slotId and valid date
-        if (slotId && formattedDate) {
-          const slotResult = await OrderSlotManager.handleOrderPlacement({
-            deliverySlotId: slotId,
-            deliveryDate: formattedDate,
-            quantity: quantity
-          });
-
-          if (!slotResult.success) {
-            console.warn('Failed to update delivery slot availability:', slotResult.message);
-          }
-        } else {
-          console.warn('OrderSlotManager: Missing slotId or deliveryDate', {
-            slotId,
-            deliveryDate,
-            formattedDate
-          });
-        }
-      }
     } catch (error) {
       console.error('Error in handleBuyNow:', error);
       throw error;
@@ -826,17 +776,6 @@ const ProductSummary = ({
         </div>
       </div>
 
-      {/* Divider */}
-      <div className="h-px bg-gray-200 dark:bg-gray-700 my-6" />
-
-      {/* Flavor Selection */}
-      <FlavorSelector
-        product={product}
-        selectedFlavor={selectedFlavor}
-        onFlavorChange={onFlavorChange}
-        onFlavorContentUpdate={handleFlavorContentUpdate}
-      />
-
       {/* Delivery Pincode Availability */}
       <div ref={pinCodeRef} className="mt-6">
         <div className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-blue-600 dark:border-blue-500 border border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-xl dark:shadow-black/30 p-3 sm:p-4 lg:p-5 transition-all duration-300 hover:shadow-xl dark:hover:shadow-2xl dark:hover:shadow-black/40 hover:border-blue-400 dark:hover:border-blue-400">
@@ -849,7 +788,7 @@ const ProductSummary = ({
           </div>
 
           {/* Content */}
-          {isDeliveryAvailable && currentPinCode ? (
+          {isDeliveryAvailable() && currentPinCode ? (
             <div className="flex items-center justify-between px-3 py-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
               <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400">
                 <CheckCircle className="w-4 h-4" />
@@ -884,7 +823,7 @@ const ProductSummary = ({
                   validatePinCodeDebounced && validatePinCodeDebounced(v);
                 }}
                 placeholder="Enter pincode"
-                className={`flex-1 bg-transparent outline-none border-none px-3 h-full text-base sm:text-lg font-medium tracking-[0.12em] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                className={`flex-1 bg-transparent outline-none border-none px-[3vw] sm:px-3 h-full text-base sm:text-lg font-medium tracking-[0.08em] sm:tracking-[0.12em] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
                   tempValidationStatus === 'valid'
                     ? 'text-green-700 dark:text-green-400'
                     : tempValidationStatus === 'invalid'
@@ -898,7 +837,7 @@ const ProductSummary = ({
                   if (localPin.length === 6) await (checkPinCode && checkPinCode(localPin));
                 }}
                 disabled={localPin.length !== 6}
-                className="px-7 sm:px-8 h-full min-w-[112px] sm:min-w-[128px] rounded-none rounded-r-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm sm:text-[15px] font-semibold tracking-wide disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors shadow-[0_2px_6px_rgba(15,23,42,0.25)] flex items-center justify-center"
+                className="px-[3vw] sm:px-8 h-full min-w-[20vw] sm:min-w-[128px] rounded-none rounded-r-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs sm:text-[15px] font-semibold tracking-wide disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors shadow-[0_2px_6px_rgba(15,23,42,0.25)] flex items-center justify-center"
                 type="button"
               >
                 Check
@@ -945,48 +884,21 @@ const ProductSummary = ({
         </div>
       </div>
 
-      {/* Delivery Slot Selection - Always show for better UX */}
-      <div ref={deliverySlotRef} className="mt-6">
-      <DeliverySlotSelector
-          onSlotSelect={(slot) => {
-            setSelectedDeliverySlot(slot);
-            setShowTimeSlotNotification(false);
-            
-            // If pincode is missing, show notification and scroll but do not execute pending action yet
-            if (!currentPinCode) {
-              setShowTimeSlotNotification(true);
-              scrollToMissingDeliveryDetail();
-              return;
-            }
-            
-            // Execute pending action after slot selection when delivery details are complete
-            if (pendingAction === 'combo') {
-              setPendingAction(null);
-              setShowComboModal(true);
-            } else if (pendingAction === 'cart') {
-              setPendingAction(null);
-              // Trigger add to cart after a brief delay to ensure state is updated
-              setTimeout(async () => {
-                if (comboSelections.length > 0) {
-                  setShowAddToCartConfirm(true);
-                } else {
-                  try {
-                    await handleAddToCart({
-                      deliverySlot: slot,
-                      cakeMessage: cakeMessage
-                    });
-                  } catch (error) {
-                    console.error('Error adding to cart:', error);
-                  }
-                }
-              }, 100);
-            }
-          }}
-        selectedSlot={selectedDeliverySlot}
-        pinCode={currentPinCode}
-        className="mb-6"
-      />
+      {/* Delivery Slot Preview - Select at checkout */}
+      <div className="mt-6">
+        <DeliverySlotPreview className="mb-6" />
       </div>
+
+      {/* Divider */}
+      <div className="h-px bg-gray-200 dark:bg-gray-700 my-6" />
+
+      {/* Flavor Selection */}
+      <FlavorSelector
+        product={product}
+        selectedFlavor={selectedFlavor}
+        onFlavorChange={onFlavorChange}
+        onFlavorContentUpdate={handleFlavorContentUpdate}
+      />
 
 
 
@@ -995,15 +907,11 @@ const ProductSummary = ({
       {/* Sticky Action Buttons - Desktop Only */}
       <div className="hidden lg:block sticky-buttons w-full">
         {/* Delivery Details Notification - Desktop */}
-        {showTimeSlotNotification && (
+        {showDeliveryNotification && (
           <div className="px-4 pt-2 pb-1">
             <div className="bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-800 rounded-sm px-3 py-1.5">
               <p className="text-xs font-medium text-red-800 dark:text-red-200">
-                {!currentPinCode && !selectedDeliverySlot
-                  ? 'Please enter pincode and select a time slot to proceed.'
-                  : !currentPinCode
-                    ? 'Please enter pincode to proceed.'
-                    : 'Please select a time slot to proceed.'}
+                Please enter pincode to proceed.
               </p>
             </div>
           </div>
@@ -1020,8 +928,7 @@ const ProductSummary = ({
             <button
               onClick={() => {
                 if (!areDeliveryDetailsComplete()) {
-                  setPendingAction('combo');
-                  setShowTimeSlotNotification(true);
+                  setShowDeliveryNotification(true);
                   scrollToMissingDeliveryDetail();
                 } else {
                   setShowComboModal(true);
@@ -1046,8 +953,7 @@ const ProductSummary = ({
             <button
               onClick={async () => {
                 if (!areDeliveryDetailsComplete()) {
-                  setPendingAction('cart');
-                  setShowTimeSlotNotification(true);
+                  setShowDeliveryNotification(true);
                   scrollToMissingDeliveryDetail();
                   return;
                 }
@@ -1059,7 +965,6 @@ const ProductSummary = ({
                   // No combos, add directly to cart
                   try {
                     await handleAddToCart({
-                      deliverySlot: selectedDeliverySlot,
                       cakeMessage: cakeMessage
                     });
                   } catch (error) {
@@ -1083,14 +988,10 @@ const ProductSummary = ({
        {/* Mobile Sticky Footer - Always visible at bottom */}
        <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-xl dark:shadow-black/30 z-50" style={{ willChange: 'transform', transform: 'translateZ(0)', backfaceVisibility: 'hidden', maxWidth: '100vw' }}>
         {/* Delivery Details Notification - Mobile - Always render to reserve space and prevent layout shift */}
-         <div className={`px-3 transition-all duration-200 ease-in-out ${showTimeSlotNotification ? 'pt-2 pb-1 opacity-100 max-h-20' : 'pt-0 pb-0 opacity-0 max-h-0 overflow-hidden'}`}>
+         <div className={`px-3 transition-all duration-200 ease-in-out ${showDeliveryNotification ? 'pt-2 pb-1 opacity-100 max-h-20' : 'pt-0 pb-0 opacity-0 max-h-0 overflow-hidden'}`}>
            <div className="bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-800 rounded-sm px-3 py-1.5">
              <p className="text-xs font-medium text-red-800 dark:text-red-200">
-              {!currentPinCode && !selectedDeliverySlot
-                ? 'Please enter pincode and select a time slot to proceed.'
-                : !currentPinCode
-                  ? 'Please enter pincode to proceed.'
-                  : 'Please select a time slot to proceed.'}
+              Please enter pincode to proceed.
              </p>
            </div>
          </div>
@@ -1101,8 +1002,7 @@ const ProductSummary = ({
              <button
                onClick={() => {
                  if (!areDeliveryDetailsComplete()) {
-                   setPendingAction('combo');
-                   setShowTimeSlotNotification(true);
+                   setShowDeliveryNotification(true);
                    scrollToMissingDeliveryDetail();
                  } else {
                    setShowComboModal(true);
@@ -1131,8 +1031,7 @@ const ProductSummary = ({
              <button
                onClick={async () => {
                if (!areDeliveryDetailsComplete()) {
-                  setPendingAction('cart');
-                  setShowTimeSlotNotification(true);
+                  setShowDeliveryNotification(true);
                   scrollToMissingDeliveryDetail();
                   return;
                 }
@@ -1144,7 +1043,6 @@ const ProductSummary = ({
                   // No combos, add directly to cart
                    try {
                      await handleAddToCart({
-                       deliverySlot: selectedDeliverySlot,
                        cakeMessage: cakeMessage
                      });
                    } catch (error) {
@@ -1202,11 +1100,10 @@ const ProductSummary = ({
         baseProductPrice={currentPrice}
         quantity={quantity}
         initialComboSelections={comboSelections}
-        selectedDeliverySlot={selectedDeliverySlot}
         onAddToCart={handleAddToCart}
         cakeMessage={cakeMessage}
         currentPinCode={currentPinCode}
-        isDeliveryAvailable={isDeliveryAvailable}
+        isDeliveryAvailable={isDeliveryAvailable()}
       />
 
       {/* Add to Cart Confirmation Popup */}
@@ -1233,7 +1130,6 @@ const ProductSummary = ({
                   setShowAddToCartConfirm(false);
                   try {
                     await handleAddToCart({
-                      deliverySlot: selectedDeliverySlot,
                       cakeMessage: cakeMessage
                     });
                   } catch (error) {
@@ -1265,7 +1161,6 @@ const ProductSummary = ({
                     setComboSelections([]);
                     setSelectedCombos([]);
                     await handleAddToCart({
-                      deliverySlot: selectedDeliverySlot,
                       cakeMessage: cakeMessage
                     });
                   } catch (error) {
@@ -1288,11 +1183,7 @@ const ProductSummary = ({
           <div>
             <p className="font-medium">Delivery Details Required</p>
             <p className="text-sm opacity-90">
-              {!currentPinCode && !selectedDeliverySlot
-                ? 'Please enter pincode and select a delivery time slot to continue.'
-                : !currentPinCode
-                  ? 'Please enter pincode to continue.'
-                  : 'Please select a delivery time slot to continue.'}
+              Please enter pincode to continue.
             </p>
           </div>
           <button

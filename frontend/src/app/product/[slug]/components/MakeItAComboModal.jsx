@@ -15,7 +15,6 @@ const MakeItAComboModal = ({
   baseProductPrice = 0, 
   quantity = 1, 
   initialComboSelections = [],
-  selectedDeliverySlot = null,
   onAddToCart = null,
   cakeMessage = '',
   currentPinCode = null,
@@ -183,14 +182,6 @@ const MakeItAComboModal = ({
   };
 
   const handleAddToCombo = async (addOnProduct) => {
-    // Check if user is authenticated
-    const token = localStorage.getItem('customer_token');
-    if (!token) {
-      setError('Please log in to add items to your combo');
-      setTimeout(() => setError(null), 5000);
-      return;
-    }
-
     setActionLoading(addOnProduct.id);
     setError(null);
     try {
@@ -421,13 +412,13 @@ const MakeItAComboModal = ({
 
   // Check if Add to Cart button should be enabled
   const canAddToCart = () => {
-    return selectedDeliverySlot && currentPinCode && isDeliveryAvailable && onAddToCart;
+    return currentPinCode && isDeliveryAvailable && onAddToCart;
   };
 
   // Handle Add to Cart from modal
   const handleAddToCartFromModal = async () => {
     if (!canAddToCart()) {
-      setError('Please select a delivery time slot and pincode to add to cart');
+      setError('Please enter pincode to add to cart');
       setTimeout(() => setError(null), 5000);
       return;
     }
@@ -475,7 +466,6 @@ const MakeItAComboModal = ({
       // Call add to cart with all required data (this will redirect to cart page on success)
       if (onAddToCart) {
         await onAddToCart({
-          deliverySlot: selectedDeliverySlot,
           cakeMessage: cakeMessage,
           combos: formattedCombos,
           totalPrice: getGrandTotal()
@@ -618,6 +608,9 @@ const MakeItAComboModal = ({
                 <div className="flex-1 min-w-0">
                   <h2 className="text-sm sm:text-base font-semibold tracking-wide text-gray-900 dark:text-gray-100 leading-tight mb-0.5">Make it a Combo</h2>
                   <p className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 leading-tight">Enhance your order with curated add‑ons</p>
+                  <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 leading-tight mt-0.5">
+                    You’ll be asked to log in at checkout to complete the order.
+                  </p>
                 </div>
               </div>
               <button
@@ -1136,7 +1129,7 @@ const MakeItAComboModal = ({
               
               {/* Action Buttons */}
               {canAddToCart() && comboSelections.length > 0 ? (
-                // Show two buttons when slot is selected and combos exist
+                // Show two buttons when delivery is available and combos exist
                 <div className="flex gap-2.5">
                   {/* Save & Return Button - Modern Outline Style with Enhanced Border */}
                   <button
@@ -1194,7 +1187,7 @@ const MakeItAComboModal = ({
                   {getContinueButtonText()}
                 </button>
               ) : (
-                // Show single Save & Return button when combos exist but no slot
+                // Show single Save & Return button when delivery is unavailable
                 <button
                   onClick={async () => {
                     setSaveLoading(true);
@@ -1279,7 +1272,7 @@ const MakeItAComboModal = ({
             
             {/* Action Buttons */}
             {canAddToCart() && comboSelections.length > 0 ? (
-              // Show two buttons when slot is selected and combos exist
+              // Show two buttons when delivery is available and combos exist
               <div className="flex gap-2">
                 {/* Save & Return Button - Modern Outline Style with Enhanced Border */}
                 <button
@@ -1337,7 +1330,7 @@ const MakeItAComboModal = ({
                 {getContinueButtonText()}
               </button>
             ) : (
-              // Show single Save & Return button when combos exist but no slot
+              // Show single Save & Return button when delivery is unavailable
               <button
                 onClick={async () => {
                   setSaveLoading(true);

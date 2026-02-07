@@ -120,7 +120,7 @@ const formatTimeSlot = (deliverySlot) => {
   return 'N/A';
 };
 
-function CheckoutPageContent() {
+function CheckoutPageContent({ isClient }) {
   const router = useRouter();
   const { cartItems, getCartSummary, clearCart, isInitialized, autoUpdateExpiredSlots } = useCart();
   const { showSuccess } = useToast();
@@ -181,6 +181,8 @@ function CheckoutPageContent() {
   });
 
   // Update form data when customer data loads
+  // isClient passed from wrapper to keep hook order stable
+
   useEffect(() => {
     if (customer && isAuthenticated) {
       setFormData(prev => ({
@@ -420,10 +422,12 @@ function CheckoutPageContent() {
   const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState(1500); // Default value, will be fetched from API
   
   const toggleSection = (section) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }));
+    setExpandedSections(prev => {
+      if (section === 'deliverySlot' && !selectedSlot && !cartDeliverySlot) {
+        return { ...prev, [section]: true };
+      }
+      return { ...prev, [section]: !prev[section] };
+    });
   };
   
   // Scroll to section
@@ -2277,7 +2281,7 @@ function CheckoutPageContent() {
         )}
 
         {/* Delivery Slot Warning Banner - Prominent warning for expired/expiring slots */}
-        {(selectedSlot || cartDeliverySlot) && !showSlotSelector && (() => {
+        {isClient && (selectedSlot || cartDeliverySlot) && !showSlotSelector && (() => {
           const currentSlot = selectedSlot || cartDeliverySlot;
           if (!currentSlot) return null;
           
@@ -2967,7 +2971,7 @@ function CheckoutPageContent() {
                 </div>
               )}
               {/* Always-visible slot display */}
-              {(selectedSlot || cartDeliverySlot) && !showSlotSelector && (() => {
+              {isClient && (selectedSlot || cartDeliverySlot) && !showSlotSelector && (() => {
                 const currentSlot = selectedSlot || cartDeliverySlot;
                 const expirationStatus = getSlotExpirationStatus(currentSlot);
                 const isExpired = expirationStatus === 'expired';
@@ -3879,6 +3883,23 @@ function CheckoutPageContent() {
 }
 
 export default function CheckoutPage() {
-  return <CheckoutPageContent />;
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
+          <div className="h-6 w-40 bg-gray-200 dark:bg-gray-800 rounded" />
+          <div className="mt-4 h-32 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700" />
+        </div>
+      </div>
+    );
+  }
+
+  return <CheckoutPageContent isClient />;
 }
 
