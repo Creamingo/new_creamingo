@@ -24,7 +24,9 @@ import {
   Tag,
   Package,
   Gift,
-  Navigation
+  Navigation,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { useCart } from '../../contexts/CartContext';
 import { usePinCode } from '../../contexts/PinCodeContext';
@@ -143,6 +145,9 @@ function CheckoutPageContent() {
   const [authEmail, setAuthEmail] = useState('');
   const [authStep, setAuthStep] = useState('email');
   const [authPassword, setAuthPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [showSignupConfirmPassword, setShowSignupConfirmPassword] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
   const [emailCheckResult, setEmailCheckResult] = useState(null);
@@ -2424,14 +2429,28 @@ function CheckoutPageContent() {
                         <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
                           Password *
                         </label>
-                        <input
-                          type="password"
-                          value={authPassword}
-                          onChange={(e) => setAuthPassword(e.target.value)}
-                          required
-                          className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
-                          placeholder="Enter your password"
-                        />
+                        <div className="relative">
+                          <input
+                            type={showLoginPassword ? 'text' : 'password'}
+                            value={authPassword}
+                            onChange={(e) => setAuthPassword(e.target.value)}
+                            required
+                            className="w-full pr-10 px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                            placeholder="Enter your password"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowLoginPassword(prev => !prev)}
+                            aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                          >
+                            {showLoginPassword ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
                       </div>
                       <button
                         type="submit"
@@ -2464,6 +2483,7 @@ function CheckoutPageContent() {
                         </label>
                         <input
                           type="text"
+                          autoComplete="name"
                           value={signupData.name}
                           onChange={(e) => setSignupData(prev => ({ ...prev, name: e.target.value }))}
                           required
@@ -2477,6 +2497,7 @@ function CheckoutPageContent() {
                         </label>
                         <input
                           type="tel"
+                          autoComplete="tel"
                           value={signupData.phone}
                           onChange={(e) => setSignupData(prev => ({ ...prev, phone: e.target.value }))}
                           className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
@@ -2488,27 +2509,57 @@ function CheckoutPageContent() {
                           <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
                             Password *
                           </label>
-                          <input
-                            type="password"
-                            value={signupData.password}
-                            onChange={(e) => setSignupData(prev => ({ ...prev, password: e.target.value }))}
-                            required
-                            className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
-                            placeholder="Create a password"
-                          />
+                          <div className="relative">
+                            <input
+                              type={showSignupPassword ? 'text' : 'password'}
+                              autoComplete="new-password"
+                              value={signupData.password}
+                              onChange={(e) => setSignupData(prev => ({ ...prev, password: e.target.value }))}
+                              required
+                              className="w-full pr-10 px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                              placeholder="Create a password"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowSignupPassword(prev => !prev)}
+                              aria-label={showSignupPassword ? 'Hide password' : 'Show password'}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                            >
+                              {showSignupPassword ? (
+                                <EyeOff className="w-4 h-4" />
+                              ) : (
+                                <Eye className="w-4 h-4" />
+                              )}
+                            </button>
+                          </div>
                         </div>
                         <div>
                           <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
                             Confirm Password *
                           </label>
-                          <input
-                            type="password"
-                            value={signupData.confirmPassword}
-                            onChange={(e) => setSignupData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                            required
-                            className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
-                            placeholder="Confirm password"
-                          />
+                          <div className="relative">
+                            <input
+                              type={showSignupConfirmPassword ? 'text' : 'password'}
+                              autoComplete="new-password"
+                              value={signupData.confirmPassword}
+                              onChange={(e) => setSignupData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                              required
+                              className="w-full pr-10 px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                              placeholder="Confirm password"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowSignupConfirmPassword(prev => !prev)}
+                              aria-label={showSignupConfirmPassword ? 'Hide password' : 'Show password'}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                            >
+                              {showSignupConfirmPassword ? (
+                                <EyeOff className="w-4 h-4" />
+                              ) : (
+                                <Eye className="w-4 h-4" />
+                              )}
+                            </button>
+                          </div>
                         </div>
                       </div>
                       <div>
@@ -2554,25 +2605,26 @@ function CheckoutPageContent() {
             )}
 
             {/* Customer Information - Collapsible on Mobile */}
-            <div id="customerInfo" className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-blue-500 dark:border-blue-400 border border-gray-200 dark:border-gray-700 overflow-hidden scroll-mt-24">
-              {/* Header - Clickable on Mobile */}
-              <button
-                onClick={() => toggleSection('customerInfo')}
-                className="w-full lg:pointer-events-none flex items-center justify-between p-3 sm:p-4 lg:p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors lg:hover:bg-transparent"
-              >
-                <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  <div className="p-1.5 sm:p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                    <User className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <span className="text-blue-900 dark:text-blue-100">Customer Information</span>
-              </h2>
-                <ChevronDown className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform duration-200 lg:hidden ${expandedSections.customerInfo ? 'rotate-180' : ''}`} />
-              </button>
-              
-              {/* Content - Collapsible on Mobile */}
-              <div className={`px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6 transition-all duration-300 lg:block ${expandedSections.customerInfo ? 'block' : 'hidden'}`}>
-                <div className="space-y-3 sm:space-y-4">
-                <div>
+            {isAuthenticated && (
+              <div id="customerInfo" className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-blue-500 dark:border-blue-400 border border-gray-200 dark:border-gray-700 overflow-hidden scroll-mt-24">
+                {/* Header - Clickable on Mobile */}
+                <button
+                  onClick={() => toggleSection('customerInfo')}
+                  className="w-full lg:pointer-events-none flex items-center justify-between p-3 sm:p-4 lg:p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors lg:hover:bg-transparent"
+                >
+                  <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                    <div className="p-1.5 sm:p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                      <User className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <span className="text-blue-900 dark:text-blue-100">Customer Information</span>
+                  </h2>
+                  <ChevronDown className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform duration-200 lg:hidden ${expandedSections.customerInfo ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {/* Content - Collapsible on Mobile */}
+                <div className={`px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6 transition-all duration-300 lg:block ${expandedSections.customerInfo ? 'block' : 'hidden'}`}>
+                  <div className="space-y-3 sm:space-y-4">
+                  <div>
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
                     Full Name *
                   </label>
@@ -2651,9 +2703,10 @@ function CheckoutPageContent() {
                     )}
                   </div>
                   </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Delivery Address - Collapsible on Mobile */}
             <div id="deliveryAddress" className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-green-500 dark:border-green-400 border border-gray-200 dark:border-gray-700 overflow-hidden scroll-mt-24">

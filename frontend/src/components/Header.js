@@ -32,6 +32,7 @@ import { useCategoryMenu } from '../contexts/CategoryMenuContext'
 import { useCart } from '../contexts/CartContext'
 import { useCustomerAuth } from '../contexts/CustomerAuthContext'
 import CartDisplay from './CartDisplay'
+import AuthModal from './AuthModal'
 import categoryApi from '../api/categoryApi'
 import productApi from '../api/productApi'
 import { formatPrice } from '../utils/priceFormatter'
@@ -161,6 +162,24 @@ const Header = () => {
 
   // Get authentication state
   const { isAuthenticated, customer, logout } = useCustomerAuth()
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
+  const [authRedirectPath, setAuthRedirectPath] = useState(null)
+
+  const openAuthModal = (redirectPath = null) => {
+    setAuthRedirectPath(redirectPath)
+    setIsAuthModalOpen(true)
+  }
+
+  const closeAuthModal = () => {
+    setIsAuthModalOpen(false)
+    setAuthRedirectPath(null)
+  }
+
+  const handleAuthSuccess = () => {
+    if (authRedirectPath) {
+      router.push(authRedirectPath)
+    }
+  }
 
   // Dynamic useful links based on authentication state
   const usefulLinks = isAuthenticated ? [
@@ -170,8 +189,8 @@ const Header = () => {
     { icon: Store, label: 'Become a Vendor', href: '/vendor' },
     { icon: LogOut, label: 'Logout', href: '#', isLogout: true }
   ] : [
-    { icon: LogIn, label: 'Login', href: '/login' },
-    { icon: UserPlus, label: 'Sign Up', href: '/signup' }
+    { icon: LogIn, label: 'Login', href: '#', isAuth: true },
+    { icon: UserPlus, label: 'Sign Up', href: '#', isAuth: true }
   ]
 
   const trendingSearches = [
@@ -731,6 +750,10 @@ const Header = () => {
               {(!mounted || !isOnPDP) && (
                 <button
                   onClick={() => {
+                    if (!isAuthenticated) {
+                      openAuthModal('/account')
+                      return
+                    }
                     // On mobile, if on account page, navigate back; otherwise navigate to account
                     if (pathname === '/account') {
                       router.push('/')
@@ -1085,6 +1108,8 @@ const Header = () => {
                                   if (link.isLogout) {
                                     // Handle logout
                                     await logout()
+                                  } else if (link.isAuth) {
+                                    openAuthModal()
                                   } else {
                                     // Navigate to link
                                     router.push(link.href)
@@ -2056,6 +2081,8 @@ const Header = () => {
                       if (link.isLogout) {
                         // Handle logout
                         await logout()
+                      } else if (link.isAuth) {
+                        openAuthModal()
                       } else {
                         // Navigate to link
                         router.push(link.href)
@@ -2076,6 +2103,12 @@ const Header = () => {
           </div>
         )}
       </div>
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={closeAuthModal}
+        onSuccess={handleAuthSuccess}
+      />
 
       {/* Cart Display Modal */}
       <CartDisplay isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />

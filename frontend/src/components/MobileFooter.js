@@ -6,7 +6,9 @@ import { Home, Wallet, ShoppingCart, Headphones, Heart, MessageSquare, Phone, Ti
 import { useCart } from '../contexts/CartContext'
 import { useWishlist } from '../contexts/WishlistContext'
 import { useNotifications } from '../contexts/NotificationContext'
+import { useCustomerAuth } from '../contexts/CustomerAuthContext'
 import CartDisplay from './CartDisplay'
+import AuthModal from './AuthModal'
 
 const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }) => {
   const router = useRouter()
@@ -17,7 +19,26 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
   const { getItemCount } = useCart()
   const { wishlistCount: contextWishlistCount, isInitialized: wishlistInitialized } = useWishlist()
   const { unreadCount: notificationCount, openNotificationCenter } = useNotifications()
+  const { isAuthenticated } = useCustomerAuth()
   const [cartItemCount, setCartItemCount] = useState(0)
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
+  const [authRedirectPath, setAuthRedirectPath] = useState(null)
+
+  const openAuthModal = (redirectPath = null) => {
+    setAuthRedirectPath(redirectPath)
+    setIsAuthModalOpen(true)
+  }
+
+  const closeAuthModal = () => {
+    setIsAuthModalOpen(false)
+    setAuthRedirectPath(null)
+  }
+
+  const handleAuthSuccess = () => {
+    if (authRedirectPath) {
+      router.push(authRedirectPath)
+    }
+  }
   
   // Use context wishlist count if available, otherwise use prop (for backwards compatibility)
   const wishlistCount = wishlistInitialized ? contextWishlistCount : propWishlistCount
@@ -100,6 +121,14 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
     if (tabId === 'help') {
       setIsHelpExpanded(!isHelpExpanded)
       setActiveTab('help')
+    } else if (tabId === 'account') {
+      if (!isAuthenticated) {
+        openAuthModal('/account')
+        return
+      }
+      router.push('/account')
+      setIsHelpExpanded(false)
+      setActiveTab('account')
     } else if (tabId === 'cart') {
       // Navigate to cart page instead of opening modal
       router.push('/cart')
@@ -184,6 +213,12 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
       <CartDisplay
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
+      />
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={closeAuthModal}
+        onSuccess={handleAuthSuccess}
       />
     </>
   )
