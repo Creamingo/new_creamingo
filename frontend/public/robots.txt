@@ -2,3 +2,4 @@ User-agent: *
 Disallow: /admin
 Disallow: /admin/
 Disallow: /admin-panel
+Sitemap: /sitemap.xml

@@ -186,81 +186,80 @@ const getWalletTransactions = async (req, res) => {
   }
 };
 
+const creditWelcomeBonusForCustomer = async (customerId) => {
+  const customerResult = await query(
+    'SELECT welcome_bonus_credited, COALESCE(wallet_balance, 0) as wallet_balance FROM customers WHERE id = ?',
+    [customerId]
+  );
+
+  if (customerResult.rows.length === 0) {
+    const error = new Error('Customer not found');
+    error.code = 'CUSTOMER_NOT_FOUND';
+    throw error;
+  }
+
+  if (customerResult.rows[0].welcome_bonus_credited) {
+    return {
+      credited: false,
+      amount: 0,
+      newBalance: parseFloat(customerResult.rows[0].wallet_balance) || 0
+    };
+  }
+
+  const bonusAmount = 50.0;
+  const currentBalance = parseFloat(customerResult.rows[0].wallet_balance) || 0;
+  const newBalance = currentBalance + bonusAmount;
+
+  await query(
+    `INSERT INTO wallet_transactions 
+    (customer_id, type, amount, description, status, transaction_type, created_at, updated_at)
+    VALUES (?, 'credit', ?, ?, 'completed', 'welcome_bonus', NOW(), NOW())`,
+    [customerId, bonusAmount, 'Welcome Bonus']
+  );
+
+  try {
+    const { createWalletNotification } = require('../utils/notificationHelper');
+    await createWalletNotification(customerId, 'welcome_bonus', bonusAmount, 'Welcome Bonus');
+  } catch (notifError) {
+    console.error('Notification creation error:', notifError);
+  }
+
+  await query(
+    'UPDATE customers SET wallet_balance = ?, welcome_bonus_credited = 1 WHERE id = ?',
+    [newBalance, customerId]
+  );
+
+  return { credited: true, amount: bonusAmount, newBalance };
+};
+
 // Credit welcome bonus
 const creditWelcomeBonus = async (req, res) => {
   try {
     const customerId = req.customer.id;
+    const result = await creditWelcomeBonusForCustomer(customerId);
 
-    // Check if welcome bonus already credited
-    const customerResult = await query(
-      'SELECT welcome_bonus_credited, COALESCE(wallet_balance, 0) as wallet_balance FROM customers WHERE id = ?',
-      [customerId]
-    );
-
-    if (customerResult.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Customer not found'
-      });
-    }
-
-    if (customerResult.rows[0].welcome_bonus_credited) {
+    if (!result.credited) {
       return res.status(400).json({
         success: false,
         message: 'Welcome bonus already credited'
       });
     }
 
-    const bonusAmount = 50.00;
-    const currentBalance = parseFloat(customerResult.rows[0].wallet_balance) || 0;
-    const newBalance = currentBalance + bonusAmount;
-
-      // Create transaction record - SQLite's NOW() stores in UTC
-      // We'll convert to IST when reading, so store in UTC for consistency
-      const insertResult = await query(
-        `INSERT INTO wallet_transactions 
-        (customer_id, type, amount, description, status, transaction_type, created_at, updated_at)
-        VALUES (?, 'credit', ?, ?, 'completed', 'welcome_bonus', NOW(), NOW())`,
-        [customerId, bonusAmount, 'Welcome Bonus']
-      );
-
-    console.log('Transaction created:', insertResult.lastID);
-
-    // Create notification
-    try {
-      const { createWalletNotification } = require('../utils/notificationHelper');
-      await createWalletNotification(customerId, 'welcome_bonus', bonusAmount, 'Welcome Bonus');
-    } catch (notifError) {
-      console.error('Notification creation error:', notifError);
-      // Don't fail if notification fails
-    }
-
-    // Update customer balance - handle NULL values
-    const updateResult = await query(
-      'UPDATE customers SET wallet_balance = ?, welcome_bonus_credited = 1 WHERE id = ?',
-      [newBalance, customerId]
-    );
-
-    console.log('Balance updated. Rows affected:', updateResult.rowCount);
-    console.log('New balance:', newBalance);
-
-    // Verify the transaction was created
-    const verifyResult = await query(
-      'SELECT COUNT(*) as count FROM wallet_transactions WHERE customer_id = ? AND transaction_type = ?',
-      [customerId, 'welcome_bonus']
-    );
-
-    console.log('Verification - welcome bonus transactions:', verifyResult.rows[0].count);
-
     res.json({
       success: true,
       message: 'Welcome bonus credited successfully',
       data: {
-        amount: bonusAmount,
-        newBalance: newBalance
+        amount: result.amount,
+        newBalance: result.newBalance
       }
     });
   } catch (error) {
+    if (error.code === 'CUSTOMER_NOT_FOUND') {
+      return res.status(404).json({
+        success: false,
+        message: 'Customer not found'
+      });
+    }
     console.error('Credit welcome bonus error:', error);
     console.error('Error stack:', error.stack);
     res.status(500).json({
@@ -349,6 +348,7 @@ module.exports = {
   getWalletBalance,
   getWalletTransactions,
   creditWelcomeBonus,
-  getWalletStats
+  getWalletStats,
+  creditWelcomeBonusForCustomer
 };
 

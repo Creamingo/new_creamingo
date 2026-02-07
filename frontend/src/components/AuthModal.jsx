@@ -154,7 +154,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
         phone: signupData.phone?.trim() || undefined,
         password: signupData.password,
         referralCode: signupData.referralCode?.trim() || undefined
-      });
+      }, { source: 'menu' });
       onSuccess?.();
       onClose?.();
     } catch (error) {

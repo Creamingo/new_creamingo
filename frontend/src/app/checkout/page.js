@@ -315,7 +315,7 @@ function CheckoutPageContent({ isClient }) {
         phone: signupData.phone?.trim() || undefined,
         password: signupData.password,
         referralCode: signupData.referralCode?.trim() || undefined
-      });
+      }, { source: 'checkout' });
       setSignupData(prev => ({
         ...prev,
         password: '',
