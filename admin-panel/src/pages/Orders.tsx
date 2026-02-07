@@ -9,6 +9,7 @@ import { TableColumn } from '../types';
 import orderService, { Order, OrderStats } from '../services/orderService';
 import dealService, { Deal } from '../services/dealService';
 import { useToastContext } from '../contexts/ToastContext';
+import { resolveImageUrl } from '../utils/imageUrl';
 import OrderTimeline from '../components/order/OrderTimeline';
 import { useNotifications } from '../hooks/useNotifications';
 
@@ -2261,7 +2262,7 @@ const OrdersComponent: React.FC = () => {
                                     <div className="relative w-16 h-16 sm:w-20 sm:h-20 bg-white dark:bg-gray-800 rounded-lg overflow-hidden flex-shrink-0 border border-gray-200 dark:border-gray-700 shadow-sm">
                                       {productImage ? (
                                         <img 
-                                          src={productImage} 
+                                          src={resolveImageUrl(productImage)} 
                                           alt={item.productName}
                                           className="w-full h-full object-cover"
                                           onError={(e) => {
@@ -2372,7 +2373,7 @@ const OrdersComponent: React.FC = () => {
                                       <div className="relative w-11 h-11 sm:w-12 sm:h-12 bg-amber-50 dark:bg-amber-950 rounded-md overflow-hidden flex-shrink-0 border border-amber-200 dark:border-amber-700">
                                         {productImage ? (
                                           <img 
-                                            src={productImage} 
+                                            src={resolveImageUrl(productImage)} 
                                             alt={item.productName}
                                             className="w-full h-full object-cover"
                                             onError={(e) => {
@@ -2912,7 +2913,7 @@ const OrdersComponent: React.FC = () => {
                               <div className="w-12 h-12 flex-shrink-0 bg-white dark:bg-gray-800 rounded-md overflow-hidden border border-gray-200 dark:border-gray-600 shadow-sm relative">
                                 {productImage ? (
                                   <img
-                                    src={productImage}
+                                    src={resolveImageUrl(productImage)}
                                     alt={item.productName || 'Product'}
                                     className="w-full h-full object-cover"
                                     loading="lazy"
@@ -2993,7 +2994,7 @@ const OrdersComponent: React.FC = () => {
                                 <div className="w-10 h-10 flex-shrink-0 rounded-md overflow-hidden bg-amber-50 border border-amber-200 dark:border-amber-700">
                                   {productImage ? (
                                     <img
-                                      src={productImage}
+                                      src={resolveImageUrl(productImage)}
                                       alt={item.productName || 'Deal item'}
                                       className="w-full h-full object-cover"
                                       loading="lazy"

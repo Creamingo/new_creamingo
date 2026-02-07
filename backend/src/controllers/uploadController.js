@@ -1,8 +1,9 @@
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const { resizeIconImage } = require('../utils/imageResize');
-const { getUploadPath } = require('../utils/uploadPath');
-const { getBaseUrl } = require('../utils/urlHelpers');
+const { getGalleryRelativePath, resolveGalleryFilePath } = require('../utils/uploadPath');
+const { getBaseUrl, buildPublicUrlWithBase } = require('../utils/urlHelpers');
 
 // Upload single file
 const uploadSingle = async (req, res) => {
@@ -14,8 +15,12 @@ const uploadSingle = async (req, res) => {
       });
     }
 
+    const type = req.uploadType || req.body?.type || req.query?.type || 'misc';
+    const relativePath = getGalleryRelativePath(type, req.file.filename);
     const baseUrl = getBaseUrl(req);
-    const fileUrl = `${baseUrl}/uploads/${req.file.filename}`;
+    const fileUrl = process.env.UPLOAD_RETURN_ABSOLUTE_URL === 'true'
+      ? buildPublicUrlWithBase(baseUrl, relativePath)
+      : relativePath;
 
     res.json({
       success: true,
@@ -24,7 +29,7 @@ const uploadSingle = async (req, res) => {
         filename: req.file.filename,
         originalname: req.file.originalname,
         size: req.file.size,
-        url: fileUrl
+      url: fileUrl
       }
     });
   } catch (error) {
@@ -46,13 +51,20 @@ const uploadMultiple = async (req, res) => {
       });
     }
 
+    const type = req.uploadType || req.body?.type || req.query?.type || 'misc';
     const baseUrl = getBaseUrl(req);
-    const files = req.files.map(file => ({
-      filename: file.filename,
-      originalname: file.originalname,
-      size: file.size,
-      url: `${baseUrl}/uploads/${file.filename}`
-    }));
+    const files = req.files.map(file => {
+      const relativePath = getGalleryRelativePath(type, file.filename);
+      const url = process.env.UPLOAD_RETURN_ABSOLUTE_URL === 'true'
+        ? buildPublicUrlWithBase(baseUrl, relativePath)
+        : relativePath;
+      return {
+        filename: file.filename,
+        originalname: file.originalname,
+        size: file.size,
+        url
+      };
+    });
 
     res.json({
       success: true,
@@ -72,7 +84,14 @@ const uploadMultiple = async (req, res) => {
 const deleteFile = async (req, res) => {
   try {
     const { filename } = req.params;
-    const filePath = path.join(getUploadPath(), filename);
+    const type = req.query?.type;
+    const filePath = resolveGalleryFilePath(type, filename);
+    if (!filePath) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid file path'
+      });
+    }
 
     // Check if file exists
     if (!fs.existsSync(filePath)) {
@@ -102,7 +121,14 @@ const deleteFile = async (req, res) => {
 const getFileInfo = async (req, res) => {
   try {
     const { filename } = req.params;
-    const filePath = path.join(getUploadPath(), filename);
+    const type = req.query?.type;
+    const filePath = resolveGalleryFilePath(type, filename);
+    if (!filePath) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid file path'
+      });
+    }
 
     // Check if file exists
     if (!fs.existsSync(filePath)) {
@@ -114,7 +140,10 @@ const getFileInfo = async (req, res) => {
 
     const stats = fs.statSync(filePath);
     const baseUrl = getBaseUrl(req);
-    const fileUrl = `${baseUrl}/uploads/${filename}`;
+    const relativePath = getGalleryRelativePath(type, filename);
+    const fileUrl = process.env.UPLOAD_RETURN_ABSOLUTE_URL === 'true'
+      ? buildPublicUrlWithBase(baseUrl, relativePath)
+      : relativePath;
 
     res.json({
       success: true,
@@ -154,7 +183,9 @@ const uploadIconImage = async (req, res) => {
     }
 
     const originalPath = req.file.path;
-    const resizedFilename = `icon-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.jpg`;
+    const hashLength = Math.floor(Math.random() * 5) + 8;
+    const hash = crypto.randomBytes(Math.ceil(hashLength / 2)).toString('hex').slice(0, hashLength);
+    const resizedFilename = `icon-${hash}.jpg`;
     const resizedPath = path.join(path.dirname(originalPath), resizedFilename);
 
     // Resize the image to 64x64 pixels
@@ -164,7 +195,10 @@ const uploadIconImage = async (req, res) => {
     fs.unlinkSync(originalPath);
 
     const baseUrl = getBaseUrl(req);
-    const fileUrl = `${baseUrl}/uploads/${resizedFilename}`;
+    const relativePath = getGalleryRelativePath('icons', resizedFilename);
+    const fileUrl = process.env.UPLOAD_RETURN_ABSOLUTE_URL === 'true'
+      ? buildPublicUrlWithBase(baseUrl, relativePath)
+      : relativePath;
 
     res.json({
       success: true,

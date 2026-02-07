@@ -152,11 +152,11 @@ app.use('/api/customer-auth', authLimiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Serve static files (uploads) with comprehensive CORS headers
-const { getUploadPath } = require('./utils/uploadPath');
-const staticUploadPath = getUploadPath();
+// Serve static files (gallery) with comprehensive CORS headers
+const { getGalleryRoot } = require('./utils/uploadPath');
+const staticGalleryPath = getGalleryRoot();
 
-app.use('/uploads', (req, res, next) => {
+app.use('/gallery', (req, res, next) => {
   // Set comprehensive CORS headers for static files
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -175,7 +175,7 @@ app.use('/uploads', (req, res, next) => {
   }
   
   next();
-}, express.static(staticUploadPath, {
+}, express.static(staticGalleryPath, {
   setHeaders: (res, path) => {
     // Additional headers for static files
     res.setHeader('Access-Control-Allow-Origin', '*');

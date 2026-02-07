@@ -24,6 +24,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Modal, ModalFooter } from '../components/ui/Modal';
 import { FileUpload } from '../components/ui/FileUpload';
+import { resolveImageUrl } from '../utils/imageUrl';
 import { Category } from '../types';
 import categoryService from '../services/categoryService';
 import apiClient from '../services/api';
@@ -194,7 +195,7 @@ const SortableRow: React.FC<SortableRowProps> = ({
           <div className="flex items-center justify-center">
             {category.image_url ? (
               <img 
-                src={category.image_url} 
+                src={resolveImageUrl(category.image_url)} 
                 alt={category.name} 
                 className="w-12 h-8 object-cover rounded border border-gray-200 dark:border-gray-700"
                 onError={(e) => {
@@ -213,7 +214,7 @@ const SortableRow: React.FC<SortableRowProps> = ({
         <div className="flex items-center justify-center">
           {(category as any).icon_image_url ? (
             <img 
-              src={(category as any).icon_image_url} 
+              src={resolveImageUrl((category as any).icon_image_url)} 
               alt={`${category.name} icon`} 
               className="w-8 h-8 object-contain rounded border border-gray-200 dark:border-gray-700"
               onError={(e) => {
@@ -669,7 +670,7 @@ export const Categories: React.FC = () => {
       
       // Upload image if files are selected
       if (uploadedFiles.length > 0) {
-        const uploadResponse = await apiClient.uploadFile('/upload/single', uploadedFiles[0]);
+        const uploadResponse = await apiClient.uploadFile('/upload/single?type=categories', uploadedFiles[0]);
         if (uploadResponse.success && uploadResponse.data) {
           imageUrl = uploadResponse.data.url;
         }
@@ -677,7 +678,7 @@ export const Categories: React.FC = () => {
       
       // Upload icon image if files are selected and no SVG icon is selected
       if (uploadedIconFiles.length > 0 && (!newCategory.icon || newCategory.icon === '')) {
-        const iconUploadResponse = await apiClient.uploadFile('/upload/icon', uploadedIconFiles[0]);
+        const iconUploadResponse = await apiClient.uploadFile('/upload/icon?type=icons', uploadedIconFiles[0]);
         if (iconUploadResponse.success && iconUploadResponse.data) {
           iconImageUrl = iconUploadResponse.data.url;
         }
@@ -747,7 +748,7 @@ export const Categories: React.FC = () => {
       
       // Upload new image if files are selected
       if (uploadedFiles.length > 0) {
-        const uploadResponse = await apiClient.uploadFile('/upload/single', uploadedFiles[0]);
+        const uploadResponse = await apiClient.uploadFile('/upload/single?type=categories', uploadedFiles[0]);
         if (uploadResponse.success && uploadResponse.data) {
           imageUrl = uploadResponse.data.url;
         }
@@ -755,7 +756,7 @@ export const Categories: React.FC = () => {
       
       // Upload icon image if files are selected and no SVG icon is selected
       if (uploadedIconFiles.length > 0 && (!editCategory.icon || editCategory.icon === '')) {
-        const iconUploadResponse = await apiClient.uploadFile('/upload/icon', uploadedIconFiles[0]);
+        const iconUploadResponse = await apiClient.uploadFile('/upload/icon?type=icons', uploadedIconFiles[0]);
         if (iconUploadResponse.success && iconUploadResponse.data) {
           iconImageUrl = iconUploadResponse.data.url;
         }
@@ -1415,7 +1416,7 @@ export const Categories: React.FC = () => {
                         {category.image_url ? (
                           <div className="w-full h-32 sm:h-40 bg-gray-100 dark:bg-gray-700 overflow-hidden">
                             <img 
-                              src={category.image_url} 
+                              src={resolveImageUrl(category.image_url)} 
                               alt={category.name} 
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                               onError={(e) => {
@@ -1445,7 +1446,7 @@ export const Categories: React.FC = () => {
                         <div className="absolute bottom-2 left-2 bg-white dark:bg-gray-800 rounded-lg p-2 shadow-md">
                           {(category as any).icon_image_url ? (
                             <img 
-                              src={(category as any).icon_image_url} 
+                              src={resolveImageUrl((category as any).icon_image_url)} 
                               alt={`${category.name} icon`} 
                               className="w-6 h-6 object-contain"
                               onError={(e) => {

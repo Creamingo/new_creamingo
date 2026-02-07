@@ -24,6 +24,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Modal, ModalFooter } from '../components/ui/Modal';
 import { FileUpload } from '../components/ui/FileUpload';
+import { resolveImageUrl } from '../utils/imageUrl';
 import { Banner } from '../types';
 import bannerService from '../services/bannerService';
 import apiClient from '../services/api';
@@ -113,7 +114,7 @@ const SortableGridCard: React.FC<SortableGridCardProps> = ({
         <div className="relative">
           {banner.image_url ? (
             <img
-              src={banner.image_url}
+              src={resolveImageUrl(banner.image_url)}
               alt={banner.title}
               className="w-full h-48 object-cover rounded-t-lg"
               onError={(e) => {
@@ -279,7 +280,7 @@ const SortableRow: React.FC<SortableRowProps> = ({
           {banner.image_url ? (
             <>
               <img 
-                src={banner.image_url} 
+                src={resolveImageUrl(banner.image_url)} 
                 alt={banner.title} 
                 className="w-28 h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all duration-200"
                 onError={(e) => {
@@ -1059,7 +1060,7 @@ export const Banners: React.FC = () => {
       // Upload image if files are selected
       if (uploadedFiles.length > 0) {
         try {
-          const uploadResponse = await apiClient.uploadFile('/upload/single', uploadedFiles[0]);
+          const uploadResponse = await apiClient.uploadFile('/upload/single?type=banners', uploadedFiles[0]);
           if (uploadResponse.success && uploadResponse.data) {
             imageUrl = uploadResponse.data.url;
           } else {
@@ -1134,7 +1135,7 @@ export const Banners: React.FC = () => {
       
       // Upload new image if files are selected
       if (uploadedFiles.length > 0) {
-        const uploadResponse = await apiClient.uploadFile('/upload/single', uploadedFiles[0]);
+        const uploadResponse = await apiClient.uploadFile('/upload/single?type=banners', uploadedFiles[0]);
         if (uploadResponse.success && uploadResponse.data) {
           imageUrl = uploadResponse.data.url;
         }
@@ -1985,7 +1986,7 @@ export const Banners: React.FC = () => {
                 <div className="relative bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900">
                   {(uploadedFiles.length > 0 ? URL.createObjectURL(uploadedFiles[0]) : newBanner.image_url || '') ? (
                     <img 
-                      src={uploadedFiles.length > 0 ? URL.createObjectURL(uploadedFiles[0]) : newBanner.image_url || ''} 
+                      src={uploadedFiles.length > 0 ? URL.createObjectURL(uploadedFiles[0]) : resolveImageUrl(newBanner.image_url || '')} 
                       alt="Banner preview" 
                       className={`w-full object-cover ${previewMode === 'mobile' ? 'h-48' : 'h-64'}`}
                     />
@@ -2147,7 +2148,7 @@ export const Banners: React.FC = () => {
                     ) : editingBanner?.image_url ? (
                       <>
                         <img 
-                          src={editingBanner.image_url} 
+                          src={resolveImageUrl(editingBanner.image_url)} 
                           alt="Current banner" 
                           className="w-full h-40 object-cover rounded border border-gray-200 dark:border-gray-700"
                           onError={(e) => {
@@ -2203,7 +2204,7 @@ export const Banners: React.FC = () => {
                   <div className="relative bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900">
                     {(uploadedFiles.length > 0 ? URL.createObjectURL(uploadedFiles[0]) : editBanner.image_url || editingBanner?.image_url || '') ? (
                       <img 
-                        src={uploadedFiles.length > 0 ? URL.createObjectURL(uploadedFiles[0]) : editBanner.image_url || editingBanner?.image_url || ''} 
+                        src={uploadedFiles.length > 0 ? URL.createObjectURL(uploadedFiles[0]) : resolveImageUrl(editBanner.image_url || editingBanner?.image_url || '')} 
                         alt="Banner preview" 
                         className={`w-full object-cover ${previewMode === 'mobile' ? 'h-48' : 'h-64'}`}
                       />
@@ -2843,7 +2844,7 @@ export const Banners: React.FC = () => {
                           {banners.find(b => b.id === showABTesting) && (
                             <div>
                               <img
-                                src={banners.find(b => b.id === showABTesting)!.image_url}
+                                src={resolveImageUrl(banners.find(b => b.id === showABTesting)!.image_url)}
                                 alt="Variant A"
                                 className="w-full h-40 object-cover rounded-xl mb-4 border-2 border-gray-200 dark:border-gray-700 shadow-sm"
                               />
@@ -2880,7 +2881,7 @@ export const Banners: React.FC = () => {
                           {abTests[showABTesting]?.variantBanner && (
                             <div>
                               <img
-                                src={abTests[showABTesting].variantBanner!.image_url}
+                                src={resolveImageUrl(abTests[showABTesting].variantBanner!.image_url)}
                                 alt="Variant B"
                                 className="w-full h-40 object-cover rounded-xl mb-4 border-2 border-gray-200 dark:border-gray-700 shadow-sm"
                               />

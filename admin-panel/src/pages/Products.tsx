@@ -5,6 +5,7 @@ import { Input } from '../components/ui/Input';
 import { Modal, ModalFooter } from '../components/ui/Modal';
 import { ProductFileUpload } from '../components/ui/ProductFileUpload';
 import { MediaPreview } from '../components/ui/MediaPreview';
+import { resolveImageUrl } from '../utils/imageUrl';
 import RichTextEditor from '../components/ui/RichTextEditor';
 import StructuredDescriptionEditor, { StructuredDescriptionEditorRef } from '../components/ui/StructuredDescriptionEditor';
 import CategoryGridSelector from '../components/ui/CategoryGridSelector';
@@ -1903,7 +1904,7 @@ export const Products: React.FC = () => {
                           <div className="flex-shrink-0 h-12 w-12">
                             {product.image_url ? (
                               <img
-                                src={product.image_url}
+                                src={resolveImageUrl(product.image_url)}
                                 alt={product.name}
                                 className="h-12 w-12 rounded-lg object-cover border border-gray-200 dark:border-gray-600"
                                 onError={(e) => {
@@ -2116,7 +2117,7 @@ export const Products: React.FC = () => {
                                 <div className="flex-shrink-0 h-10 w-10">
                                   {product.image_url ? (
                                     <img
-                                      src={product.image_url}
+                                      src={resolveImageUrl(product.image_url)}
                                       alt={variant.name || variant.weight}
                                       className="h-10 w-10 rounded-lg object-cover border border-gray-200 dark:border-gray-600 opacity-75"
                                       onError={(e) => {
@@ -2590,7 +2591,7 @@ export const Products: React.FC = () => {
                       <div className="space-y-4 flex-1">
                         <div className="relative">
                           <img 
-                            src={selectedMainImage} 
+                            src={resolveImageUrl(selectedMainImage)} 
                             alt="Selected product" 
                             className="w-full h-48 object-cover rounded-lg cursor-pointer border-2 border-gray-200 dark:border-gray-600"
                             onClick={handleSetProductImage}
@@ -3252,7 +3253,7 @@ export const Products: React.FC = () => {
                         <div className="space-y-4 flex-1">
                           <div className="relative">
                             <img
-                              src={selectedMainImage}
+                              src={resolveImageUrl(selectedMainImage)}
                               alt="Selected product"
                               className="w-full h-48 object-cover rounded-lg cursor-pointer border-2 border-gray-200 dark:border-gray-600"
                               onClick={handleSetProductImage}
@@ -3569,6 +3570,7 @@ export const Products: React.FC = () => {
             multiple={galleryType === 'gallery'}
             maxFiles={galleryType === 'gallery' ? 10 : 1}
             accept="image/*,video/*"
+            uploadType="products"
           />
           
           <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -3635,7 +3637,7 @@ export const Products: React.FC = () => {
                             {product.image_url ? (
                               <img
                                 className="h-10 w-10 rounded-lg object-cover border border-gray-200 dark:border-gray-600"
-                                src={product.image_url}
+                                src={resolveImageUrl(product.image_url)}
                                 alt={product.name}
                                 onError={(e) => {
                                   e.currentTarget.src = '/api/placeholder/40/40';

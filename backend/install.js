@@ -18,15 +18,23 @@ if (!fs.existsSync(envPath)) {
   console.log('✅ .env file already exists.\n');
 }
 
-// Check if uploads directory exists
-const uploadsPath = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsPath)) {
-  console.log('📁 Creating uploads directory...');
-  fs.mkdirSync(uploadsPath, { recursive: true });
-  console.log('✅ Uploads directory created.\n');
+// Check if gallery directories exist
+const galleryPath = path.join(__dirname, '..', 'gallery');
+const gallerySubdirs = ['products', 'categories', 'subcategories', 'banners', 'icons', 'misc'];
+if (!fs.existsSync(galleryPath)) {
+  console.log('📁 Creating gallery directory...');
+  fs.mkdirSync(galleryPath, { recursive: true });
+  console.log('✅ Gallery directory created.\n');
 } else {
-  console.log('✅ Uploads directory already exists.\n');
+  console.log('✅ Gallery directory already exists.\n');
 }
+
+gallerySubdirs.forEach((dir) => {
+  const subdirPath = path.join(galleryPath, dir);
+  if (!fs.existsSync(subdirPath)) {
+    fs.mkdirSync(subdirPath, { recursive: true });
+  }
+});
 
 // Check if database directory exists
 const dbPath = path.join(__dirname, 'database');

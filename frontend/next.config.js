@@ -37,6 +37,30 @@ const nextConfig = {
         port: '5000',
         pathname: '/uploads/**',
       },
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+        port: '5000',
+        pathname: '/gallery/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'localhost',
+        port: '5000',
+        pathname: '/gallery/**',
+      },
+      {
+        protocol: 'http',
+        hostname: '72.61.242.230',
+        port: '5000',
+        pathname: '/gallery/**',
+      },
+      {
+        protocol: 'https',
+        hostname: '72.61.242.230',
+        port: '5000',
+        pathname: '/gallery/**',
+      },
     ],
   },
   // Expose environment variables to the client

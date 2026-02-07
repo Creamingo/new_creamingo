@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Edit2, Trash2, Save, X, Package, Image, DollarSign, Upload, ChevronDown, Check } from 'lucide-react';
+import { resolveImageUrl } from '../../utils/imageUrl';
 import addOnProductService from '../../services/addOnProductService';
 import addOnCategoryService from '../../services/addOnCategoryService';
 import { AddOnProduct, AddOnCategory, CreateAddOnProductData, UpdateAddOnProductData } from '../../types/addOn';
@@ -229,7 +230,7 @@ const AddOnProductManagement: React.FC<AddOnProductManagementProps> = ({
   // Upload image and get URL
   const uploadImage = async (file: File): Promise<string | null> => {
     try {
-      const response = await apiClient.uploadFile('/upload/single', file);
+      const response = await apiClient.uploadFile('/upload/single?type=add-ons', file);
       if (response.success && response.data) {
         return response.data.url;
       }
@@ -644,7 +645,7 @@ const AddOnProductManagement: React.FC<AddOnProductManagementProps> = ({
                             />
                           ) : editingData.image_url || product.image_url ? (
                             <img 
-                              src={editingData.image_url || product.image_url} 
+                              src={resolveImageUrl(editingData.image_url || product.image_url)} 
                               alt="Current" 
                               className="w-full h-full object-cover rounded-lg"
                             />
@@ -808,7 +809,7 @@ const AddOnProductManagement: React.FC<AddOnProductManagementProps> = ({
                       <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center overflow-hidden">
                         {product.image_url ? (
                           <img 
-                            src={product.image_url} 
+                            src={resolveImageUrl(product.image_url)}
                             alt={product.name}
                             className="w-full h-full object-cover"
                           />

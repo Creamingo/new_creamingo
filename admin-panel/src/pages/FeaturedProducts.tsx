@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Modal } from '../components/ui/Modal';
 import { useToastContext } from '../contexts/ToastContext';
 import featuredProductService from '../services/featuredProductService';
+import { resolveImageUrl } from '../utils/imageUrl';
 
 // Tooltip Component - Matching Dashboard Style
 const DashboardTooltip: React.FC<{ text: string; children: React.ReactNode }> = ({ text, children }) => {
@@ -1101,7 +1102,7 @@ export const FeaturedProducts: React.FC = () => {
                           <div className="flex-shrink-0 h-12 w-12">
                             {product.product_image ? (
                       <img
-                        src={product.product_image}
+                        src={resolveImageUrl(product.product_image)}
                         alt={product.product_name}
                                 className="h-12 w-12 rounded-lg object-cover border border-gray-200 dark:border-gray-600"
                                 onError={(e) => {
@@ -1293,7 +1294,7 @@ export const FeaturedProducts: React.FC = () => {
                                 <div className="flex-shrink-0 h-10 w-10">
                                   {product.product_image ? (
                                     <img
-                                      src={product.product_image}
+                                      src={resolveImageUrl(product.product_image)}
                                       alt={variant.name || variant.weight}
                                       className="h-10 w-10 rounded-lg object-cover border border-gray-200 dark:border-gray-600 opacity-75"
                                       onError={(e) => {
@@ -1382,7 +1383,7 @@ export const FeaturedProducts: React.FC = () => {
                           {product.product_image ? (
                             <div className="w-full h-40 sm:h-48 bg-gray-100 dark:bg-gray-700 overflow-hidden">
                               <img 
-                                src={product.product_image} 
+                                src={resolveImageUrl(product.product_image)} 
                                 alt={product.product_name} 
                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                                 onError={(e) => {
@@ -1558,7 +1559,7 @@ export const FeaturedProducts: React.FC = () => {
           <form onSubmit={handleUpdateProduct} className="space-y-4">
             <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
               <img
-                src={editingProduct.product_image}
+                src={resolveImageUrl(editingProduct.product_image)}
                 alt={editingProduct.product_name}
                 className="w-10 h-10 rounded-lg object-cover border border-gray-200 dark:border-gray-700"
               />
@@ -1624,7 +1625,7 @@ export const FeaturedProducts: React.FC = () => {
             {/* Product Info */}
             <div className="flex items-start gap-4">
               <img
-                src={showDetailsModal.product_image}
+                src={resolveImageUrl(showDetailsModal.product_image)}
                 alt={showDetailsModal.product_name}
                 className="w-24 h-24 rounded-lg object-cover border border-gray-200 dark:border-gray-700"
               />
@@ -1684,7 +1685,7 @@ export const FeaturedProducts: React.FC = () => {
                   {showDetailsModal.gallery_images.map((image, index) => (
                     <img
                       key={index}
-                      src={image}
+                      src={resolveImageUrl(image)}
                       alt={`${showDetailsModal.product_name} - ${index + 1}`}
                       className="w-full h-24 object-cover rounded-lg border border-gray-200 dark:border-gray-700"
                     />

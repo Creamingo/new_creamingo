@@ -32,6 +32,7 @@ import { Modal, ModalFooter } from '../components/ui/Modal';
 import orderService, { Order } from '../services/orderService';
 import dealService, { Deal } from '../services/dealService';
 import { useToastContext } from '../contexts/ToastContext';
+import { resolveImageUrl } from '../utils/imageUrl';
 
 // Format currency
 const formatCurrency = (amount: number | string): string => {
@@ -849,7 +850,7 @@ const BakeryProduction: React.FC<BakeryProductionProps> = () => {
                                       {productImage ? (
                                         <>
                                           <img 
-                                            src={productImage} 
+                                            src={resolveImageUrl(productImage)} 
                                             alt={item.productName}
                                             className="w-full h-full object-cover"
                                             onError={(e) => {
@@ -991,7 +992,7 @@ const BakeryProduction: React.FC<BakeryProductionProps> = () => {
                                         {productImage ? (
                                           <>
                                             <img 
-                                              src={productImage} 
+                                              src={resolveImageUrl(productImage)} 
                                               alt={item.productName}
                                               className="w-full h-full object-cover"
                                               onError={(e) => {
@@ -1275,7 +1276,7 @@ const BakeryProduction: React.FC<BakeryProductionProps> = () => {
             >
               <div className="relative bg-white/5 backdrop-blur-sm rounded-2xl p-4 md:p-6 shadow-2xl border border-white/10">
                 <img 
-                  src={imageModal.imageUrl} 
+                  src={resolveImageUrl(imageModal.imageUrl)} 
                   alt={imageModal.productName}
                   className="max-w-full max-h-[80vh] object-contain rounded-xl shadow-2xl select-none"
                   style={{ 
@@ -1462,7 +1463,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                         <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden bg-white dark:bg-gray-700 border border-purple-100 dark:border-purple-800 flex-shrink-0">
                           {image ? (
                             <img
-                              src={image}
+                              src={resolveImageUrl(image)}
                               alt={item.productName}
                               className="w-full h-full object-cover"
                               onError={(e) => {
@@ -1557,7 +1558,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                           <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 flex-shrink-0">
                             {image ? (
                               <img
-                                src={image}
+                                src={resolveImageUrl(image)}
                                 alt={item.productName}
                                 className="w-full h-full object-cover"
                                 onError={(e) => {

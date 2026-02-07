@@ -18,12 +18,24 @@ const getBaseUrl = (req) => {
 const normalizeUploadUrl = (value) => {
   if (!value) return value;
 
+  if (value.startsWith('/gallery/')) {
+    return value;
+  }
+
+  if (value.startsWith('gallery/')) {
+    return `/${value}`;
+  }
+
   if (value.startsWith('/uploads/')) {
     return value;
   }
 
+  if (value.startsWith('uploads/')) {
+    return `/${value}`;
+  }
+
   if (/^https?:\/\//i.test(value)) {
-    const match = value.match(/\/uploads\/[^?#]+/i);
+    const match = value.match(/\/gallery\/[^?#]+/i) || value.match(/\/uploads\/[^?#]+/i);
     if (match) {
       return match[0];
     }
@@ -39,8 +51,20 @@ const buildPublicUrlWithBase = (baseUrl, value) => {
     return value;
   }
 
+  if (value.startsWith('/gallery/')) {
+    return baseUrl ? `${baseUrl}${value}` : value;
+  }
+
   if (value.startsWith('/uploads/')) {
     return baseUrl ? `${baseUrl}${value}` : value;
+  }
+
+  if (value.startsWith('gallery/')) {
+    return baseUrl ? `${baseUrl}/${value}` : value;
+  }
+
+  if (value.startsWith('uploads/')) {
+    return baseUrl ? `${baseUrl}/${value}` : value;
   }
 
   return value;

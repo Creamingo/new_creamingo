@@ -63,6 +63,7 @@ import { Product } from '../types';
 import { useToastContext } from '../contexts/ToastContext';
 import orderService from '../services/orderService';
 import { DateRangePicker } from '../components/ui/DateRangePicker';
+import { resolveImageUrl } from '../utils/imageUrl';
 
 // Tooltip Component - Matching Dashboard Style
 const DashboardTooltip: React.FC<{ text: string; children: React.ReactNode }> = ({ text, children }) => {
@@ -126,7 +127,7 @@ const DealCard: React.FC<{
           <div className="flex items-center gap-2">
             {deal.product?.image_url && (
               <img
-                src={deal.product.image_url}
+                src={resolveImageUrl(deal.product.image_url)}
                 alt={deal.product.name}
                 className="w-12 h-12 rounded-lg object-cover border border-gray-200 dark:border-gray-700"
               />
@@ -1468,7 +1469,7 @@ export const OneRupeeDeals: React.FC = () => {
         <div className="flex items-center gap-2">
           {item.product?.image_url && (
             <img
-              src={item.product.image_url}
+              src={resolveImageUrl(item.product.image_url)}
               alt={item.product.name}
               className="w-8 h-8 rounded object-cover"
             />
@@ -2840,7 +2841,7 @@ export const OneRupeeDeals: React.FC = () => {
                       >
                         {product.image_url && (
                           <img
-                            src={product.image_url}
+                            src={resolveImageUrl(product.image_url)}
                             alt={product.name}
                             className="w-10 h-10 rounded object-cover"
                           />
@@ -3018,7 +3019,7 @@ export const OneRupeeDeals: React.FC = () => {
                       >
                         {product.image_url && (
                           <img
-                            src={product.image_url}
+                            src={resolveImageUrl(product.image_url)}
                             alt={product.name}
                             className="w-10 h-10 rounded object-cover"
                           />

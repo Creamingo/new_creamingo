@@ -49,6 +49,7 @@ import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
 import { useAuth } from '../contexts/AuthContext';
 import { useToastContext } from '../contexts/ToastContext';
+import { resolveImageUrl } from '../utils/imageUrl';
 import orderService, { Order } from '../services/orderService';
 import { deliveryService } from '../services/deliveryService';
 import productService from '../services/productService';
@@ -461,7 +462,7 @@ const RiderOrderDetailSheet: React.FC<RiderOrderDetailSheetProps> = ({
                       <div className="w-14 h-14 rounded-md overflow-hidden bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0">
                         {productImage ? (
                           <img
-                            src={productImage}
+                            src={resolveImageUrl(productImage)}
                             alt={name}
                             className="w-full h-full object-cover"
                           />
@@ -1197,7 +1198,7 @@ const DeliveryCard: React.FC<DeliveryCardProps> = ({
                           <div className="flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 flex items-center justify-center border border-gray-300/50 dark:border-gray-600/50 shadow-sm">
                             {productImage ? (
                               <img 
-                                src={productImage} 
+                                src={resolveImageUrl(productImage)} 
                                 alt={itemName}
                                 className="w-full h-full object-cover"
                                 onError={(e) => {
@@ -1384,7 +1385,7 @@ const DeliveryCard: React.FC<DeliveryCardProps> = ({
                             <div className="flex-shrink-0 w-8 h-8 rounded-md overflow-hidden bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
                               {productImage ? (
                                 <img 
-                                  src={productImage} 
+                                  src={resolveImageUrl(productImage)} 
                                   alt={itemName}
                                   className="w-full h-full object-cover"
                                   onError={(e) => {
@@ -2023,7 +2024,7 @@ const DeliveryCard: React.FC<DeliveryCardProps> = ({
                             {productImage ? (
                               <>
                                 <img 
-                                  src={productImage} 
+                                  src={resolveImageUrl(productImage)} 
                                   alt={item.productName || item.product_name || 'Item'}
                                   className="w-full h-full object-cover"
                                   onError={(e) => {
@@ -2171,7 +2172,7 @@ const DeliveryCard: React.FC<DeliveryCardProps> = ({
                               {productImage ? (
                                 <>
                                   <img 
-                                    src={productImage} 
+                                    src={resolveImageUrl(productImage)} 
                                     alt={item.productName || item.product_name || 'Item'}
                                     className="w-full h-full object-cover"
                                     onError={(e) => {
@@ -6619,7 +6620,7 @@ const Delivery: React.FC = () => {
             >
               <div className="relative bg-white/5 backdrop-blur-sm rounded-2xl p-4 md:p-6 shadow-2xl border border-white/10">
                 <img 
-                  src={imageModal.imageUrl} 
+                  src={resolveImageUrl(imageModal.imageUrl)}
                   alt={imageModal.productName}
                   className="max-w-full max-h-[80vh] object-contain rounded-xl shadow-2xl select-none"
                   style={{ 

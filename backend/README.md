@@ -99,9 +99,10 @@ backend/
    PORT=5000
    NODE_ENV=development
 
-   # File Upload Configuration
-   UPLOAD_PATH=./uploads
-   MAX_FILE_SIZE=5242880
+  # File Upload Configuration
+  GALLERY_PATH=gallery
+  MAX_FILE_SIZE=5242880
+  UPLOAD_RETURN_ABSOLUTE_URL=false
 
    # CORS Configuration
    CORS_ORIGIN=http://localhost:3000
