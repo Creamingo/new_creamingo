@@ -567,7 +567,7 @@ export const Categories: React.FC = () => {
     try {
       setActionLoading('add-category');
       
-      let imageUrl = newCategory.image_url || 'https://via.placeholder.com/300x200?text=Category+Image';
+      let imageUrl = newCategory.image_url || 'https://via.placeholder.com/600x600?text=Category+Image';
       // Upload image if files are selected
       if (uploadedFiles.length > 0) {
         const uploadResponse = await apiClient.uploadFile('/upload/single?type=categories', uploadedFiles[0]);
@@ -1412,7 +1412,7 @@ export const Categories: React.FC = () => {
             onFileSelect={handleFileSelect}
             onFileRemove={handleFileRemove}
             files={uploadedFiles}
-            helperText="Recommended size: 300x200px"
+            helperText="Recommended size: 600x600px"
           />
         </div>
         <ModalFooter>
@@ -1492,7 +1492,7 @@ export const Categories: React.FC = () => {
               onFileSelect={handleFileSelect}
               onFileRemove={handleFileRemove}
               files={uploadedFiles}
-              helperText="Recommended size: 300x200px"
+              helperText="Recommended size: 600x600px"
             />
           </div>
         )}

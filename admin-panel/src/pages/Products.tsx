@@ -127,6 +127,7 @@ const ModernRatingComponent = ({
 
 export const Products: React.FC = () => {
   const { showSuccess, showError, showInfo } = useToastContext();
+  const FLAVOR_SUBCATEGORY_IDS = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
@@ -1103,6 +1104,34 @@ export const Products: React.FC = () => {
       }
     }
   }, [editingProduct]);
+
+  React.useEffect(() => {
+    if (!newProduct.primary_subcategory_id) return;
+    if (!FLAVOR_SUBCATEGORY_IDS.includes(Number(newProduct.primary_subcategory_id))) return;
+    if (newProduct.available_flavor_ids.includes(Number(newProduct.primary_subcategory_id))) return;
+
+    setNewProduct(prev => ({
+      ...prev,
+      available_flavor_ids: Array.from(new Set([
+        ...prev.available_flavor_ids,
+        Number(prev.primary_subcategory_id)
+      ]))
+    }));
+  }, [newProduct.primary_subcategory_id, newProduct.available_flavor_ids]);
+
+  React.useEffect(() => {
+    if (!editProduct.primary_subcategory_id) return;
+    if (!FLAVOR_SUBCATEGORY_IDS.includes(Number(editProduct.primary_subcategory_id))) return;
+    if (editProduct.available_flavor_ids.includes(Number(editProduct.primary_subcategory_id))) return;
+
+    setEditProduct(prev => ({
+      ...prev,
+      available_flavor_ids: Array.from(new Set([
+        ...prev.available_flavor_ids,
+        Number(prev.primary_subcategory_id)
+      ]))
+    }));
+  }, [editProduct.primary_subcategory_id, editProduct.available_flavor_ids]);
 
 
   const handleAddVariation = () => {

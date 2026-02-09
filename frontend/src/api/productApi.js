@@ -1,5 +1,13 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
+const CATEGORY_SLUG_ALIASES = {
+  'cakes-for-any-occasion': 'cakes-for-occasion'
+};
+
+const normalizeCategorySlug = (slug) => (
+  CATEGORY_SLUG_ALIASES[slug] || slug
+);
+
 class ProductAPI {
   /**
    * Get products by category and subcategory
@@ -10,6 +18,8 @@ class ProductAPI {
    */
   async getProductsByCategory(categorySlug, subCategorySlug = null, options = {}) {
     try {
+      const normalizedCategorySlug = normalizeCategorySlug(categorySlug);
+
       // Map category slugs to category IDs
       const categoryIdMap = {
         'cakes-for-occasion': 20,
@@ -100,8 +110,8 @@ class ProductAPI {
       const params = new URLSearchParams();
       
       // Add category ID if category slug is provided
-      if (categorySlug && categoryIdMap[categorySlug]) {
-        params.append('category_id', categoryIdMap[categorySlug]);
+      if (normalizedCategorySlug && categoryIdMap[normalizedCategorySlug]) {
+        params.append('category_id', categoryIdMap[normalizedCategorySlug]);
       }
       
       // Add subcategory ID if subcategory slug is provided

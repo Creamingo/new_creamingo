@@ -577,7 +577,7 @@ export const Subcategories: React.FC = () => {
     try {
       setActionLoading('add-subcategory');
       
-      let imageUrl = newSubcategory.image_url || 'https://via.placeholder.com/300x200?text=Subcategory+Image';
+      let imageUrl = newSubcategory.image_url || 'https://via.placeholder.com/600x600?text=Subcategory+Image';
       
       // Upload image if files are selected
       if (uploadedFiles.length > 0) {
@@ -1508,7 +1508,7 @@ export const Subcategories: React.FC = () => {
             onFileSelect={handleFileSelect}
             onFileRemove={handleFileRemove}
             files={uploadedFiles}
-            helperText="Recommended size: 300x200px"
+            helperText="Recommended size: 600x600px"
           />
         </div>
         <ModalFooter>
@@ -1596,7 +1596,7 @@ export const Subcategories: React.FC = () => {
               onFileSelect={handleFileSelect}
               onFileRemove={handleFileRemove}
               files={uploadedFiles}
-              helperText="Recommended size: 300x200px"
+              helperText="Recommended size: 600x600px"
             />
           </div>
         )}
