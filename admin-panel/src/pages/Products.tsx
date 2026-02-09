@@ -835,15 +835,27 @@ export const Products: React.FC = () => {
         return;
       }
       
+      const legacyCategoryId = newProduct.primary_category_id
+        || (newProduct.category_ids.length > 0 ? newProduct.category_ids[0] : parseInt(newProduct.category_id));
+      const primarySubcategory = newProduct.primary_subcategory_id
+        ? subcategories.find((s) => Number(s.id) === Number(newProduct.primary_subcategory_id))
+        : undefined;
+      const legacySubcategoryId = (primarySubcategory && Number(primarySubcategory.category_id) === Number(legacyCategoryId))
+        ? newProduct.primary_subcategory_id
+        : newProduct.subcategory_ids.find((id) => {
+          const subcat = subcategories.find((s) => Number(s.id) === Number(id));
+          return subcat && Number(subcat.category_id) === Number(legacyCategoryId);
+        }) || (newProduct.subcategory_id ? parseInt(newProduct.subcategory_id) : undefined);
+
       // Create product data with only the fields that the API accepts
       const productData = {
         name: newProduct.name,
         description: newProduct.description,
         short_description: newProduct.short_description,
         // Legacy fields for backward compatibility
-        category_id: newProduct.category_ids.length > 0 ? newProduct.category_ids[0] : parseInt(newProduct.category_id),
-        // Set legacy subcategory_id to first subcategory (can be flavor or non-flavor)
-        subcategory_id: newProduct.subcategory_ids.length > 0 ? newProduct.subcategory_ids[0] : (newProduct.subcategory_id ? parseInt(newProduct.subcategory_id) : undefined),
+        category_id: Number.isFinite(legacyCategoryId) ? legacyCategoryId : undefined,
+        // Set legacy subcategory_id within the legacy category
+        subcategory_id: Number.isFinite(legacySubcategoryId) ? legacySubcategoryId : undefined,
         // New multi-category fields
         category_ids: newProduct.category_ids.length > 0 ? newProduct.category_ids : (newProduct.category_id ? [parseInt(newProduct.category_id)] : []),
         subcategory_ids: newProduct.subcategory_ids.length > 0 ? newProduct.subcategory_ids : (newProduct.subcategory_id ? [parseInt(newProduct.subcategory_id)] : []),
@@ -1648,10 +1660,18 @@ export const Products: React.FC = () => {
           : (toValidNumber(editProduct.subcategory_id) ? [toValidNumber(editProduct.subcategory_id)!] : [])
       ).filter((id): id is number => Number.isFinite(id));
 
-      const resolvedCategoryId = resolvedCategoryIds[0];
-      const resolvedSubcategoryId = resolvedSubcategoryIds[0];
       const resolvedPrimaryCategoryId = toValidNumber(editProduct.primary_category_id);
       const resolvedPrimarySubcategoryId = toValidNumber(editProduct.primary_subcategory_id);
+      const resolvedCategoryId = resolvedPrimaryCategoryId || resolvedCategoryIds[0];
+      const primaryEditSubcategory = resolvedPrimarySubcategoryId
+        ? subcategories.find((s) => Number(s.id) === Number(resolvedPrimarySubcategoryId))
+        : undefined;
+      const resolvedSubcategoryId = (primaryEditSubcategory && Number(primaryEditSubcategory.category_id) === Number(resolvedCategoryId))
+        ? resolvedPrimarySubcategoryId
+        : resolvedSubcategoryIds.find((id) => {
+          const subcat = subcategories.find((s) => Number(s.id) === Number(id));
+          return subcat && Number(subcat.category_id) === Number(resolvedCategoryId);
+        }) || resolvedSubcategoryIds[0];
 
       const productData: {
         name: string;
@@ -1689,7 +1709,7 @@ export const Products: React.FC = () => {
         short_description: editProduct.short_description,
         // Legacy fields for backward compatibility
         category_id: resolvedCategoryId,
-        // Set legacy subcategory_id to first subcategory
+        // Set legacy subcategory_id within the legacy category
         subcategory_id: resolvedSubcategoryId,
         // New multi-category fields
         category_ids: resolvedCategoryIds.length > 0 ? resolvedCategoryIds : undefined,

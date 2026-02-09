@@ -28,8 +28,6 @@ const sqlNormalize = (column) => {
   return `REPLACE(REPLACE(REPLACE(LOWER(${column}), '''', ''), '-', ''), '.', '')`;
 };
 
-const FLAVOR_SUBCATEGORY_IDS = [9, 10, 12, 14, 11, 13, 17, 16, 15, 18];
-const isFlavorSubcategory = (id) => FLAVOR_SUBCATEGORY_IDS.includes(Number(id));
 
 // Get all products with pagination and filters
 const getProducts = async (req, res) => {
@@ -567,6 +565,28 @@ const getProductBySlug = async (req, res) => {
       image_url: buildPublicUrlWithBase(baseUrl, normalizeUploadUrl(subcategory.image_url))
     }));
 
+    // Get product flavors
+    const flavorsQuery = `
+      SELECT 
+        sc.id,
+        sc.name,
+        sc.description,
+        sc.image_url,
+        sc.category_id,
+        pf.is_primary,
+        pf.display_order
+      FROM product_flavors pf
+      JOIN subcategories sc ON pf.subcategory_id = sc.id
+      WHERE pf.product_id = ?
+      ORDER BY pf.display_order ASC, pf.is_primary DESC
+    `;
+    
+    const flavorsResult = await query(flavorsQuery, [product.id]);
+    product.flavors = (flavorsResult.rows || []).map((flavor) => ({
+      ...flavor,
+      image_url: buildPublicUrlWithBase(baseUrl, normalizeUploadUrl(flavor.image_url))
+    }));
+
     // Get product variants
     const variantsQuery = `
       SELECT 
@@ -998,19 +1018,13 @@ const createProduct = async (req, res) => {
 
     // Determine which categories to use (new multi-category or legacy single category)
     const categoriesToUse = category_ids || (category_id ? [category_id] : []);
-    const rawSubcategories = subcategory_ids || (subcategory_id ? [subcategory_id] : []);
+    const subcategoriesToUse = subcategory_ids || (subcategory_id ? [subcategory_id] : []);
     const rawFlavorIds = available_flavor_ids || [];
-    const flavorIdsFromSubcategories = rawSubcategories.filter((id) => isFlavorSubcategory(id));
-    const subcategoriesToUse = rawSubcategories.filter((id) => !isFlavorSubcategory(id));
-    const flavorsToUse = Array.from(new Set([...rawFlavorIds, ...flavorIdsFromSubcategories]))
+    const flavorsToUse = Array.from(new Set([...rawFlavorIds]))
       .map((id) => Number(id))
       .filter((id) => Number.isFinite(id));
-    const resolvedPrimarySubcategoryId = primary_subcategory_id && !isFlavorSubcategory(primary_subcategory_id)
-      ? primary_subcategory_id
-      : null;
-    const resolvedPrimaryFlavorId = primary_flavor_id || (primary_subcategory_id && isFlavorSubcategory(primary_subcategory_id)
-      ? primary_subcategory_id
-      : null);
+    const resolvedPrimarySubcategoryId = primary_subcategory_id || null;
+    const resolvedPrimaryFlavorId = primary_flavor_id || null;
 
     // Verify categories exist
     if (categoriesToUse.length > 0) {
@@ -1185,21 +1199,11 @@ const updateProduct = async (req, res) => {
 
     const rawSubcategories = updateData.subcategory_ids || [];
     const rawFlavorIds = updateData.available_flavor_ids || [];
-    const flavorIdsFromSubcategories = rawSubcategories.filter((id) => isFlavorSubcategory(id));
-    const filteredSubcategoryIds = rawSubcategories.filter((id) => !isFlavorSubcategory(id));
-    const flavorsToUse = Array.from(new Set([...rawFlavorIds, ...flavorIdsFromSubcategories]))
+    const flavorsToUse = Array.from(new Set([...rawFlavorIds]))
       .map((id) => Number(id))
       .filter((id) => Number.isFinite(id));
-    const resolvedPrimarySubcategoryId = updateData.primary_subcategory_id && !isFlavorSubcategory(updateData.primary_subcategory_id)
-      ? updateData.primary_subcategory_id
-      : null;
-    const resolvedPrimaryFlavorId = updateData.primary_flavor_id || (updateData.primary_subcategory_id && isFlavorSubcategory(updateData.primary_subcategory_id)
-      ? updateData.primary_subcategory_id
-      : null);
-
-    if (updateData.subcategory_ids !== undefined) {
-      updateData.subcategory_ids = filteredSubcategoryIds;
-    }
+    const resolvedPrimarySubcategoryId = updateData.primary_subcategory_id || null;
+    const resolvedPrimaryFlavorId = updateData.primary_flavor_id || null;
 
     // Validate discount_percent if provided
     if (updateData.discount_percent !== undefined) {
@@ -1239,21 +1243,18 @@ const updateProduct = async (req, res) => {
       }
     }
 
-    // Verify subcategory if provided (skip validation for flavor subcategories)
+    // Verify subcategory if provided
     if (updateData.subcategory_id && updateData.category_id) {
-      // Flavor subcategory IDs that can be assigned to any product
-      if (!isFlavorSubcategory(updateData.subcategory_id)) {
-        const subcategoryResult = await query(
-          'SELECT id FROM subcategories WHERE id = ? AND category_id = ? AND is_active = 1',
-          [updateData.subcategory_id, updateData.category_id]
-        );
+      const subcategoryResult = await query(
+        'SELECT id FROM subcategories WHERE id = ? AND category_id = ? AND is_active = 1',
+        [updateData.subcategory_id, updateData.category_id]
+      );
 
-        if (subcategoryResult.rows.length === 0) {
-          return res.status(400).json({
-            success: false,
-            message: 'Invalid subcategory for this category'
-          });
-        }
+      if (subcategoryResult.rows.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid subcategory for this category'
+        });
       }
     }
 

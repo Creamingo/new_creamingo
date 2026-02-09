@@ -4,6 +4,8 @@
  */
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+// Log once to verify which API base URL is used in this build.
+console.info('[api] Using API base URL:', API_BASE_URL);
 
 interface ApiResponse<T = any> {
   success: boolean;
@@ -247,6 +249,17 @@ class ApiClient {
     const formData = new FormData();
     formData.append('image', file);
 
+    return this.uploadFormData(endpoint, formData, requireAuth);
+  }
+
+  /**
+   * Upload FormData with auth + refresh support
+   */
+  async uploadFormData(endpoint: string, formData: FormData, requireAuth: boolean = true, _retry: boolean = false): Promise<ApiResponse> {
+    if (requireAuth && !this.token) {
+      throw new Error('Authentication required');
+    }
+
     const headers: Record<string, string> = {};
     if (this.token) {
       headers['Authorization'] = `Bearer ${this.token}`;
@@ -261,11 +274,19 @@ class ApiClient {
         body: formData,
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (response.status === 401) {
+        if (requireAuth && !_retry) {
+          const refreshed = await this.refreshAccessToken();
+          if (refreshed) {
+            return this.uploadFormData(endpoint, formData, requireAuth, true);
+          }
+        }
+
         this.clearToken();
-        throw new Error('Authentication failed');
+        localStorage.removeItem('refresh_token');
+        throw new Error(data.message || 'Authentication failed');
       }
 
       if (!response.ok) {

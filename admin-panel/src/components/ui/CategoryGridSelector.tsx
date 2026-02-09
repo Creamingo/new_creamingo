@@ -42,7 +42,7 @@ export const CategoryGridSelector: React.FC<CategoryGridSelectorProps> = ({
       return;
     }
 
-    const filtered = subcategories.filter(subcat => 
+    const filtered = subcategories.filter(subcat =>
       selectedCategoryIds.includes(Number(subcat.category_id))
     );
     setAvailableSubcategories(filtered);
