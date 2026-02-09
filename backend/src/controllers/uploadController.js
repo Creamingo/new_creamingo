@@ -1,7 +1,4 @@
-const path = require('path');
 const fs = require('fs');
-const crypto = require('crypto');
-const { resizeIconImage } = require('../utils/imageResize');
 const { getGalleryRelativePath, resolveGalleryFilePath } = require('../utils/uploadPath');
 const { getBaseUrl, buildPublicUrlWithBase } = require('../utils/urlHelpers');
 
@@ -164,65 +161,9 @@ const getFileInfo = async (req, res) => {
   }
 };
 
-// Upload and resize icon image
-const uploadIconImage = async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: 'No file uploaded'
-      });
-    }
-
-    // Check if it's an image file
-    if (!req.file.mimetype.startsWith('image/')) {
-      return res.status(400).json({
-        success: false,
-        message: 'Only image files are allowed for icon uploads'
-      });
-    }
-
-    const originalPath = req.file.path;
-    const hashLength = Math.floor(Math.random() * 5) + 8;
-    const hash = crypto.randomBytes(Math.ceil(hashLength / 2)).toString('hex').slice(0, hashLength);
-    const resizedFilename = `icon-${hash}.jpg`;
-    const resizedPath = path.join(path.dirname(originalPath), resizedFilename);
-
-    // Resize the image to 64x64 pixels
-    await resizeIconImage(originalPath, resizedPath, 64, 85);
-
-    // Delete the original file
-    fs.unlinkSync(originalPath);
-
-    const baseUrl = getBaseUrl(req);
-    const relativePath = getGalleryRelativePath('icons', resizedFilename);
-    const fileUrl = process.env.UPLOAD_RETURN_ABSOLUTE_URL === 'true'
-      ? buildPublicUrlWithBase(baseUrl, relativePath)
-      : relativePath;
-
-    res.json({
-      success: true,
-      message: 'Icon image uploaded and resized successfully',
-      data: {
-        filename: resizedFilename,
-        originalname: req.file.originalname,
-        size: fs.statSync(resizedPath).size,
-        url: fileUrl
-      }
-    });
-  } catch (error) {
-    console.error('Upload icon image error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
-  }
-};
-
 module.exports = {
   uploadSingle,
   uploadMultiple,
-  uploadIconImage,
   deleteFile,
   getFileInfo
 };

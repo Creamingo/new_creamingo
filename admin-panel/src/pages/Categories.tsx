@@ -53,68 +53,6 @@ const DashboardTooltip: React.FC<{ text: string; children: React.ReactNode }> = 
   );
 };
 
-// Predefined icon options for categories
-const ICON_OPTIONS = [
-  { value: '', label: 'None', svg: 'M6 18L18 6M6 6l12 12' },
-  { value: 'cake', label: 'Cake', svg: 'M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z' },
-  { value: 'heart', label: 'Heart', svg: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z' },
-  { value: 'smile', label: 'Smile', svg: 'M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
-  { value: 'book', label: 'Book', svg: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
-  { value: 'star', label: 'Star', svg: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z' },
-  { value: 'package', label: 'Package', svg: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' },
-  { value: 'gift', label: 'Gift', svg: 'M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7' },
-  { value: 'crown', label: 'Crown', svg: 'M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z' },
-  { value: 'sparkles', label: 'Sparkles', svg: 'M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z' },
-  // Example: Adding a new cupcake icon
-  { value: 'cupcake', label: 'Cupcake', svg: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 2a8 8 0 100 16 8 8 0 000-16zm-2 4a1 1 0 11-2 0 1 1 0 012 0zm4 0a1 1 0 11-2 0 1 1 0 012 0zm-2 4a1 1 0 11-2 0 1 1 0 012 0z' }
-];
-
-// Icon Selection Component
-interface IconSelectorProps {
-  selectedIcon: string;
-  onIconSelect: (icon: string) => void;
-  label?: string;
-}
-
-const IconSelector: React.FC<IconSelectorProps> = ({ selectedIcon, onIconSelect, label = "Category Icon" }) => {
-  const handleIconSelect = (iconValue: string) => {
-    onIconSelect(iconValue);
-  };
-
-  return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-        {label}
-      </label>
-      <div className="grid grid-cols-3 gap-2 p-3 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-        {ICON_OPTIONS.map((icon) => (
-          <button
-            key={icon.value}
-            type="button"
-            onClick={() => handleIconSelect(icon.value)}
-            className={`p-2 rounded-lg border-2 transition-all hover:bg-white dark:hover:bg-gray-700 ${
-              selectedIcon === icon.value
-                ? 'border-primary-500 dark:border-primary-400 bg-primary-50 dark:bg-primary-900/30'
-                : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
-            }`}
-            title={icon.label}
-          >
-            <svg className="w-6 h-6 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={icon.svg} />
-            </svg>
-          </button>
-        ))}
-      </div>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-        Selected: {ICON_OPTIONS.find(icon => icon.value === selectedIcon)?.label || 'None'}
-      </p>
-      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-        Current value: {selectedIcon || 'None selected'}
-      </p>
-    </div>
-  );
-};
-
 // Utility function for status badge
 const getStatusBadge = (status: string) => {
   return (
@@ -211,37 +149,6 @@ const SortableRow: React.FC<SortableRowProps> = ({
         </div>
       </td>
       <td className="px-4 py-4 text-sm text-gray-900 dark:text-gray-100 text-center">
-        <div className="flex items-center justify-center">
-          {(category as any).icon_image_url ? (
-            <img 
-              src={resolveImageUrl((category as any).icon_image_url)} 
-              alt={`${category.name} icon`} 
-              className="w-8 h-8 object-contain rounded border border-gray-200 dark:border-gray-700"
-              onError={(e) => {
-                e.currentTarget.src = '/placeholder-image.png';
-              }}
-            />
-          ) : (category as any).icon ? (
-            <div className="w-8 h-8 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
-              {(() => {
-                const iconOption = ICON_OPTIONS.find(opt => opt.value === (category as any).icon);
-                return iconOption ? (
-                  <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={iconOption.svg} />
-                  </svg>
-                ) : (
-                  <span className="text-xs text-gray-400 dark:text-gray-500">SVG</span>
-                );
-              })()}
-            </div>
-          ) : (
-            <div className="w-8 h-8 bg-gray-100 dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 flex items-center justify-center">
-              <span className="text-xs text-gray-400 dark:text-gray-500">No Icon</span>
-            </div>
-          )}
-        </div>
-      </td>
-      <td className="px-4 py-4 text-sm text-gray-900 dark:text-gray-100 text-center">
         <div className="space-y-1">
           <span className="block font-medium" title={category.name}>{category.name}</span>
           {(category as any).display_name && (
@@ -324,7 +231,6 @@ export const Categories: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
-  const [uploadedIconFiles, setUploadedIconFiles] = useState<File[]>([]);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const { showSuccess, showError } = useToastContext();
 
@@ -341,8 +247,6 @@ export const Categories: React.FC = () => {
     name: '',
     description: '',
     image_url: '',
-    icon: '',
-    icon_image_url: '',
     display_name: '',
     is_active: true
   });
@@ -352,8 +256,6 @@ export const Categories: React.FC = () => {
     name: '',
     description: '',
     image_url: '',
-    icon: '',
-    icon_image_url: '',
     display_name: '',
     is_active: true
   });
@@ -666,8 +568,6 @@ export const Categories: React.FC = () => {
       setActionLoading('add-category');
       
       let imageUrl = newCategory.image_url || 'https://via.placeholder.com/300x200?text=Category+Image';
-      let iconImageUrl = newCategory.icon_image_url || null;
-      
       // Upload image if files are selected
       if (uploadedFiles.length > 0) {
         const uploadResponse = await apiClient.uploadFile('/upload/single?type=categories', uploadedFiles[0]);
@@ -675,21 +575,10 @@ export const Categories: React.FC = () => {
           imageUrl = uploadResponse.data.url;
         }
       }
-      
-      // Upload icon image if files are selected and no SVG icon is selected
-      if (uploadedIconFiles.length > 0 && (!newCategory.icon || newCategory.icon === '')) {
-        const iconUploadResponse = await apiClient.uploadFile('/upload/icon?type=icons', uploadedIconFiles[0]);
-        if (iconUploadResponse.success && iconUploadResponse.data) {
-          iconImageUrl = iconUploadResponse.data.url;
-        }
-      }
-      
       const categoryData = {
         name: newCategory.name,
         description: newCategory.description,
         image_url: imageUrl,
-        icon: newCategory.icon || null, // Send null if empty string
-        icon_image_url: iconImageUrl, // Send null if no icon image
         display_name: newCategory.display_name || null, // Send null if empty string
         is_active: Boolean(newCategory.is_active) // Ensure it's a boolean
       };
@@ -706,10 +595,9 @@ export const Categories: React.FC = () => {
       }
       
       // Reset form and close modal
-      setNewCategory({ name: '', description: '', image_url: '', icon: '', icon_image_url: '', display_name: '', is_active: true });
+      setNewCategory({ name: '', description: '', image_url: '', display_name: '', is_active: true });
       setShowAddModal(false);
       setUploadedFiles([]);
-      setUploadedIconFiles([]);
       
       // Show success message
       showSuccess('Category Created', 'Category created successfully!');
@@ -744,8 +632,6 @@ export const Categories: React.FC = () => {
       setActionLoading('edit-category');
       
       let imageUrl = editCategory.image_url;
-      let iconImageUrl = editCategory.icon_image_url || null;
-      
       // Upload new image if files are selected
       if (uploadedFiles.length > 0) {
         const uploadResponse = await apiClient.uploadFile('/upload/single?type=categories', uploadedFiles[0]);
@@ -753,21 +639,10 @@ export const Categories: React.FC = () => {
           imageUrl = uploadResponse.data.url;
         }
       }
-      
-      // Upload icon image if files are selected and no SVG icon is selected
-      if (uploadedIconFiles.length > 0 && (!editCategory.icon || editCategory.icon === '')) {
-        const iconUploadResponse = await apiClient.uploadFile('/upload/icon?type=icons', uploadedIconFiles[0]);
-        if (iconUploadResponse.success && iconUploadResponse.data) {
-          iconImageUrl = iconUploadResponse.data.url;
-        }
-      }
-      
       const categoryData = {
         name: editCategory.name,
         description: editCategory.description,
         image_url: imageUrl,
-        icon: editCategory.icon || null, // Send null if empty string
-        icon_image_url: iconImageUrl, // Send null if no icon image
         display_name: editCategory.display_name || null, // Send null if empty string
         is_active: Boolean(editCategory.is_active) // Ensure it's a boolean
       };
@@ -787,9 +662,8 @@ export const Categories: React.FC = () => {
       }
       
       setEditingCategory(null);
-      setEditCategory({ name: '', description: '', image_url: '', icon: '', icon_image_url: '', display_name: '', is_active: true });
+      setEditCategory({ name: '', description: '', image_url: '', display_name: '', is_active: true });
       setUploadedFiles([]);
-      setUploadedIconFiles([]);
       
       // Show success message
       showSuccess('Category Updated', 'Category updated successfully!');
@@ -832,8 +706,6 @@ export const Categories: React.FC = () => {
         name: editingCategory.name,
         description: editingCategory.description || '',
         image_url: editingCategory.image_url || '',
-        icon: (editingCategory as any).icon || '',
-        icon_image_url: (editingCategory as any).icon_image_url || '',
         display_name: (editingCategory as any).display_name || '',
         is_active: Boolean(editingCategory.is_active) // Ensure it's a boolean
       });
@@ -846,14 +718,6 @@ export const Categories: React.FC = () => {
 
   const handleFileRemove = (file: File) => {
     setUploadedFiles(uploadedFiles.filter(f => f !== file));
-  };
-
-  const handleIconFileSelect = (files: File[]) => {
-    setUploadedIconFiles(files);
-  };
-
-  const handleIconFileRemove = (file: File) => {
-    setUploadedIconFiles(uploadedIconFiles.filter(f => f !== file));
   };
 
   if (loading) {
@@ -1364,9 +1228,6 @@ export const Categories: React.FC = () => {
                         <th className="px-4 py-4 text-xs font-medium text-chocolate-700 dark:text-chocolate-300 uppercase tracking-wider text-center w-20">
                           <span>Order</span>
                         </th>
-                        <th className="px-4 py-4 text-xs font-medium text-chocolate-700 dark:text-chocolate-300 uppercase tracking-wider text-center w-20">
-                          <span>Icon</span>
-                        </th>
                         <th className="px-4 py-4 text-xs font-medium text-chocolate-700 dark:text-chocolate-300 uppercase tracking-wider text-center w-48">
                           <span>Name</span>
                         </th>
@@ -1442,31 +1303,6 @@ export const Categories: React.FC = () => {
                           </button>
                           {getStatusBadge(category.is_active ? 'active' : 'inactive')}
                         </div>
-                      {(category as any).icon_image_url || (category as any).icon ? (
-                        <div className="absolute bottom-2 left-2 bg-white dark:bg-gray-800 rounded-lg p-2 shadow-md">
-                          {(category as any).icon_image_url ? (
-                            <img 
-                              src={resolveImageUrl((category as any).icon_image_url)} 
-                              alt={`${category.name} icon`} 
-                              className="w-6 h-6 object-contain"
-                              onError={(e) => {
-                                e.currentTarget.src = '/placeholder-image.png';
-                              }}
-                            />
-                          ) : (
-                            <div className="w-6 h-6 flex items-center justify-center">
-                              {(() => {
-                                const iconOption = ICON_OPTIONS.find(opt => opt.value === (category as any).icon);
-                                return iconOption ? (
-                                  <svg className="w-6 h-6 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={iconOption.svg} />
-                                  </svg>
-                                ) : null;
-                              })()}
-                            </div>
-                          )}
-                        </div>
-                      ) : null}
                     </div>
                     <CardContent className="p-4">
                       <div className="space-y-2">
@@ -1524,9 +1360,8 @@ export const Categories: React.FC = () => {
         isOpen={showAddModal}
         onClose={() => {
           setShowAddModal(false);
-          setNewCategory({ name: '', description: '', image_url: '', icon: '', icon_image_url: '', display_name: '', is_active: true });
+          setNewCategory({ name: '', description: '', image_url: '', display_name: '', is_active: true });
           setUploadedFiles([]);
-          setUploadedIconFiles([]);
         }}
         title="Add New Category"
         size="lg"
@@ -1570,25 +1405,6 @@ export const Categories: React.FC = () => {
             onChange={(e) => handleInputChange('description', e.target.value)}
           />
           
-          <IconSelector
-            selectedIcon={newCategory.icon}
-            onIconSelect={(icon) => handleInputChange('icon', icon)}
-            label="Category Icon"
-          />
-          
-          {/* Icon Image Upload - Only show when no SVG icon is selected */}
-          {(!newCategory.icon || newCategory.icon === '') && (
-            <FileUpload
-              label="Icon Image (JPEG/PNG)"
-              accept="image/jpeg,image/png"
-              maxSize={2}
-              onFileSelect={handleIconFileSelect}
-              onFileRemove={handleIconFileRemove}
-              files={uploadedIconFiles}
-              helperText="Upload a custom icon image (JPEG/PNG). Recommended size: 64x64px or 128x128px"
-            />
-          )}
-          
           <FileUpload
             label="Category Image"
             accept="image/*"
@@ -1624,9 +1440,8 @@ export const Categories: React.FC = () => {
         isOpen={!!editingCategory}
         onClose={() => {
           setEditingCategory(null);
-          setEditCategory({ name: '', description: '', image_url: '', icon: '', icon_image_url: '', display_name: '', is_active: true });
+          setEditCategory({ name: '', description: '', image_url: '', display_name: '', is_active: true });
           setUploadedFiles([]);
-          setUploadedIconFiles([]);
         }}
         title="Edit Category"
         size="lg"
@@ -1669,25 +1484,6 @@ export const Categories: React.FC = () => {
               onChange={(e) => handleEditInputChange('description', e.target.value)}
               placeholder="Enter category description" 
             />
-            
-            <IconSelector
-              selectedIcon={editCategory.icon}
-              onIconSelect={(icon) => handleEditInputChange('icon', icon)}
-              label="Category Icon"
-            />
-            
-            {/* Icon Image Upload - Only show when no SVG icon is selected */}
-            {(!editCategory.icon || editCategory.icon === '') && (
-              <FileUpload
-                label="Icon Image (JPEG/PNG)"
-                accept="image/jpeg,image/png"
-                maxSize={2}
-                onFileSelect={handleIconFileSelect}
-                onFileRemove={handleIconFileRemove}
-                files={uploadedIconFiles}
-                helperText="Upload a custom icon image (JPEG/PNG). Recommended size: 64x64px or 128x128px"
-              />
-            )}
             
             <FileUpload
               label="Category Image"

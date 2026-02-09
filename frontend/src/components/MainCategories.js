@@ -63,8 +63,6 @@ const MainCategories = () => {
           name: category.name,
           description: category.description,
           image_url: category.image_url,
-          icon: category.icon, // Make sure icon is included
-          icon_image_url: category.icon_image_url, // Include icon image URL
           display_name: category.display_name, // Include display name
           is_active: category.is_active,
           order_index: category.order_index,
@@ -94,94 +92,6 @@ const MainCategories = () => {
   }, [mounted, refreshKey]);
 
   // Removed automatic refresh mechanism to prevent infinite loading
-
-  // Icon mapping for database-stored icons
-  const iconMap = {
-    'cake': 'M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z',
-    'heart': 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z',
-    'smile': 'M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-    'book': 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253',
-    'star': 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
-    'package': 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10',
-    'gift': 'M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7',
-    'crown': 'M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z',
-    'sparkles': 'M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z',
-    // Example: Adding a new cupcake icon
-    'cupcake': 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 2a8 8 0 100 16 8 8 0 000-16zm-2 4a1 1 0 11-2 0 1 1 0 012 0zm4 0a1 1 0 11-2 0 1 1 0 012 0zm-2 4a1 1 0 11-2 0 1 1 0 012 0z'
-  };
-
-  // Function to get category icon from database or fallback to default
-  const getCategoryIcon = (category) => {
-    // First try to use uploaded icon image if available (fallback to image_url)
-    const iconImageUrl = resolveImageUrl(category.icon_image_url || category.image_url);
-    if (iconImageUrl) {
-      return (
-        <img 
-          src={iconImageUrl} 
-          alt={`${category.name} icon`}
-          className="w-8 h-8 lg:w-12 lg:h-12 object-contain"
-          style={{ filter: 'opacity(0.8)' }} // Make it slightly transparent to match the light color theme
-        />
-      );
-    }
-    
-    // Then try to use the SVG icon from database
-    if (category.icon && iconMap[category.icon]) {
-      return (
-        <svg className="w-6 h-6 lg:w-8 lg:h-8 text-[#8B7355] dark:text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={iconMap[category.icon]} />
-        </svg>
-      );
-    }
-
-    // Fallback to keyword-based icon selection for backward compatibility
-    const name = category.name?.toLowerCase() || '';
-    
-    if (name.includes('birthday') || name.includes('cake')) {
-      return (
-        <svg className="w-6 h-6 lg:w-8 lg:h-8 text-[#8B7355] dark:text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={iconMap.cake} />
-        </svg>
-      );
-    } else if (name.includes('wedding') || name.includes('anniversary')) {
-      return (
-        <svg className="w-6 h-6 lg:w-8 lg:h-8 text-[#8B7355] dark:text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={iconMap.heart} />
-        </svg>
-      );
-    } else if (name.includes('kid') || name.includes('child')) {
-      return (
-        <svg className="w-6 h-6 lg:w-8 lg:h-8 text-[#8B7355] dark:text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={iconMap.smile} />
-        </svg>
-      );
-    } else if (name.includes('mini') || name.includes('small') || name.includes('treat')) {
-      return (
-        <svg className="w-6 h-6 lg:w-8 lg:h-8 text-[#8B7355] dark:text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={iconMap.book} />
-        </svg>
-      );
-    } else if (name.includes('flower') || name.includes('rose')) {
-      return (
-        <svg className="w-6 h-6 lg:w-8 lg:h-8 text-[#8B7355] dark:text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={iconMap.star} />
-        </svg>
-      );
-    } else if (name.includes('sweet') || name.includes('dry') || name.includes('fruit')) {
-      return (
-        <svg className="w-6 h-6 lg:w-8 lg:h-8 text-[#8B7355] dark:text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={iconMap.book} />
-        </svg>
-      );
-    } else {
-      // Default icon
-      return (
-        <svg className="w-6 h-6 lg:w-8 lg:h-8 text-[#8B7355] dark:text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={iconMap.package} />
-        </svg>
-      );
-    }
-  };
 
   // Get category display name
   const getCategoryDisplayName = (category) => {
@@ -356,7 +266,7 @@ const MainCategories = () => {
               }`}>
               {mainCategories.map((category, index) => {
                 const displayName = getCategoryDisplayName(category);
-                const imageUrl = resolveImageUrl(category.image_url || category.icon_image_url);
+                const imageUrl = resolveImageUrl(category.image_url);
                 const categoryKey = `${category.item_type}-${category.item_type === 'category' ? category.category_id : category.subcategory_id}`;
                 const isFeatured = index === 0;
                 const isSecondary = index === 1;
@@ -380,8 +290,8 @@ const MainCategories = () => {
                           onError={() => setImageErrors((prev) => ({ ...prev, [categoryKey]: true }))}
                         />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center">
-                          {getCategoryIcon(category)}
+                        <div className="flex h-full w-full items-center justify-center text-[11px] font-semibold text-gray-500">
+                          No Image
                         </div>
                       )}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/5 to-transparent"></div>

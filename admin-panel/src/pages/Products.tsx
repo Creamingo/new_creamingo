@@ -846,10 +846,12 @@ export const Products: React.FC = () => {
         subcategory_id: newProduct.subcategory_ids.length > 0 ? newProduct.subcategory_ids[0] : (newProduct.subcategory_id ? parseInt(newProduct.subcategory_id) : undefined),
         // New multi-category fields
         category_ids: newProduct.category_ids.length > 0 ? newProduct.category_ids : (newProduct.category_id ? [parseInt(newProduct.category_id)] : []),
-        // Combine base subcategories with flavor subcategories
-        subcategory_ids: Array.from(new Set([...(newProduct.subcategory_ids.length > 0 ? newProduct.subcategory_ids : (newProduct.subcategory_id ? [parseInt(newProduct.subcategory_id)] : [])), ...(newProduct.available_flavor_ids || [])])),
+        subcategory_ids: newProduct.subcategory_ids.length > 0 ? newProduct.subcategory_ids : (newProduct.subcategory_id ? [parseInt(newProduct.subcategory_id)] : []),
         primary_category_id: newProduct.primary_category_id,
-        primary_subcategory_id: newProduct.primary_subcategory_id || newProduct.primary_flavor_id,
+        primary_subcategory_id: newProduct.primary_subcategory_id,
+        // Flavor selection fields
+        available_flavor_ids: newProduct.available_flavor_ids || [],
+        primary_flavor_id: newProduct.primary_flavor_id,
         base_price: newProduct.base_price,
         base_weight: newProduct.base_weight,
         discount_percent: newProduct.discount_percent,
@@ -1047,13 +1049,9 @@ export const Products: React.FC = () => {
         subcategory_ids: editingProduct.subcategories?.map(s => Number(s.id)) || [],
         primary_category_id: editingProduct.primary_category_id || editingProduct.categories?.find(c => c.is_primary)?.id,
         primary_subcategory_id: editingProduct.primary_subcategory_id || editingProduct.subcategories?.find(s => s.is_primary)?.id,
-        // Flavor selection fields - extract flavor subcategories from all subcategories
-        available_flavor_ids: editingProduct.subcategories?.filter(s => 
-          [9, 10, 12, 14, 11, 13, 17, 16, 15, 18].includes(Number(s.id))
-        ).map(s => Number(s.id)) || [],
-        primary_flavor_id: editingProduct.subcategories?.find(s => 
-          [9, 10, 12, 14, 11, 13, 17, 16, 15, 18].includes(Number(s.id)) && s.is_primary
-        )?.id,
+        // Flavor selection fields
+        available_flavor_ids: editingProduct.flavors?.map(s => Number(s.id)) || [],
+        primary_flavor_id: editingProduct.flavors?.find(s => s.is_primary)?.id,
         base_weight: editingProduct.base_weight,
         base_price: editingProduct.base_price,
         discount_percent: editingProduct.discount_percent,
@@ -1644,19 +1642,16 @@ export const Products: React.FC = () => {
           : (toValidNumber(editProduct.category_id) ? [toValidNumber(editProduct.category_id)!] : [])
       ).filter((id): id is number => Number.isFinite(id));
 
-      const resolvedSubcategoryIds = Array.from(
-        new Set([
-          ...(editProduct.subcategory_ids.length > 0
-            ? editProduct.subcategory_ids
-            : (toValidNumber(editProduct.subcategory_id) ? [toValidNumber(editProduct.subcategory_id)!] : [])),
-          ...(editProduct.available_flavor_ids || [])
-        ])
+      const resolvedSubcategoryIds = (
+        editProduct.subcategory_ids.length > 0
+          ? editProduct.subcategory_ids
+          : (toValidNumber(editProduct.subcategory_id) ? [toValidNumber(editProduct.subcategory_id)!] : [])
       ).filter((id): id is number => Number.isFinite(id));
 
       const resolvedCategoryId = resolvedCategoryIds[0];
       const resolvedSubcategoryId = resolvedSubcategoryIds[0];
       const resolvedPrimaryCategoryId = toValidNumber(editProduct.primary_category_id);
-      const resolvedPrimarySubcategoryId = toValidNumber(editProduct.primary_subcategory_id || editProduct.primary_flavor_id);
+      const resolvedPrimarySubcategoryId = toValidNumber(editProduct.primary_subcategory_id);
 
       const productData: {
         name: string;
@@ -1694,14 +1689,15 @@ export const Products: React.FC = () => {
         short_description: editProduct.short_description,
         // Legacy fields for backward compatibility
         category_id: resolvedCategoryId,
-        // Set legacy subcategory_id to first subcategory (can be flavor or non-flavor)
+        // Set legacy subcategory_id to first subcategory
         subcategory_id: resolvedSubcategoryId,
         // New multi-category fields
         category_ids: resolvedCategoryIds.length > 0 ? resolvedCategoryIds : undefined,
-        // Combine base subcategories with flavor subcategories
         subcategory_ids: resolvedSubcategoryIds.length > 0 ? resolvedSubcategoryIds : undefined,
         primary_category_id: resolvedPrimaryCategoryId,
         primary_subcategory_id: resolvedPrimarySubcategoryId,
+        available_flavor_ids: editProduct.available_flavor_ids,
+        primary_flavor_id: toValidNumber(editProduct.primary_flavor_id),
         base_price: editProduct.base_price,
         base_weight: editProduct.base_weight,
         discount_percent: editProduct.discount_percent,

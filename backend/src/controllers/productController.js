@@ -2,6 +2,7 @@ const { query } = require('../config/db');
 const {
   assignProductToCategories,
   assignProductToSubcategories,
+  assignProductToFlavors,
   getProductWithCategories,
   getProductsWithCategories,
   removeProductFromCategory,
@@ -26,6 +27,9 @@ const normalizeSearchTerm = (term) => {
 const sqlNormalize = (column) => {
   return `REPLACE(REPLACE(REPLACE(LOWER(${column}), '''', ''), '-', ''), '.', '')`;
 };
+
+const FLAVOR_SUBCATEGORY_IDS = [9, 10, 12, 14, 11, 13, 17, 16, 15, 18];
+const isFlavorSubcategory = (id) => FLAVOR_SUBCATEGORY_IDS.includes(Number(id));
 
 // Get all products with pagination and filters
 const getProducts = async (req, res) => {
@@ -968,6 +972,8 @@ const createProduct = async (req, res) => {
       subcategory_ids, // New: support multiple subcategories
       primary_category_id, // New: primary category
       primary_subcategory_id, // New: primary subcategory
+      available_flavor_ids, // New: available flavors
+      primary_flavor_id, // New: primary flavor
       base_price,
       base_weight,
       discount_percent = 0,
@@ -992,7 +998,19 @@ const createProduct = async (req, res) => {
 
     // Determine which categories to use (new multi-category or legacy single category)
     const categoriesToUse = category_ids || (category_id ? [category_id] : []);
-    const subcategoriesToUse = subcategory_ids || (subcategory_id ? [subcategory_id] : []);
+    const rawSubcategories = subcategory_ids || (subcategory_id ? [subcategory_id] : []);
+    const rawFlavorIds = available_flavor_ids || [];
+    const flavorIdsFromSubcategories = rawSubcategories.filter((id) => isFlavorSubcategory(id));
+    const subcategoriesToUse = rawSubcategories.filter((id) => !isFlavorSubcategory(id));
+    const flavorsToUse = Array.from(new Set([...rawFlavorIds, ...flavorIdsFromSubcategories]))
+      .map((id) => Number(id))
+      .filter((id) => Number.isFinite(id));
+    const resolvedPrimarySubcategoryId = primary_subcategory_id && !isFlavorSubcategory(primary_subcategory_id)
+      ? primary_subcategory_id
+      : null;
+    const resolvedPrimaryFlavorId = primary_flavor_id || (primary_subcategory_id && isFlavorSubcategory(primary_subcategory_id)
+      ? primary_subcategory_id
+      : null);
 
     // Verify categories exist
     if (categoriesToUse.length > 0) {
@@ -1010,7 +1028,7 @@ const createProduct = async (req, res) => {
       }
     }
 
-    // Verify subcategories exist if provided (includes flavor subcategories)
+    // Verify subcategories exist if provided (non-flavor)
     if (subcategoriesToUse.length > 0) {
       const subcategoryPlaceholders = subcategoriesToUse.map(() => '?').join(',');
       const subcategoryResult = await query(
@@ -1022,6 +1040,22 @@ const createProduct = async (req, res) => {
         return res.status(400).json({
           success: false,
           message: 'One or more subcategories are invalid or inactive'
+        });
+      }
+    }
+
+    // Verify flavors exist if provided
+    if (flavorsToUse.length > 0) {
+      const flavorPlaceholders = flavorsToUse.map(() => '?').join(',');
+      const flavorResult = await query(
+        `SELECT id FROM subcategories WHERE id IN (${flavorPlaceholders}) AND is_active = 1`,
+        flavorsToUse
+      );
+
+      if (flavorResult.rows.length !== flavorsToUse.length) {
+        return res.status(400).json({
+          success: false,
+          message: 'One or more flavors are invalid or inactive'
         });
       }
     }
@@ -1069,7 +1103,11 @@ const createProduct = async (req, res) => {
 
     // Assign product to multiple subcategories if provided
     if (subcategoriesToUse.length > 0) {
-      await assignProductToSubcategories(productId, subcategoriesToUse, primary_subcategory_id);
+      await assignProductToSubcategories(productId, subcategoriesToUse, resolvedPrimarySubcategoryId);
+    }
+
+    if (flavorsToUse.length > 0) {
+      await assignProductToFlavors(productId, flavorsToUse, resolvedPrimaryFlavorId);
     }
 
     // Handle product variations if provided
@@ -1145,6 +1183,24 @@ const updateProduct = async (req, res) => {
       ? updateData.gallery_images.map((url) => normalizeUploadUrl(url))
       : [];
 
+    const rawSubcategories = updateData.subcategory_ids || [];
+    const rawFlavorIds = updateData.available_flavor_ids || [];
+    const flavorIdsFromSubcategories = rawSubcategories.filter((id) => isFlavorSubcategory(id));
+    const filteredSubcategoryIds = rawSubcategories.filter((id) => !isFlavorSubcategory(id));
+    const flavorsToUse = Array.from(new Set([...rawFlavorIds, ...flavorIdsFromSubcategories]))
+      .map((id) => Number(id))
+      .filter((id) => Number.isFinite(id));
+    const resolvedPrimarySubcategoryId = updateData.primary_subcategory_id && !isFlavorSubcategory(updateData.primary_subcategory_id)
+      ? updateData.primary_subcategory_id
+      : null;
+    const resolvedPrimaryFlavorId = updateData.primary_flavor_id || (updateData.primary_subcategory_id && isFlavorSubcategory(updateData.primary_subcategory_id)
+      ? updateData.primary_subcategory_id
+      : null);
+
+    if (updateData.subcategory_ids !== undefined) {
+      updateData.subcategory_ids = filteredSubcategoryIds;
+    }
+
     // Validate discount_percent if provided
     if (updateData.discount_percent !== undefined) {
       if (updateData.discount_percent < 0 || updateData.discount_percent > 100) {
@@ -1186,9 +1242,7 @@ const updateProduct = async (req, res) => {
     // Verify subcategory if provided (skip validation for flavor subcategories)
     if (updateData.subcategory_id && updateData.category_id) {
       // Flavor subcategory IDs that can be assigned to any product
-      const flavorSubcategoryIds = [9, 10, 12, 14, 11, 13, 17, 16, 15, 18];
-      
-      if (!flavorSubcategoryIds.includes(Number(updateData.subcategory_id))) {
+      if (!isFlavorSubcategory(updateData.subcategory_id)) {
         const subcategoryResult = await query(
           'SELECT id FROM subcategories WHERE id = ? AND category_id = ? AND is_active = 1',
           [updateData.subcategory_id, updateData.category_id]
@@ -1203,6 +1257,21 @@ const updateProduct = async (req, res) => {
       }
     }
 
+    if (flavorsToUse.length > 0) {
+      const flavorPlaceholders = flavorsToUse.map(() => '?').join(',');
+      const flavorResult = await query(
+        `SELECT id FROM subcategories WHERE id IN (${flavorPlaceholders}) AND is_active = 1`,
+        flavorsToUse
+      );
+
+      if (flavorResult.rows.length !== flavorsToUse.length) {
+        return res.status(400).json({
+          success: false,
+          message: 'One or more flavors are invalid or inactive'
+        });
+      }
+    }
+
     // Build update query dynamically
     const updates = [];
     const values = [];
@@ -1214,63 +1283,74 @@ const updateProduct = async (req, res) => {
           key !== 'category_ids' &&
           key !== 'subcategory_ids' &&
           key !== 'primary_category_id' &&
-          key !== 'primary_subcategory_id') {
+          key !== 'primary_subcategory_id' &&
+          key !== 'available_flavor_ids' &&
+          key !== 'primary_flavor_id') {
         updates.push(`${key} = ?`);
         values.push(updateData[key]);
       }
     });
 
-    if (updates.length === 0) {
+    const hasRelationshipUpdates = updateData.category_ids !== undefined
+      || updateData.subcategory_ids !== undefined
+      || updateData.primary_category_id !== undefined
+      || updateData.primary_subcategory_id !== undefined
+      || updateData.available_flavor_ids !== undefined
+      || updateData.primary_flavor_id !== undefined;
+
+    if (updates.length === 0 && !hasRelationshipUpdates && req.body.variations === undefined && updateData.gallery_images === undefined) {
       return res.status(400).json({
         success: false,
         message: 'No valid fields to update'
       });
     }
 
-    // Generate new slug if name is being updated
-    if (updateData.name !== undefined) {
-      const slug = updateData.name
-        .toLowerCase()
-        .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
-        .replace(/\s+/g, '-') // Replace spaces with hyphens
-        .replace(/-+/g, '-') // Replace multiple hyphens with single
-        .trim();
-      
-      updates.push('slug = ?');
-      values.push(slug);
+    if (updates.length > 0) {
+      // Generate new slug if name is being updated
+      if (updateData.name !== undefined) {
+        const slug = updateData.name
+          .toLowerCase()
+          .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
+          .replace(/\s+/g, '-') // Replace spaces with hyphens
+          .replace(/-+/g, '-') // Replace multiple hyphens with single
+          .trim();
+        
+        updates.push('slug = ?');
+        values.push(slug);
+      }
+
+      // Calculate discounted price if discount_percent or base_price is being updated
+      if (updateData.discount_percent !== undefined || updateData.base_price !== undefined) {
+        const currentProduct = await query('SELECT base_price, discount_percent FROM products WHERE id = ?', [id]);
+        const currentBasePrice = updateData.base_price !== undefined ? updateData.base_price : currentProduct.rows[0].base_price;
+        const currentDiscountPercent = updateData.discount_percent !== undefined ? updateData.discount_percent : currentProduct.rows[0].discount_percent;
+        
+        const discountedPrice = currentDiscountPercent > 0 ? 
+          currentBasePrice * (1 - currentDiscountPercent / 100) : 
+          currentBasePrice;
+        
+        updates.push('discounted_price = ?');
+        values.push(discountedPrice);
+      }
+
+      updates.push('updated_at = NOW()');
+      values.push(id);
+
+      const queryText = `
+        UPDATE products 
+        SET ${updates.join(', ')} 
+        WHERE id = ?
+      `;
+
+      await query(queryText, values);
     }
-
-    // Calculate discounted price if discount_percent or base_price is being updated
-    if (updateData.discount_percent !== undefined || updateData.base_price !== undefined) {
-      const currentProduct = await query('SELECT base_price, discount_percent FROM products WHERE id = ?', [id]);
-      const currentBasePrice = updateData.base_price !== undefined ? updateData.base_price : currentProduct.rows[0].base_price;
-      const currentDiscountPercent = updateData.discount_percent !== undefined ? updateData.discount_percent : currentProduct.rows[0].discount_percent;
-      
-      const discountedPrice = currentDiscountPercent > 0 ? 
-        currentBasePrice * (1 - currentDiscountPercent / 100) : 
-        currentBasePrice;
-      
-      updates.push('discounted_price = ?');
-      values.push(discountedPrice);
-    }
-
-    updates.push('updated_at = NOW()');
-    values.push(id);
-
-    const queryText = `
-      UPDATE products 
-      SET ${updates.join(', ')} 
-      WHERE id = ?
-    `;
-
-    await query(queryText, values);
 
     // Handle multi-category fields if provided
     if (updateData.category_ids !== undefined || updateData.subcategory_ids !== undefined) {
       const categoriesToUse = updateData.category_ids || [];
       const subcategoriesToUse = updateData.subcategory_ids || [];
       const primaryCategoryId = updateData.primary_category_id;
-      const primarySubcategoryId = updateData.primary_subcategory_id;
+      const primarySubcategoryId = resolvedPrimarySubcategoryId;
 
       // Update categories if provided
       if (updateData.category_ids !== undefined) {
@@ -1292,6 +1372,18 @@ const updateProduct = async (req, res) => {
         if (subcategoriesToUse.length > 0) {
           await assignProductToSubcategories(id, subcategoriesToUse, primarySubcategoryId);
         }
+      }
+    }
+
+    const shouldUpdateFlavors = updateData.available_flavor_ids !== undefined
+      || updateData.primary_flavor_id !== undefined
+      || flavorIdsFromSubcategories.length > 0;
+
+    if (shouldUpdateFlavors) {
+      await query('DELETE FROM product_flavors WHERE product_id = ?', [id]);
+
+      if (flavorsToUse.length > 0) {
+        await assignProductToFlavors(id, flavorsToUse, resolvedPrimaryFlavorId);
       }
     }
 
