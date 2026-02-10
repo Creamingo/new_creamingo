@@ -1142,7 +1142,6 @@ const ListingPage = () => {
                       return (
                         <button
                           key={subcategory.id}
-                            ref={(el) => (subcategoryButtonsRef.current[index] = el)}
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
