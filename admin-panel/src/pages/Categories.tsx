@@ -322,12 +322,15 @@ export const Categories: React.FC = () => {
       const oldIndex = categories.findIndex(category => category.id === active.id);
       const newIndex = categories.findIndex(category => category.id === over.id);
 
-      // Update local state immediately for better UX
-      const newCategories = arrayMove(categories, oldIndex, newIndex);
+      // Reorder array and assign new order_index to each item so UI sort reflects the change
+      const reordered = arrayMove(categories, oldIndex, newIndex);
+      const newCategories = reordered.map((category, index) => ({
+        ...category,
+        order_index: index + 1
+      }));
       setCategories(newCategories);
 
       try {
-        // Update order_index for all categories
         const updatedCategories = newCategories.map((category, index) => ({
           id: category.id,
           order_index: index + 1
@@ -1493,6 +1496,7 @@ export const Categories: React.FC = () => {
               onFileRemove={handleFileRemove}
               files={uploadedFiles}
               helperText="Recommended size: 600x600px"
+              existingImageUrl={editCategory.image_url ? resolveImageUrl(editCategory.image_url) : undefined}
             />
           </div>
         )}

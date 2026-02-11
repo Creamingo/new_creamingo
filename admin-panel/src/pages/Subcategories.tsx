@@ -326,12 +326,15 @@ export const Subcategories: React.FC = () => {
       const oldIndex = subcategories.findIndex(subcategory => subcategory.id === active.id);
       const newIndex = subcategories.findIndex(subcategory => subcategory.id === over.id);
 
-      // Update local state immediately for better UX
-      const newSubcategories = arrayMove(subcategories, oldIndex, newIndex);
+      // Reorder array and assign new order_index to each item so UI sort reflects the change
+      const reordered = arrayMove(subcategories, oldIndex, newIndex);
+      const newSubcategories = reordered.map((subcategory, index) => ({
+        ...subcategory,
+        order_index: index + 1
+      }));
       setSubcategories(newSubcategories);
 
       try {
-        // Update order_index for all subcategories
         const updatedSubcategories = newSubcategories.map((subcategory, index) => ({
           id: subcategory.id,
           order_index: index + 1
@@ -1597,6 +1600,7 @@ export const Subcategories: React.FC = () => {
               onFileRemove={handleFileRemove}
               files={uploadedFiles}
               helperText="Recommended size: 600x600px"
+              existingImageUrl={editSubcategory.image_url ? resolveImageUrl(editSubcategory.image_url) : undefined}
             />
           </div>
         )}
