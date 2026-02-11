@@ -985,8 +985,8 @@ const ProductSummary = ({
         </div>
       </div>
 
-       {/* Mobile Sticky Footer - Always visible at bottom */}
-       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-xl dark:shadow-black/30 z-50" style={{ willChange: 'transform', transform: 'translateZ(0)', backfaceVisibility: 'hidden', maxWidth: '100vw' }}>
+       {/* Mobile Sticky Footer - Above category menu (z-[60]) so Add Combo / Add to Cart stay on top when menu is open */}
+       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-xl dark:shadow-black/30 z-[60]" style={{ willChange: 'transform', transform: 'translateZ(0)', backfaceVisibility: 'hidden', maxWidth: '100vw' }}>
         {/* Delivery Details Notification - Mobile - Always render to reserve space and prevent layout shift */}
          <div className={`px-3 transition-all duration-200 ease-in-out ${showDeliveryNotification ? 'pt-2 pb-1 opacity-100 max-h-20' : 'pt-0 pb-0 opacity-0 max-h-0 overflow-hidden'}`}>
            <div className="bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-800 rounded-sm px-3 py-1.5">
@@ -995,7 +995,7 @@ const ProductSummary = ({
              </p>
            </div>
          </div>
-        <div className="px-2 py-2.5 min-h-[72px]">
+        <div className="px-2 py-2 min-h-[64px]">
           {/* Unified Button Layout - Compact and refined */}
           <div className="w-full flex items-stretch gap-2 h-full">
              {/* Add Combo Button - Fixed height to prevent layout shift */}
@@ -1008,7 +1008,7 @@ const ProductSummary = ({
                    setShowComboModal(true);
                  }
                }}
-              className="flex-1 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300 py-2.5 px-3 font-semibold border-2 border-rose-200 dark:border-rose-700 hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-all duration-200 flex items-center justify-center gap-2 text-base shadow-sm hover:shadow-md active:scale-[0.98] min-h-[56px]"
+              className="flex-1 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300 py-2 px-3 font-semibold border-2 border-rose-200 dark:border-rose-700 hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-all duration-200 flex items-center justify-center gap-2 text-base shadow-sm hover:shadow-md active:scale-[0.98] min-h-[48px]"
              >
                {comboSelections.length > 0 ? (
                  <>
@@ -1050,7 +1050,7 @@ const ProductSummary = ({
                    }
                  }
                }}
-              className={`flex-1 py-2.5 px-3 font-medium transition-all duration-200 flex flex-col items-center justify-center gap-0.5 text-sm min-h-[56px] text-center cursor-pointer ${
+              className={`flex-1 py-2 px-3 font-medium transition-all duration-200 flex flex-col items-center justify-center gap-0.5 text-sm min-h-[48px] text-center cursor-pointer ${
                 isAddToCartEnabled
                   ? 'bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 active:from-pink-700 active:to-rose-700 dark:active:from-pink-800 dark:active:to-rose-800'
                   : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'

@@ -7,8 +7,8 @@ import { useCart } from '../contexts/CartContext'
 import { useWishlist } from '../contexts/WishlistContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { useCustomerAuth } from '../contexts/CustomerAuthContext'
+import { useAuthModal } from '../contexts/AuthModalContext'
 import CartDisplay from './CartDisplay'
-import AuthModal from './AuthModal'
 
 const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }) => {
   const router = useRouter()
@@ -20,25 +20,8 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
   const { wishlistCount: contextWishlistCount, isInitialized: wishlistInitialized } = useWishlist()
   const { unreadCount: notificationCount, openNotificationCenter } = useNotifications()
   const { isAuthenticated } = useCustomerAuth()
+  const { isAuthModalOpen, openAuthModal } = useAuthModal()
   const [cartItemCount, setCartItemCount] = useState(0)
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
-  const [authRedirectPath, setAuthRedirectPath] = useState(null)
-
-  const openAuthModal = (redirectPath = null) => {
-    setAuthRedirectPath(redirectPath)
-    setIsAuthModalOpen(true)
-  }
-
-  const closeAuthModal = () => {
-    setIsAuthModalOpen(false)
-    setAuthRedirectPath(null)
-  }
-
-  const handleAuthSuccess = () => {
-    if (authRedirectPath) {
-      router.push(authRedirectPath)
-    }
-  }
   
   // Use context wishlist count if available, otherwise use prop (for backwards compatibility)
   const wishlistCount = wishlistInitialized ? contextWishlistCount : propWishlistCount
@@ -145,6 +128,16 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
     }
   }
 
+  // Hide sticky footer when Login/Sign up modal is open so the layout feels connected
+  if (isAuthModalOpen) {
+    return (
+      <CartDisplay
+        isOpen={isCartOpen}
+        onClose={() => setIsCartOpen(false)}
+      />
+    )
+  }
+
   return (
     <>
       {/* Expandable Help Menu */}
@@ -168,11 +161,7 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
       )}
 
       <footer
-        className={`fixed bottom-0 left-0 right-0 w-full z-50 h-[3.6rem] max-w-full ${
-          isAuthModalOpen
-            ? 'bg-white dark:bg-gray-800 rounded-t-3xl shadow-none border border-white/60 dark:border-gray-700/60'
-            : 'bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-t-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 border border-white/20 dark:border-gray-700/50 border-t-2 border-t-pink-200 dark:border-t-pink-700'
-        }`}
+        className="fixed bottom-0 left-0 right-0 w-full z-50 h-[3.6rem] max-w-full bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-t-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 border border-white/20 dark:border-gray-700/50 border-t-2 border-t-pink-200 dark:border-t-pink-700"
       >
         <div className="flex items-center justify-around h-full px-2 gap-1">
           {footerItems.map((item, index) => {
@@ -219,12 +208,6 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
       <CartDisplay
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
-      />
-
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={closeAuthModal}
-        onSuccess={handleAuthSuccess}
       />
     </>
   )

@@ -12,7 +12,9 @@ import { SearchProvider } from '../contexts/SearchContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
 import { WalletProvider } from '../contexts/WalletContext'
 import { NotificationProvider } from '../contexts/NotificationContext'
+import { AuthModalProvider } from '../contexts/AuthModalContext'
 import WalletComponents from '../components/WalletComponents'
+import AuthModalBackdrop from '../components/AuthModalBackdrop'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -44,8 +46,11 @@ export default function RootLayout({ children }) {
                   <WishlistProvider>
                     <SearchProvider>
                       <CartProvider>
-                        <WalletComponents />
-                        {children}
+                        <AuthModalProvider>
+                          <WalletComponents />
+                          {children}
+                          <AuthModalBackdrop />
+                        </AuthModalProvider>
                       </CartProvider>
                     </SearchProvider>
                   </WishlistProvider>

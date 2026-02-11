@@ -289,9 +289,6 @@ const LoveAndRelationshipCakes = () => {
                           loading="lazy"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/10 to-transparent"></div>
-                        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-white/70 backdrop-blur px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-800 shadow-sm border border-white/60">
-                          {relationship.name}
-                        </div>
                       </div>
                       
                       {/* Category Name with Enhanced Styling */}
@@ -327,9 +324,6 @@ const LoveAndRelationshipCakes = () => {
                         loading="lazy"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/10 to-transparent"></div>
-                      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-white/70 backdrop-blur px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-800 shadow-sm border border-white/60">
-                        {relationship.name}
-                      </div>
                     </div>
                     
                     {/* Category Name */}

@@ -125,6 +125,9 @@ export const CustomerAuthProvider = ({ children }) => {
       setCustomer(null);
       setIsAuthenticated(false);
       setError(null);
+      if (toast?.showSuccess) {
+        toast.showSuccess('Logged out', 'You have been logged out successfully.', 3000);
+      }
       // Redirect to home page
       router.push('/');
     }
