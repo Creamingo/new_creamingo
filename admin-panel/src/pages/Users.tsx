@@ -7,6 +7,7 @@ import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import { useAuth } from '../contexts/AuthContext';
 import { userService } from '../services/userService';
+import { useToastContext } from '../contexts/ToastContext';
 import { User } from '../types';
 import { getRoleDisplayName, getRoleColor } from '../utils/permissions';
 import {
@@ -268,6 +269,8 @@ const Users: React.FC = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const { user: currentUser } = useAuth();
+  const { showSuccess, showError } = useToastContext();
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Drag and drop sensors
   const sensors = useSensors(
@@ -285,10 +288,14 @@ const Users: React.FC = () => {
   const fetchUsers = async (showLoading = true) => {
     try {
       if (showLoading) setLoading(true);
+      setLoadError(null);
       const response = await userService.getUsers();
       setUsers(response.data || []);
     } catch (error) {
       console.error('Error fetching users:', error);
+      const message = error instanceof Error ? error.message : 'Failed to load users';
+      setLoadError(message);
+      showError('Failed to load users', message);
     } finally {
       if (showLoading) setLoading(false);
     }
@@ -421,10 +428,12 @@ const Users: React.FC = () => {
         setUsers(prevUsers => 
           prevUsers.map(u => u.id === editingUser.id ? updatedUser.data : u)
         );
+        showSuccess('User updated', `${updatedUser.data.name} was updated successfully.`);
       } else {
         const newUser = await userService.createUser(payload);
         // Add new user to local state
         setUsers(prevUsers => [newUser.data, ...prevUsers]);
+        showSuccess('User created', `${newUser.data.name} was added successfully.`);
       }
 
       setIsModalOpen(false);
@@ -432,6 +441,8 @@ const Users: React.FC = () => {
       resetForm();
     } catch (error) {
       console.error('Error saving user:', error);
+      const message = error instanceof Error ? error.message : 'Failed to save user';
+      showError('User save failed', message);
     } finally {
       setSubmitting(false);
     }
@@ -493,8 +504,14 @@ const Users: React.FC = () => {
           u.id === user.id ? { ...u, is_active: !u.is_active } : u
         )
       );
+      showSuccess(
+        'Status updated',
+        `${user.name} is now ${!user.is_active ? 'active' : 'inactive'}.`
+      );
     } catch (error) {
       console.error('Error updating user status:', error);
+      const message = error instanceof Error ? error.message : 'Failed to update user status';
+      showError('Status update failed', message);
     }
   };
 
@@ -921,6 +938,12 @@ const Users: React.FC = () => {
                       <tr>
                         <td colSpan={6} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                           Loading...
+                        </td>
+                      </tr>
+                    ) : loadError ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                          {loadError}
                         </td>
                       </tr>
                     ) : filteredUsers.length === 0 ? (

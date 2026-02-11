@@ -30,7 +30,7 @@ const FLAVOR_SUBCATEGORY_IDS = [
 
 export const FlavorSelector: React.FC<FlavorSelectorProps> = ({
   subcategories,
-  selectedSubcategoryIds = [],
+  selectedSubcategoryIds: _selectedSubcategoryIds = [],
   selectedFlavorIds,
   primaryFlavorId,
   onFlavorsChange,
@@ -39,7 +39,6 @@ export const FlavorSelector: React.FC<FlavorSelectorProps> = ({
   disabled = false
 }) => {
   const [availableFlavors, setAvailableFlavors] = useState<Subcategory[]>([]);
-  const [hasAutoPopulated, setHasAutoPopulated] = useState(false);
 
   // Filter subcategories to only show flavor-related ones
   useEffect(() => {
@@ -48,34 +47,6 @@ export const FlavorSelector: React.FC<FlavorSelectorProps> = ({
     );
     setAvailableFlavors(flavorSubcategories);
   }, [subcategories]);
-
-  // Auto-populate Available Flavors when flavor subcategories are selected in regular subcategories
-  // Only run this once when the component mounts or when selectedSubcategoryIds changes significantly
-  useEffect(() => {
-    if (selectedSubcategoryIds && selectedSubcategoryIds.length > 0 && !hasAutoPopulated) {
-      // Find flavor subcategories from the selected subcategories
-      const selectedFlavorSubcategories = subcategories.filter(subcat => 
-        FLAVOR_SUBCATEGORY_IDS.includes(Number(subcat.id)) && 
-        selectedSubcategoryIds.includes(Number(subcat.id))
-      );
-      
-      if (selectedFlavorSubcategories.length > 0) {
-        const flavorIds = selectedFlavorSubcategories.map(flavor => Number(flavor.id));
-        
-        // Only auto-populate if no flavors are currently selected (initial load)
-        if (selectedFlavorIds.length === 0) {
-          onFlavorsChange(flavorIds);
-          setHasAutoPopulated(true);
-          
-          // Set primary flavor if available
-          const primaryFlavor = selectedFlavorSubcategories.find(flavor => flavor.is_primary);
-          if (primaryFlavor) {
-            onPrimaryFlavorChange(Number(primaryFlavor.id));
-          }
-        }
-      }
-    }
-  }, [selectedSubcategoryIds, hasAutoPopulated, selectedFlavorIds.length, subcategories, onFlavorsChange, onPrimaryFlavorChange]);
 
   // Handle flavor selection
   const handleFlavorToggle = (flavorId: number) => {

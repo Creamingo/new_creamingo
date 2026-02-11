@@ -28,14 +28,19 @@ const FlavorSelector = ({
     18, // Blueberry
   ];
 
-  // Get available flavors from product subcategories
+  // Get available flavors from product flavors (fallback to subcategories)
   const getAvailableFlavors = () => {
-    if (!product.subcategories || !Array.isArray(product.subcategories)) {
+    const flavorSource = Array.isArray(product.flavors)
+      ? product.flavors
+      : (Array.isArray(product.subcategories) ? product.subcategories : []);
+
+    if (!Array.isArray(flavorSource)) {
       return [];
     }
-    
-    const flavors = product.subcategories
-      .filter(subcat => FLAVOR_SUBCATEGORY_IDS.includes(Number(subcat.id)));
+
+    const flavors = product.flavors && Array.isArray(product.flavors)
+      ? flavorSource
+      : flavorSource.filter(subcat => FLAVOR_SUBCATEGORY_IDS.includes(Number(subcat.id)));
     
     // Sort: Primary flavor first, then others alphabetically
     return flavors.sort((a, b) => {

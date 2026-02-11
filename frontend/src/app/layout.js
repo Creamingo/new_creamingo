@@ -20,14 +20,13 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <head>
-        {/* Simple: Just disable browser's automatic scroll restoration */}
+        {/* Enable browser scroll restoration so back button returns to previous scroll position */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
-                // Only disable browser's automatic scroll restoration
                 if ('scrollRestoration' in history) {
-                  history.scrollRestoration = 'manual';
+                  history.scrollRestoration = 'auto';
                 }
               })();
             `,

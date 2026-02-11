@@ -385,7 +385,7 @@ export const Settings: React.FC = () => {
             onFileSelect={handleFileSelect}
             onFileRemove={handleFileRemove}
             files={uploadedFiles}
-            helperText="Recommended size: 200x60px"
+            helperText="Recommended size: 700x217px"
           />
         </CardContent>
       </Card>

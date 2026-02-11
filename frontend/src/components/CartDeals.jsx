@@ -203,11 +203,8 @@ const CartDeals = () => {
                     <div className="flex-1 min-w-0 flex flex-col justify-between h-16 sm:h-20">
                       {/* Price and Weight in a row */}
                       <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                        <span className="text-xs sm:text-sm text-gray-400 dark:text-gray-500 line-through">
-                          {formatPrice(deal.product.original_price || deal.product.base_price)}
-                        </span>
-                        <span className="text-lg sm:text-xl font-bold text-green-600 dark:text-green-400">
-                          {formatPrice(deal.deal_price)}
+                        <span className="px-2 py-0.5 rounded-md bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 text-xs sm:text-sm font-bold">
+                          in {formatPrice(deal.deal_price)}
                         </span>
                         {deal.product.base_weight && (
                           <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-medium">
@@ -215,6 +212,11 @@ const CartDeals = () => {
                           </span>
                         )}
                       </div>
+                      {deal.original_price && (
+                        <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                          current price {formatPrice(deal.original_price)}
+                        </div>
+                      )}
                       
                       {/* Button - Just below Prices and Weight */}
                       <div className="mt-auto">
@@ -287,41 +289,54 @@ const CartDeals = () => {
             {lockedDeals.map((deal) => {
               const amountNeeded = Math.ceil(deal.threshold - cartTotal);
               const progressPercent = Math.min(100, (cartTotal / deal.threshold) * 100);
+              const currentPrice = deal.original_price;
 
               return (
-                <div
-                  key={deal.deal_id}
-                  className="p-3 sm:p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600"
-                >
-                  <div className="flex items-start gap-2.5 sm:gap-3 mb-2 sm:mb-2.5">
-                    {deal.product.image_url && (
-                      <img
-                        src={resolveImageUrl(deal.product.image_url)}
-                        alt={deal.product.name}
-                        className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg object-cover flex-shrink-0"
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100">
-                        Add ₹{amountNeeded} more to unlock:
-                      </p>
-                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 line-clamp-1">
-                          {deal.product.name} for {formatPrice(deal.deal_price)}
+                <div key={deal.deal_id} className="rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                  {/* Top deal info bar */}
+                  <div className="bg-gradient-to-r from-pink-600 to-rose-600 text-white px-3 py-2 text-xs sm:text-sm font-semibold flex items-center gap-2">
+                    <Gift className="w-3.5 h-3.5" />
+                    <span>Shop for ₹{amountNeeded} more to unlock this deal</span>
+                  </div>
+
+                  {/* Deal card */}
+                  <div className="p-3 sm:p-4 bg-gray-50 dark:bg-gray-700/50">
+                    <div className="flex items-start gap-2.5 sm:gap-3 mb-2 sm:mb-2.5">
+                      {deal.product.image_url && (
+                        <img
+                          src={resolveImageUrl(deal.product.image_url)}
+                          alt={deal.product.name}
+                          className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg object-cover flex-shrink-0"
+                        />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100 line-clamp-2">
+                          {deal.product.name}
                         </p>
                         {deal.product.base_weight && (
-                          <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-medium">
-                            • {deal.product.base_weight}
-                          </span>
+                          <p className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                            {deal.product.base_weight}
+                          </p>
                         )}
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <span className="px-2 py-0.5 rounded-md bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 text-xs sm:text-sm font-bold">
+                            in {formatPrice(deal.deal_price)}
+                          </span>
+                          {currentPrice && currentPrice > deal.deal_price && (
+                            <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                              current price {formatPrice(currentPrice)}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1.5 sm:h-2">
-                    <div
-                      className="bg-gradient-to-r from-pink-500 to-rose-500 dark:from-pink-600 dark:to-rose-600 h-1.5 sm:h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${progressPercent}%` }}
-                    />
+
+                    <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1.5 sm:h-2">
+                      <div
+                        className="bg-gradient-to-r from-pink-500 to-rose-500 dark:from-pink-600 dark:to-rose-600 h-1.5 sm:h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${progressPercent}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
               );

@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import customerAuthApi from '../api/customerAuthApi';
+import { ToastContext } from './ToastContext';
 
 // Create context
 const CustomerAuthContext = createContext(null);
@@ -23,6 +24,7 @@ export const CustomerAuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const router = useRouter();
+  const toast = useContext(ToastContext);
 
   // Check for existing session on mount
   useEffect(() => {
@@ -82,7 +84,7 @@ export const CustomerAuthProvider = ({ children }) => {
   };
 
   // Register function
-  const register = async (customerData) => {
+  const register = async (customerData, options = {}) => {
     setIsLoading(true);
     setError(null);
 
@@ -90,6 +92,18 @@ export const CustomerAuthProvider = ({ children }) => {
       const response = await customerAuthApi.register(customerData);
       setCustomer(response.customer);
       setIsAuthenticated(true);
+      if (response.welcomeBonus?.credited && toast?.showSuccess) {
+        const baseMessage = `₹${response.welcomeBonus.amount} has been added to your wallet.`;
+        const message =
+          options?.source === 'checkout'
+            ? baseMessage
+            : `${baseMessage} You can use this bonus for purchasing this order!`;
+        toast.showSuccess(
+          'Welcome Bonus Credited!',
+          message,
+          6000
+        );
+      }
       return response;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Registration failed';

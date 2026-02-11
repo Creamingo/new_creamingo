@@ -113,40 +113,31 @@ if (allowAllOrigins && process.env.NODE_ENV === 'production') {
 
 app.use(cors(corsOptions));
 
-// Rate limiting - more lenient for development
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // limit each IP to 1000 requests per windowMs (increased for development)
-  message: {
-    success: false,
-    message: 'Too many requests from this IP, please try again later.'
-  },
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-});
+const authRateLimitWindowMs = Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000;
+const authRateLimitMax = Number(process.env.AUTH_RATE_LIMIT_MAX) || 20;
+const customerAuthRateLimitMax = Number(process.env.CUSTOMER_AUTH_RATE_LIMIT_MAX) || authRateLimitMax;
 
-// Apply rate limiting to all API routes except auth
-app.use('/api/', (req, res, next) => {
-  // Skip rate limiting for auth routes (they have their own limiter)
-  if (req.path.startsWith('/auth') || req.path.startsWith('/customer-auth')) {
-    return next();
-  }
-  return limiter(req, res, next);
-});
-
-// More lenient rate limiting for auth routes
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50, // limit each IP to 50 auth requests per windowMs
-  message: {
-    success: false,
-    message: 'Too many authentication attempts from this IP, please try again later.'
-  },
+  windowMs: authRateLimitWindowMs,
+  max: authRateLimitMax,
   standardHeaders: true,
   legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many authentication attempts. Please try again later.'
+  }
 });
-app.use('/api/auth', authLimiter);
-app.use('/api/customer-auth', authLimiter);
+
+const customerAuthLimiter = rateLimit({
+  windowMs: authRateLimitWindowMs,
+  max: customerAuthRateLimitMax,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many authentication attempts. Please try again later.'
+  }
+});
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -249,8 +240,8 @@ app.get('/api', (req, res) => {
 });
 
 // API routes
-app.use('/api/auth', authRoutes);
-app.use('/api/customer-auth', customerAuthRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/customer-auth', customerAuthLimiter, customerAuthRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/subcategories', subcategoryRoutes);

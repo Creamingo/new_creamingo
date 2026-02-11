@@ -4,6 +4,7 @@ import { Eye, EyeOff, Lock, Mail, AlertCircle, X } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { useAuth } from '../contexts/AuthContext';
+import { useToastContext } from '../contexts/ToastContext';
 
 export const Login: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -15,8 +16,11 @@ export const Login: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const { login, isAuthenticated, error, clearError } = useAuth();
+  const { showInfo } = useToastContext();
   const navigate = useNavigate();
   const location = useLocation();
+  const supportEmail = process.env.REACT_APP_SUPPORT_EMAIL || 'support@creamingo.com';
+  const supportMailto = `mailto:${supportEmail}?subject=Creamingo%20Admin%20Password%20Reset`;
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -58,35 +62,61 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-2 sm:p-4 pt-20 sm:pt-4 sm:flex">
-      <div className="w-full max-w-6xl">
-        {/* Header Box with Logo and Content */}
-        <div className="bg-white/90 backdrop-blur-sm dark:bg-gray-800/90 rounded-3xl shadow-soft-lg border border-amber-200/50 dark:border-gray-700/50 p-3 sm:p-6 mb-15 sm:mb-6 mt-0 sm:mt-0 fixed top-0 left-0 right-0 sm:static sm:left-auto sm:right-auto z-50">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-0">
-            {/* Logo Section - Left */}
-            <div className="flex items-center gap-3 sm:gap-4">
-              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-amber-400 via-orange-400 to-yellow-400 rounded-2xl flex items-center justify-center shadow-lg border border-amber-200">
-                <span className="text-white font-bold text-lg sm:text-2xl">C</span>
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4 sm:p-6">
+      <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10 items-stretch">
+        {/* Brand Panel */}
+        <div className="hidden lg:flex flex-col justify-between rounded-3xl border border-amber-200/60 dark:border-gray-700/60 bg-gradient-to-br from-amber-200/60 via-orange-100/70 to-yellow-50/80 dark:from-gray-800 dark:via-gray-800 dark:to-gray-900 p-10 shadow-soft-lg">
+          <div>
+            <div className="flex items-center gap-4 mb-10">
+              <div className="w-14 h-14 bg-gradient-to-br from-amber-400 via-orange-400 to-yellow-400 rounded-2xl flex items-center justify-center shadow-lg border border-amber-200">
+                <span className="text-white font-bold text-2xl">C</span>
               </div>
               <div>
-                <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent dark:text-gray-100">Creamingo</h1>
-                <p className="text-sm sm:text-base text-amber-600 dark:text-gray-400 font-semibold">Admin Panel</p>
+                <h1 className="text-3xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent dark:text-gray-100">Creamingo</h1>
+                <p className="text-sm text-amber-700 dark:text-gray-400 font-semibold tracking-wide">Admin Panel</p>
               </div>
             </div>
-            
-            {/* Content Section - Right */}
-            <div className="text-center sm:text-right hidden sm:block">
-              <h2 className="text-lg sm:text-xl font-bold text-amber-800 dark:text-gray-100 mb-1">Welcome back</h2>
-              <p className="text-xs sm:text-sm text-amber-600 dark:text-gray-400">Sign in to your admin account</p>
-            </div>
+            <h2 className="text-4xl font-semibold text-amber-900 dark:text-gray-100 leading-tight">
+              Welcome back
+            </h2>
+            <p className="mt-3 text-base text-amber-700 dark:text-gray-300 max-w-md">
+              Sign in to manage products, orders, and operations securely.
+            </p>
+          </div>
+          <div className="text-sm text-amber-700/80 dark:text-gray-400">
+            Secure access only. All activity is monitored and audited.
           </div>
         </div>
 
-        {/* Main Content - Horizontal Layout for Laptop */}
-        <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 items-start lg:items-start justify-center">
-
-          {/* Login Form */}
-          <div className="w-full lg:w-96 bg-white/80 backdrop-blur-sm dark:bg-gray-800/80 rounded-2xl shadow-soft-lg border border-amber-100 dark:border-gray-700 p-6">
+        {/* Login Form */}
+        <div className="w-full bg-white/90 backdrop-blur-sm dark:bg-gray-800/90 rounded-3xl shadow-soft-lg border border-amber-100/70 dark:border-gray-700/70 p-6 sm:p-8 lg:p-10 flex flex-col justify-center">
+          <div className="lg:hidden rounded-2xl border border-amber-200/60 dark:border-gray-700/60 bg-gradient-to-br from-amber-200/60 via-orange-100/70 to-yellow-50/80 dark:from-gray-800 dark:via-gray-800 dark:to-gray-900 p-5 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-amber-400 via-orange-400 to-yellow-400 rounded-2xl flex items-center justify-center shadow-lg border border-amber-200">
+                <span className="text-white font-bold text-xl">C</span>
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent dark:text-gray-100">Creamingo</h1>
+                <p className="text-xs text-amber-600 dark:text-gray-400 font-semibold">Admin Panel</p>
+              </div>
+            </div>
+            <div className="mt-4">
+              <h2 className="text-2xl font-semibold text-amber-900 dark:text-gray-100">
+                Welcome back
+              </h2>
+              <p className="mt-2 text-sm text-amber-700 dark:text-gray-300">
+                Sign in to manage products, orders, and operations securely.
+              </p>
+            </div>
+          </div>
+          <div className="mb-6">
+            <h2 className="text-2xl sm:text-3xl font-semibold text-amber-900 dark:text-gray-100">
+              Sign in to your account
+            </h2>
+            <p className="mt-2 text-sm sm:text-base text-amber-700 dark:text-gray-300">
+              Enter your credentials to continue.
+            </p>
+          </div>
 
           {/* Error Message */}
           {error && (
@@ -182,6 +212,10 @@ export const Login: React.FC = () => {
               </label>
               <button
                 type="button"
+                onClick={() => {
+                  showInfo('Password reset', `Please contact support at ${supportEmail}.`);
+                  window.location.href = supportMailto;
+                }}
                 className="text-sm text-amber-600 dark:text-amber-400 hover:text-amber-500 dark:hover:text-amber-300 transition-colors"
                 disabled={isSubmitting}
               >
@@ -200,86 +234,9 @@ export const Login: React.FC = () => {
             </Button>
           </form>
 
+          <div className="mt-6 text-xs text-amber-600 dark:text-gray-400">
+            Secure login protected by encryption.
           </div>
-
-          {/* Demo Credentials - Side Panel for Laptop */}
-          <div className="w-full lg:w-80">
-            <div className="p-4 bg-gradient-to-r from-amber-50/80 to-orange-50/80 dark:bg-gray-700/80 rounded-xl border border-amber-100 dark:border-gray-600 backdrop-blur-sm">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-2 h-2 bg-gradient-to-r from-amber-400 to-orange-400 rounded-full"></div>
-                <h3 className="text-sm font-medium text-amber-700 dark:text-gray-100">Demo Credentials</h3>
-              </div>
-              <div className="space-y-3">
-                <div className="p-3 bg-white/90 dark:bg-gray-600/90 rounded-lg border border-amber-200 dark:border-gray-500 backdrop-blur-sm">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"></div>
-                    <span className="text-sm font-medium text-amber-800 dark:text-gray-100">Super Admin</span>
-                  </div>
-                              <div className="text-sm text-amber-700 dark:text-gray-300 space-y-1">
-                                <p><span className="font-medium">Email:</span> admin@creamingo.com</p>
-                                <p><span className="font-medium">Password:</span> Creamingo@2427</p>
-                              </div>
-                </div>
-                <div className="p-3 bg-white/90 dark:bg-gray-600/90 rounded-lg border border-amber-200 dark:border-gray-500 backdrop-blur-sm">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"></div>
-                    <span className="text-sm font-medium text-amber-800 dark:text-gray-100">Super Admin</span>
-                  </div>
-                              <div className="text-sm text-amber-700 dark:text-gray-300 space-y-1">
-                                <p><span className="font-medium">Email:</span> superadmin@creamingo.com</p>
-                                <p><span className="font-medium">Password:</span> SuperCreamingo@2427</p>
-                              </div>
-                </div>
-                <div className="p-3 bg-white/90 dark:bg-gray-600/90 rounded-lg border border-amber-200 dark:border-gray-500 backdrop-blur-sm">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full"></div>
-                    <span className="text-sm font-medium text-amber-800 dark:text-gray-100">Admin</span>
-                  </div>
-                              <div className="text-sm text-amber-700 dark:text-gray-300 space-y-1">
-                                <p><span className="font-medium">Email:</span> admin2@creamingo.com</p>
-                                <p><span className="font-medium">Password:</span> Creamingo@2427</p>
-                              </div>
-                </div>
-                <div className="p-3 bg-white/90 dark:bg-gray-600/90 rounded-lg border border-amber-200 dark:border-gray-500 backdrop-blur-sm">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full"></div>
-                    <span className="text-sm font-medium text-amber-800 dark:text-gray-100">Staff</span>
-                  </div>
-                              <div className="text-sm text-amber-700 dark:text-gray-300 space-y-1">
-                                <p><span className="font-medium">Email:</span> staff@creamingo.com</p>
-                                <p><span className="font-medium">Password:</span> Creamingo@2427</p>
-                              </div>
-                </div>
-                <div className="p-3 bg-white/90 dark:bg-gray-600/90 rounded-lg border border-amber-200 dark:border-gray-500 backdrop-blur-sm">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 bg-gradient-to-r from-orange-500 to-red-500 rounded-full"></div>
-                    <span className="text-sm font-medium text-amber-800 dark:text-gray-100">Bakery Production</span>
-                  </div>
-                              <div className="text-sm text-amber-700 dark:text-gray-300 space-y-1">
-                                <p><span className="font-medium">Email:</span> bakery@creamingo.com</p>
-                                <p><span className="font-medium">Password:</span> Creamingo@2427</p>
-                              </div>
-                </div>
-                <div className="p-3 bg-white/90 dark:bg-gray-600/90 rounded-lg border border-amber-200 dark:border-gray-500 backdrop-blur-sm">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full"></div>
-                    <span className="text-sm font-medium text-amber-800 dark:text-gray-100">Delivery Boy</span>
-                  </div>
-                              <div className="text-sm text-amber-700 dark:text-gray-300 space-y-1">
-                                <p><span className="font-medium">Email:</span> delivery@creamingo.com</p>
-                                <p><span className="font-medium">Password:</span> Creamingo@2427</p>
-                              </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="text-center mt-6 sm:mt-4 mb-4 sm:mb-0">
-          <p className="text-xs sm:text-xs text-amber-500 dark:text-gray-400 font-medium">
-            © 2024 Creamingo. All rights reserved.
-          </p>
         </div>
       </div>
     </div>
