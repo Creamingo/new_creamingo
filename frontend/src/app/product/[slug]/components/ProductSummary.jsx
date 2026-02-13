@@ -821,7 +821,7 @@ const ProductSummary = ({
               </button>
             </div>
           ) : (
-            <div className="w-full h-[52px] sm:h-[56px] rounded-xl border-2 border-pink-200 dark:border-pink-700/60 bg-white dark:bg-gray-800 shadow-sm flex items-stretch overflow-hidden focus-within:border-pink-500 dark:focus-within:border-pink-400 focus-within:ring-2 focus-within:ring-pink-500/20 dark:focus-within:ring-pink-400/20 transition-all duration-200">
+            <div className="w-full min-w-0 h-[52px] sm:h-[56px] rounded-xl border-2 border-pink-200 dark:border-pink-700/60 bg-white dark:bg-gray-800 shadow-sm flex items-stretch overflow-hidden focus-within:border-pink-500 dark:focus-within:border-pink-400 focus-within:ring-2 focus-within:ring-pink-500/20 dark:focus-within:ring-pink-400/20 transition-all duration-200">
               <input
                 type="text"
                 value={localPin}
@@ -831,7 +831,7 @@ const ProductSummary = ({
                   validatePinCodeDebounced && validatePinCodeDebounced(v);
                 }}
                 placeholder="Enter delivery pincode"
-                className={`flex-1 bg-transparent outline-none border-none px-[3vw] sm:px-4 h-full text-base sm:text-lg font-poppins font-medium tracking-[0.08em] sm:tracking-[0.12em] text-gray-900 dark:text-gray-100 placeholder:font-poppins placeholder:font-medium placeholder:tracking-wide placeholder:text-pink-300 dark:placeholder:text-pink-600/50 ${
+                className={`flex-1 min-w-0 bg-transparent outline-none border-none px-3 sm:px-4 h-full text-base sm:text-lg font-poppins font-medium tracking-[0.08em] sm:tracking-[0.12em] text-gray-900 dark:text-gray-100 placeholder:font-poppins placeholder:font-medium placeholder:tracking-wide placeholder:text-pink-300 dark:placeholder:text-pink-600/50 ${
                   tempValidationStatus === 'valid'
                     ? 'text-green-700 dark:text-green-400'
                     : tempValidationStatus === 'invalid'
@@ -845,7 +845,7 @@ const ProductSummary = ({
                   if (localPin.length === 6) await (checkPinCode && checkPinCode(localPin));
                 }}
                 disabled={localPin.length !== 6}
-                className="flex-shrink-0 px-4 sm:px-8 h-full min-w-[80px] sm:min-w-[128px] rounded-none rounded-r-xl bg-pink-600 dark:bg-pink-700 text-white text-sm sm:text-[15px] font-poppins font-semibold tracking-wide disabled:opacity-60 disabled:cursor-not-allowed hover:bg-pink-700 dark:hover:bg-pink-600 active:bg-pink-800 dark:active:bg-pink-800 transition-colors shadow-sm flex items-center justify-center"
+                className="flex-shrink-0 px-4 sm:px-8 h-full min-w-[80px] sm:min-w-[128px] rounded-none rounded-r-xl border-l-2 border-pink-300 dark:border-pink-600 bg-pink-600 dark:bg-pink-700 text-white text-sm sm:text-[15px] font-poppins font-semibold tracking-wide disabled:opacity-60 disabled:cursor-not-allowed hover:bg-pink-700 dark:hover:bg-pink-600 active:bg-pink-800 dark:active:bg-pink-800 transition-colors shadow-sm flex items-center justify-center"
                 type="button"
                 aria-label="Check delivery for pincode"
               >
