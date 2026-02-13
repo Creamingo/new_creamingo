@@ -845,8 +845,9 @@ const ProductSummary = ({
                   if (localPin.length === 6) await (checkPinCode && checkPinCode(localPin));
                 }}
                 disabled={localPin.length !== 6}
-                className="px-[3vw] sm:px-8 h-full min-w-[20vw] sm:min-w-[128px] rounded-none rounded-r-xl bg-pink-600 dark:bg-pink-700 text-white text-xs sm:text-[15px] font-poppins font-semibold tracking-wide disabled:opacity-50 disabled:cursor-not-allowed hover:bg-pink-700 dark:hover:bg-pink-600 active:bg-pink-800 dark:active:bg-pink-800 transition-colors shadow-sm flex items-center justify-center"
+                className="flex-shrink-0 px-4 sm:px-8 h-full min-w-[80px] sm:min-w-[128px] rounded-none rounded-r-xl bg-pink-600 dark:bg-pink-700 text-white text-sm sm:text-[15px] font-poppins font-semibold tracking-wide disabled:opacity-60 disabled:cursor-not-allowed hover:bg-pink-700 dark:hover:bg-pink-600 active:bg-pink-800 dark:active:bg-pink-800 transition-colors shadow-sm flex items-center justify-center"
                 type="button"
+                aria-label="Check delivery for pincode"
               >
                 Check
               </button>
