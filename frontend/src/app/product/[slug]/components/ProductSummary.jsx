@@ -613,7 +613,7 @@ const ProductSummary = ({
                     <>
                       <span className="text-xs line-through text-gray-500 dark:text-gray-400">{formatPrice(originalPrice)}</span>
                       <span className="px-2 py-0.5 text-[10px] font-semibold text-white bg-red-500 dark:bg-red-600 rounded-full">
-                        {discountPercent}% OFF
+                        {Math.round(discountPercent)}% off
                       </span>
                     </>
                   )}
@@ -652,7 +652,7 @@ const ProductSummary = ({
           {hasDiscount && (
                 <div className="flex items-center gap-2">
                   <span className="text-lg text-gray-500 dark:text-gray-400 line-through">{formatPrice(originalPrice)}</span>
-                  <span className="px-2 py-0.5 text-xs font-semibold text-white bg-red-500 dark:bg-red-600 rounded-full">{discountPercent}% OFF</span>
+                  <span className="px-2 py-0.5 text-xs font-semibold text-white bg-red-500 dark:bg-red-600 rounded-full">{Math.round(discountPercent)}% off</span>
                   <span className="text-xs text-green-600 dark:text-green-400 font-medium">You save {formatPrice(originalPrice - currentPrice)}</span>
                 </div>
               )}
