@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   ArrowLeft,
   User,
@@ -123,12 +123,14 @@ const formatTimeSlot = (deliverySlot) => {
 
 function CheckoutPageContent({ isClient }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { cartItems, getCartSummary, clearCart, isInitialized, autoUpdateExpiredSlots } = useCart();
   const { showSuccess } = useToast();
   const {
     deliveryInfo,
     currentPinCode,
-    getFormattedDeliveryCharge
+    getFormattedDeliveryCharge,
+    isValidPinCode
   } = usePinCode();
   const { customer, isAuthenticated, login, register } = useCustomerAuth();
   const { balance: walletBalance = 0, fetchBalance } = useWallet();
@@ -401,11 +403,11 @@ function CheckoutPageContent({ isClient }) {
   const [isAutoSelected, setIsAutoSelected] = useState(false); // Track if slot was auto-selected
   const [isLoadingEarliestSlot, setIsLoadingEarliestSlot] = useState(false);
   
-  // Collapsible sections state for mobile accordion
+  // Collapsible sections state for mobile accordion (Delivery Date & Time expanded by default)
   const [expandedSections, setExpandedSections] = useState({
     customerInfo: true, // Default open
     deliveryAddress: true, // Default open
-    deliverySlot: true, // Default open
+    deliverySlot: true, // Delivery Date & Time * - expanded by default so user sees slot selection first
     paymentMethod: true, // Default open
     specialInstructions: false // Default closed
   });
@@ -425,12 +427,7 @@ function CheckoutPageContent({ isClient }) {
   const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState(1500); // Default value, will be fetched from API
   
   const toggleSection = (section) => {
-    setExpandedSections(prev => {
-      if (section === 'deliverySlot' && !selectedSlot && !cartDeliverySlot) {
-        return { ...prev, [section]: true };
-      }
-      return { ...prev, [section]: !prev[section] };
-    });
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
   
   // Scroll to section
@@ -595,6 +592,13 @@ function CheckoutPageContent({ isClient }) {
     }
   };
   
+  // Delivery Date & Time: always expanded when checkout page is shown (user can collapse via header if they choose)
+  useLayoutEffect(() => {
+    if (pathname === '/checkout') {
+      setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+    }
+  }, [pathname]);
+
   // Track active section on scroll
   useEffect(() => {
     const handleScroll = () => {
@@ -2423,7 +2427,7 @@ function CheckoutPageContent({ isClient }) {
                     </p>
                     <button
                       onClick={() => setShowSlotSelector(true)}
-                      className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-600 transition-colors font-medium"
+                      className="px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-600 transition-colors font-medium"
                     >
                       Select New Slot
                     </button>
@@ -2455,14 +2459,14 @@ function CheckoutPageContent({ isClient }) {
                     <div className="flex flex-wrap gap-2">
                       <button
                         onClick={() => setShowSlotSelector(true)}
-                        className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm border border-yellow-600 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300 rounded-lg hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition-colors font-medium"
+                        className="px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm border border-yellow-600 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300 rounded-lg hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition-colors font-medium"
                       >
                         Change Slot
                       </button>
                       <button
                         onClick={handlePlaceOrder}
                         disabled={loading || !selectedSlot || !isAuthenticated}
-                        className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-yellow-600 dark:bg-yellow-700 text-white rounded-lg hover:bg-yellow-700 dark:hover:bg-yellow-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm bg-yellow-600 dark:bg-yellow-700 text-white rounded-lg hover:bg-yellow-700 dark:hover:bg-yellow-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Complete Order Now
                       </button>
@@ -2519,7 +2523,7 @@ function CheckoutPageContent({ isClient }) {
                           value={authEmail}
                           onChange={(e) => setAuthEmail(e.target.value)}
                           required
-                          className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                          className="w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
                           placeholder="your@email.com"
                         />
                       </div>
@@ -2549,7 +2553,7 @@ function CheckoutPageContent({ isClient }) {
                             value={authPassword}
                             onChange={(e) => setAuthPassword(e.target.value)}
                             required
-                            className="w-full pr-10 px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                            className="w-full pr-10 px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
                             placeholder="Enter your password"
                           />
                           <button
@@ -2601,7 +2605,7 @@ function CheckoutPageContent({ isClient }) {
                           value={signupData.name}
                           onChange={(e) => setSignupData(prev => ({ ...prev, name: e.target.value }))}
                           required
-                          className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                          className="w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
                           placeholder="Enter your full name"
                         />
                       </div>
@@ -2614,7 +2618,7 @@ function CheckoutPageContent({ isClient }) {
                           autoComplete="tel"
                           value={signupData.phone}
                           onChange={(e) => setSignupData(prev => ({ ...prev, phone: e.target.value }))}
-                          className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                          className="w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
                           placeholder="Enter mobile number"
                         />
                       </div>
@@ -2630,7 +2634,7 @@ function CheckoutPageContent({ isClient }) {
                               value={signupData.password}
                               onChange={(e) => setSignupData(prev => ({ ...prev, password: e.target.value }))}
                               required
-                              className="w-full pr-10 px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                              className="w-full pr-10 px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
                               placeholder="Create a password"
                             />
                             <button
@@ -2658,7 +2662,7 @@ function CheckoutPageContent({ isClient }) {
                               value={signupData.confirmPassword}
                               onChange={(e) => setSignupData(prev => ({ ...prev, confirmPassword: e.target.value }))}
                               required
-                              className="w-full pr-10 px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                              className="w-full pr-10 px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
                               placeholder="Confirm password"
                             />
                             <button
@@ -2684,7 +2688,7 @@ function CheckoutPageContent({ isClient }) {
                           type="text"
                           value={signupData.referralCode}
                           onChange={(e) => setSignupData(prev => ({ ...prev, referralCode: e.target.value }))}
-                          className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                          className="w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
                           placeholder="Enter referral code"
                         />
                       </div>
@@ -2748,7 +2752,7 @@ function CheckoutPageContent({ isClient }) {
                     value={formData.name}
                     onChange={handleInputChange}
                     required
-                    className={`w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                    className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
                       fieldErrors.name 
                         ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
                         : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400'
@@ -2775,7 +2779,7 @@ function CheckoutPageContent({ isClient }) {
                       value={formData.email}
                       onChange={handleInputChange}
                       required
-                      className={`w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
                         fieldErrors.email 
                           ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
                           : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400'
@@ -2802,7 +2806,7 @@ function CheckoutPageContent({ isClient }) {
                       onChange={handleInputChange}
                       required
                       maxLength={15}
-                      className={`w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
                         fieldErrors.phone 
                           ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
                           : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400'
@@ -2932,7 +2936,7 @@ function CheckoutPageContent({ isClient }) {
                     value={formData.address.street}
                     onChange={handleInputChange}
                     required
-                      className={`w-full px-2.5 sm:px-4 py-1.5 sm:py-2 pr-10 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 transition-all duration-300 ${
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 pr-10 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 transition-all duration-300 ${
                       fieldErrors['address.street'] 
                         ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
                           : formData.address.street && addressScore >= 75
@@ -2968,7 +2972,7 @@ function CheckoutPageContent({ isClient }) {
                       name="address.landmark"
                       value={formData.address.landmark}
                       onChange={handleInputChange}
-                      className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500 dark:focus:ring-green-400 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                      className="w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500 dark:focus:ring-green-400 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500"
                       placeholder="Nearby landmark or location (optional)"
                     />
                   </div>
@@ -2983,7 +2987,7 @@ function CheckoutPageContent({ isClient }) {
                       value={formData.address.city}
                       onChange={handleInputChange}
                       required
-                      className={`w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
                         fieldErrors['address.city'] 
                           ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
                           : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
@@ -3010,7 +3014,7 @@ function CheckoutPageContent({ isClient }) {
                       value={formData.address.state}
                       onChange={handleInputChange}
                       required
-                      className={`w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
                         fieldErrors['address.state'] 
                           ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
                           : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
@@ -3036,7 +3040,7 @@ function CheckoutPageContent({ isClient }) {
                       onChange={handleInputChange}
                       required
                       maxLength={6}
-                      className={`w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
                         fieldErrors['address.zip_code'] 
                           ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
                           : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
@@ -3273,7 +3277,7 @@ function CheckoutPageContent({ isClient }) {
                 onChange={handleInputChange}
                   rows={3}
                 maxLength={150}
-                  className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:focus:ring-gray-400 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                  className="w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:focus:ring-gray-400 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500"
                 placeholder="Any special delivery instructions or notes (optional)..."
               />
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 sm:mt-2">
@@ -3542,8 +3546,8 @@ function CheckoutPageContent({ isClient }) {
                 </div>
               </div>
 
-              {/* Error Alert - Desktop Only - Above Place Order Button */}
-              {(error || (!selectedSlot && !cartDeliverySlot)) && (
+              {/* Error Alert - Desktop Only - Shown when user tries to place order without slot or other validation fails */}
+              {error && (
                 <div 
                   data-error-alert
                   className="hidden lg:block mb-3 p-3 sm:p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-800 rounded-lg"
@@ -3557,7 +3561,7 @@ function CheckoutPageContent({ isClient }) {
                       <p className="text-xs sm:text-sm text-red-700 dark:text-red-400">
                         {error || 'Please select a delivery date and time slot to place your order.'}
                       </p>
-                      {!selectedSlot && !cartDeliverySlot && !error && (
+                      {(!selectedSlot && !cartDeliverySlot) && (
                         <button
                           onClick={() => setShowSlotSelector(true)}
                           className="mt-2 px-3 py-1.5 text-xs bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-600 transition-colors font-medium"
@@ -3619,8 +3623,8 @@ function CheckoutPageContent({ isClient }) {
       {/* Mobile Sticky Checkout Bar */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-2xl dark:shadow-black/50 z-40">
         <div className="max-w-7xl mx-auto px-3 py-2.5">
-          {/* Error Alert - Mobile - Above Place Order Button */}
-          {(error || (!selectedSlot && !cartDeliverySlot)) && (
+          {/* Error Alert - Mobile - Shown when user tries to place order without slot or other validation fails */}
+          {error && (
             <div 
               data-error-alert
               className="mb-2 p-3 bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-800 rounded-lg"
@@ -3634,7 +3638,7 @@ function CheckoutPageContent({ isClient }) {
                   <p className="text-[11px] text-red-700 dark:text-red-400 leading-tight">
                     {error || 'Please select a delivery date and time slot to place your order.'}
                   </p>
-                  {!selectedSlot && !cartDeliverySlot && !error && (
+                  {(!selectedSlot && !cartDeliverySlot) && (
                     <button
                       onClick={() => setShowSlotSelector(true)}
                       className="mt-1.5 px-2.5 py-1 text-[10px] bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-600 transition-colors font-medium"

@@ -29,6 +29,7 @@ import { useToast } from '../../contexts/ToastContext';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import CartDeals from '../../components/CartDeals';
+import ConfirmModal from '../../components/ConfirmModal';
 import promoCodeApi from '../../api/promoCodeApi';
 import promoCodeTrackingApi from '../../api/promoCodeTrackingApi';
 import productApi from '../../api/productApi';
@@ -250,6 +251,26 @@ export default function CartPage() {
   const [suggestedProducts, setSuggestedProducts] = useState([]);
   const [suggestedProductsLoading, setSuggestedProductsLoading] = useState(false);
   const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState(1500); // Default value, will be fetched from API
+  const [confirmModal, setConfirmModal] = useState({
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Delete',
+    cancelLabel: 'Cancel',
+    variant: 'danger',
+    onConfirm: null
+  });
+
+  const openConfirmModal = (options) => {
+    setConfirmModal(prev => ({ ...prev, open: true, ...options }));
+  };
+  const closeConfirmModal = () => {
+    setConfirmModal(prev => ({ ...prev, open: false, onConfirm: null }));
+  };
+  const handleConfirmModalConfirm = () => {
+    confirmModal.onConfirm?.();
+    closeConfirmModal();
+  };
 
   // Fetch suggested products from Small Treats Desserts and Sweets and Dry Fruits
   useEffect(() => {
@@ -462,15 +483,20 @@ export default function CartPage() {
   };
 
   const handleRemoveItem = async (itemId) => {
-    // Show confirmation dialog
-    if (!window.confirm('Do you want to delete this item?')) return;
-    
-    // User confirmed deletion
-    setRemovingItemId(itemId);
-    setTimeout(() => {
-      removeFromCart(itemId);
-      setRemovingItemId(null);
-    }, 300);
+    openConfirmModal({
+      title: 'Remove item?',
+      message: 'Do you want to delete this item from your cart?',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      variant: 'danger',
+      onConfirm: () => {
+        setRemovingItemId(itemId);
+        setTimeout(() => {
+          removeFromCart(itemId);
+          setRemovingItemId(null);
+        }, 300);
+      }
+    });
   };
 
   // Handle combo item quantity change
@@ -489,11 +515,18 @@ export default function CartPage() {
     const combo = item?.combos?.find(c => 
       c.id === comboId || (c.product_id && c.product_id.toString() === comboId.toString())
     );
-    
-    if (combo && window.confirm(`Remove ${combo.product_name} from combo?`)) {
-      removeComboItem(itemId, comboId);
-      showSuccess('Combo Item Removed', `${combo.product_name} has been removed from the combo.`);
-    }
+    if (!combo) return;
+    openConfirmModal({
+      title: 'Remove from combo?',
+      message: `Remove ${combo.product_name} from this combo?`,
+      confirmLabel: 'Remove',
+      cancelLabel: 'Cancel',
+      variant: 'danger',
+      onConfirm: () => {
+        removeComboItem(itemId, comboId);
+        showSuccess('Combo Item Removed', `${combo.product_name} has been removed from the combo.`);
+      }
+    });
   };
 
   // Load applied promo from localStorage on mount and sync with localStorage
@@ -617,12 +650,20 @@ export default function CartPage() {
   };
 
   const handleRemoveSavedItem = (savedItemId) => {
-    if (!window.confirm('Remove this item from saved items?')) return;
-    setRemovingSavedItemId(savedItemId);
-    setTimeout(() => {
-      removeSavedItem(savedItemId);
-      setRemovingSavedItemId(null);
-    }, 300);
+    openConfirmModal({
+      title: 'Remove from saved?',
+      message: 'Remove this item from saved items?',
+      confirmLabel: 'Remove',
+      cancelLabel: 'Cancel',
+      variant: 'danger',
+      onConfirm: () => {
+        setRemovingSavedItemId(savedItemId);
+        setTimeout(() => {
+          removeSavedItem(savedItemId);
+          setRemovingSavedItemId(null);
+        }, 300);
+      }
+    });
   };
 
   // Real-time validation with debouncing
@@ -2620,7 +2661,7 @@ export default function CartPage() {
                           onClick={() => setIsSuggestedPromosOpen(!isSuggestedPromosOpen)}
                           className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                         >
-                          {isSuggestedPromosOpen ? 'Hide' : 'Show'}
+                          {isSuggestedPromosOpen ? 'Hide' : 'View Promos'}
                         </button>
                       </div>
                       {isSuggestedPromosOpen && (
@@ -2874,8 +2915,8 @@ export default function CartPage() {
           <div className="max-w-7xl mx-auto px-2 py-1.5">
             {/* Total Box and Checkout Button Row */}
             <div className="flex items-center gap-1.5 mb-1">
-              {/* Total Box - 20vw */}
-              <div className="w-[20vw] min-w-[70px] bg-gray-50 dark:bg-gray-700/50 rounded-lg px-1.5 py-1.5 border border-pink-300 dark:border-pink-500/50 h-[56px] flex items-center">
+              {/* Total Box - 20vw, height matches PDP Add to Cart button (52px) */}
+              <div className="w-[20vw] min-w-[70px] bg-gray-50 dark:bg-gray-700/50 rounded-lg px-1.5 py-1.5 border border-pink-300 dark:border-pink-500/50 min-h-[52px] flex items-center">
                 <div className="flex flex-col w-full items-center text-center">
                   <p className="text-sm font-bold text-pink-600 dark:text-pink-400 leading-tight mb-0.5">{formatPrice(total)}</p>
                   <span className="text-[9px] text-gray-500 dark:text-gray-400 leading-tight">
@@ -2884,10 +2925,10 @@ export default function CartPage() {
                 </div>
               </div>
               
-              {/* Checkout Button - 80vw */}
+              {/* Checkout Button - 80vw, height matches PDP Add to Cart (52px) */}
               <button
                 onClick={handleCheckout}
-                className="flex-1 w-[80vw] h-[56px] bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all font-bold text-base shadow-lg dark:shadow-xl dark:shadow-black/30 active:scale-95 flex items-center justify-center gap-2"
+                className="flex-1 w-[80vw] min-h-[52px] py-2.5 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all font-bold text-base shadow-lg dark:shadow-xl dark:shadow-black/30 active:scale-95 flex items-center justify-center gap-2"
               >
                 <span>PROCEED TO CHECKOUT</span>
                 <ChevronRight className="w-5 h-5" />
@@ -3257,6 +3298,17 @@ export default function CartPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmModal.open}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmLabel={confirmModal.confirmLabel}
+        cancelLabel={confirmModal.cancelLabel}
+        variant={confirmModal.variant}
+        onConfirm={handleConfirmModalConfirm}
+        onCancel={closeConfirmModal}
+      />
     </div>
   );
 }
