@@ -845,7 +845,7 @@ const ProductSummary = ({
                   if (localPin.length === 6) await (checkPinCode && checkPinCode(localPin));
                 }}
                 disabled={localPin.length !== 6}
-                className="flex-shrink-0 px-4 sm:px-8 h-full min-w-[80px] sm:min-w-[128px] rounded-none rounded-r-xl border-l-2 border-pink-300 dark:border-pink-600 bg-pink-600 dark:bg-pink-700 text-white text-sm sm:text-[15px] font-poppins font-semibold tracking-wide disabled:opacity-60 disabled:cursor-not-allowed hover:bg-pink-700 dark:hover:bg-pink-600 active:bg-pink-800 dark:active:bg-pink-800 transition-colors shadow-sm flex items-center justify-center"
+                className="flex-shrink-0 px-4 sm:px-8 h-full min-w-[80px] sm:min-w-[128px] rounded-none rounded-r-[10px] border-l-2 border-pink-300 dark:border-pink-600 bg-pink-600 dark:bg-pink-700 text-white text-sm sm:text-[15px] font-poppins font-semibold tracking-wide disabled:opacity-60 disabled:cursor-not-allowed hover:bg-pink-700 dark:hover:bg-pink-600 active:bg-pink-800 dark:active:bg-pink-800 transition-colors shadow-sm flex items-center justify-center"
                 type="button"
                 aria-label="Check delivery for pincode"
               >
@@ -1017,7 +1017,7 @@ const ProductSummary = ({
                    setShowComboModal(true);
                  }
                }}
-              className="flex-1 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300 py-2 px-3 font-semibold border-2 border-rose-200 dark:border-rose-700 hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-all duration-200 flex items-center justify-center gap-2 text-base shadow-sm hover:shadow-md active:scale-[0.98] min-h-[48px]"
+              className="flex-1 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300 py-2.5 px-3 font-semibold border-2 border-rose-200 dark:border-rose-700 hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-all duration-200 flex items-center justify-center gap-2 text-base shadow-sm hover:shadow-md active:scale-[0.98] min-h-[52px]"
              >
                {comboSelections.length > 0 ? (
                  <>
@@ -1059,7 +1059,7 @@ const ProductSummary = ({
                    }
                  }
                }}
-              className={`flex-1 py-2 px-3 font-medium transition-all duration-200 flex flex-col items-center justify-center gap-0.5 text-sm min-h-[48px] text-center cursor-pointer ${
+              className={`flex-1 py-2.5 px-3 font-medium transition-all duration-200 flex flex-col items-center justify-center gap-0.5 text-sm min-h-[52px] text-center cursor-pointer ${
                 isAddToCartEnabled
                   ? 'bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 active:from-pink-700 active:to-rose-700 dark:active:from-pink-800 dark:active:to-rose-800'
                   : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'

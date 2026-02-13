@@ -13,8 +13,23 @@ const DeliverySlotPreview = ({ className = '' }) => {
   const [availability, setAvailability] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const getLocalDateString = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+  const [todayKey, setTodayKey] = useState(() => getLocalDateString(new Date()));
 
-  const today = useMemo(() => new Date(), []);
+  useEffect(() => {
+    const update = () => setTodayKey(getLocalDateString(new Date()));
+    const id = setInterval(update, 60000);
+    window.addEventListener('focus', update);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('focus', update);
+    };
+  }, []);
 
   const formatDateForAPI = (date) => {
     return date.toISOString().split('T')[0];
@@ -27,9 +42,10 @@ const DeliverySlotPreview = ({ className = '' }) => {
   };
 
   const getDateLabel = (dateStr) => {
-    const date = new Date(dateStr);
-    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const [ty, tm, td] = todayKey.split('-').map(Number);
+    const dateOnly = new Date(y, m - 1, d);
+    const todayOnly = new Date(ty, tm - 1, td);
     const diffDays = Math.round((dateOnly - todayOnly) / (1000 * 60 * 60 * 24));
     if (diffDays === 0) return 'Today';
     if (diffDays === 1) return 'Tomorrow';
@@ -47,13 +63,12 @@ const DeliverySlotPreview = ({ className = '' }) => {
 
   const isExpiredForDate = (dateStr, startTime) => {
     if (!dateStr || !startTime) return false;
-    const date = new Date(dateStr);
-    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-
-    if (dateOnly.getTime() !== todayOnly.getTime()) {
-      return false;
-    }
+    if (dateStr < todayKey) return true;
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const [ty, tm, td] = todayKey.split('-').map(Number);
+    const dateOnly = new Date(y, m - 1, d);
+    const todayOnly = new Date(ty, tm - 1, td);
+    if (dateOnly.getTime() !== todayOnly.getTime()) return false;
 
     const now = new Date();
     const currentTime = now.getHours() * 60 + now.getMinutes();
@@ -74,10 +89,10 @@ const DeliverySlotPreview = ({ className = '' }) => {
       try {
         setLoading(true);
         setError(null);
-        const startDate = formatDateForAPI(today);
-        const endDateObj = new Date(today);
-        endDateObj.setDate(today.getDate() + (DAYS_TO_CHECK - 1));
-        const endDate = formatDateForAPI(endDateObj);
+        const startDate = todayKey;
+        const [y, m, d] = todayKey.split('-').map(Number);
+        const endDateObj = new Date(y, m - 1, d + (DAYS_TO_CHECK - 1));
+        const endDate = getLocalDateString(endDateObj);
 
         const response = await deliverySlotApi.getSlotAvailability(startDate, endDate);
         if (response.success) {
@@ -94,17 +109,17 @@ const DeliverySlotPreview = ({ className = '' }) => {
     };
 
     loadAvailability();
-  }, [today]);
+  }, [todayKey]);
 
   const datesToCheck = useMemo(() => {
     const dates = [];
+    const [y, m, d] = todayKey.split('-').map(Number);
     for (let i = 0; i < DAYS_TO_CHECK; i += 1) {
-      const d = new Date(today);
-      d.setDate(today.getDate() + i);
-      dates.push(formatDateForAPI(d));
+      const dateObj = new Date(y, m - 1, d + i);
+      dates.push(getLocalDateString(dateObj));
     }
     return dates;
-  }, [today]);
+  }, [todayKey]);
 
   const availabilityByDate = useMemo(() => {
     const map = {};
@@ -122,9 +137,11 @@ const DeliverySlotPreview = ({ className = '' }) => {
 
   const earliestAvailable = useMemo(() => {
     for (const dateStr of datesToCheck) {
+      if (dateStr < todayKey) continue;
       const items = availabilityByDate[dateStr] || [];
       for (const item of items) {
         if (
+          item.deliveryDate >= todayKey &&
           item.isAvailable &&
           item.availableOrders > 0 &&
           !isExpiredForDate(item.deliveryDate, item.startTime)
@@ -134,14 +151,16 @@ const DeliverySlotPreview = ({ className = '' }) => {
       }
     }
     return null;
-  }, [availabilityByDate, datesToCheck]);
+  }, [availabilityByDate, datesToCheck, todayKey]);
 
   const nextAvailableDate = useMemo(() => {
     for (const dateStr of datesToCheck) {
+      if (dateStr < todayKey) continue;
       const items = availabilityByDate[dateStr] || [];
       if (
         items.some(
           (item) =>
+            item.deliveryDate >= todayKey &&
             item.isAvailable &&
             item.availableOrders > 0 &&
             !isExpiredForDate(item.deliveryDate, item.startTime)
@@ -151,15 +170,17 @@ const DeliverySlotPreview = ({ className = '' }) => {
       }
     }
     return null;
-  }, [availabilityByDate, datesToCheck]);
+  }, [availabilityByDate, datesToCheck, todayKey]);
 
   const limitedFound = useMemo(() => {
     for (let i = 0; i < Math.min(LIMITED_PREVIEW_DAYS, datesToCheck.length); i += 1) {
       const dateStr = datesToCheck[i];
+      if (dateStr < todayKey) continue;
       const items = availabilityByDate[dateStr] || [];
       if (
         items.some(
           (item) =>
+            item.deliveryDate >= todayKey &&
             item.isAvailable &&
             item.availableOrders > 0 &&
             item.availableOrders <= LIMITED_THRESHOLD &&
@@ -170,58 +191,48 @@ const DeliverySlotPreview = ({ className = '' }) => {
       }
     }
     return false;
-  }, [availabilityByDate, datesToCheck]);
+  }, [availabilityByDate, datesToCheck, todayKey]);
 
   const previewDate = nextAvailableDate || datesToCheck[0];
   const previewItems = (availabilityByDate[previewDate] || []).slice(0, PREVIEW_LIMIT);
 
   return (
-    <div className={`bg-white dark:bg-gray-800 rounded-xl border-l-4 border-green-500 dark:border-green-400 border border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-xl dark:shadow-black/30 p-3 sm:p-4 lg:p-5 ${className}`}>
-      <div className="flex items-center gap-2 pb-3 border-b border-gray-200 dark:border-gray-700 mb-4">
+    <div className={`bg-white dark:bg-gray-800 rounded-xl border-l-4 border-green-500 dark:border-green-400 border border-gray-200 dark:border-gray-700 shadow-md dark:shadow-xl dark:shadow-black/30 p-3 sm:p-4 ${className}`}>
+      <div className="flex items-center gap-2 pb-2 border-b border-gray-100 dark:border-gray-700/80 mb-3">
         <div className="p-1.5 rounded-lg bg-green-100 dark:bg-green-900/30">
           <Calendar className="w-4 h-4 text-green-600 dark:text-green-400" />
         </div>
-        <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">Delivery Time</h3>
+        <h3 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100 tracking-tight">Delivery Time</h3>
       </div>
 
       {loading && (
-        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-500 dark:border-green-400"></div>
-          <span>Checking available slots...</span>
+        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+          <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-green-500 dark:border-green-400"></div>
+          <span>Checking slots...</span>
         </div>
       )}
 
       {!loading && error && (
-        <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
-          <AlertCircle className="w-4 h-4" />
+        <div className="flex items-center gap-2 text-xs text-red-600 dark:text-red-400">
+          <AlertCircle className="w-3.5 h-3.5" />
           <span>{error}</span>
         </div>
       )}
 
       {!loading && !error && (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {earliestAvailable ? (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1.5">
               <div className="flex items-center gap-2 flex-wrap">
-                <Clock className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" />
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Earliest delivery: {getDateLabel(earliestAvailable.deliveryDate)} •{' '}
-                  {formatTime(earliestAvailable.startTime)} - {formatTime(earliestAvailable.endTime)}
+                <Clock className="w-3.5 h-3.5 text-green-600 dark:text-green-400 flex-shrink-0" />
+                <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {getDateLabel(earliestAvailable.deliveryDate)}, {formatTime(earliestAvailable.startTime)}–{formatTime(earliestAvailable.endTime)}
                 </span>
-                {/* Visual Availability Badge - label matches slot date (Today/Tomorrow) */}
                 {(() => {
                   const status = getStatus(earliestAvailable);
                   const dateLabel = getDateLabel(earliestAvailable.deliveryDate);
-                  const availableLabel = dateLabel === 'Today'
-                    ? '🟢 Available today'
-                    : dateLabel === 'Tomorrow'
-                      ? '🟢 Available tomorrow'
-                      : `🟢 Available ${dateLabel.toLowerCase()}`;
-                  const limitedLabel = dateLabel === 'Today'
-                    ? '🟡 Limited slots today'
-                    : dateLabel === 'Tomorrow'
-                      ? '🟡 Limited slots tomorrow'
-                      : `🟡 Limited slots`;
+                  const availableLabel = dateLabel === 'Today' ? 'Today' : dateLabel === 'Tomorrow' ? 'Tomorrow' : dateLabel;
+                  const limitedLabel = 'Limited';
                   const badgeConfig = {
                     Available: {
                       bg: 'bg-green-100 dark:bg-green-900/30',
@@ -238,38 +249,31 @@ const DeliverySlotPreview = ({ className = '' }) => {
                     Full: {
                       bg: 'bg-red-100 dark:bg-red-900/30',
                       text: 'text-red-700 dark:text-red-400',
-                      label: '🔴 Fully booked',
+                      label: 'Fully booked',
                       border: 'border-red-200 dark:border-red-800'
                     }
                   };
                   const config = badgeConfig[status] || badgeConfig.Available;
                   return (
-                    <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${config.bg} ${config.text} ${config.border}`}>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold border ${config.bg} ${config.text} ${config.border}`}>
                       {config.label}
                     </span>
                   );
                 })()}
-              </div>
-              {/* Slot Count Urgency Display */}
-              {earliestAvailable.availableOrders > 0 && earliestAvailable.availableOrders <= LIMITED_THRESHOLD && (
-                <div className="flex items-center gap-2 text-xs font-semibold text-amber-700 dark:text-amber-400 pl-6 bg-amber-50/50 dark:bg-amber-900/10 px-3 py-1.5 rounded-lg border border-amber-200/50 dark:border-amber-800/50">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  <span>Only {earliestAvailable.availableOrders} slot{earliestAvailable.availableOrders !== 1 ? 's' : ''} left {getDateLabel(earliestAvailable.deliveryDate) === 'Today' ? 'today' : getDateLabel(earliestAvailable.deliveryDate).toLowerCase()}</span>
-                </div>
-              )}
-              <div className="flex flex-col gap-0.5 pl-6">
-                <p className="text-xs text-gray-600 dark:text-gray-400">
-                  This is the soonest we can deliver.{' '}
-                  <span className="font-semibold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-1.5 py-0.5 rounded">
-                    Choose your preferred time slot during checkout.
+                {earliestAvailable.availableOrders > 0 && earliestAvailable.availableOrders <= LIMITED_THRESHOLD && (
+                  <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                    · {earliestAvailable.availableOrders} left
                   </span>
-                </p>
+                )}
               </div>
+              <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 pl-5">
+                This is the soonest we can deliver. Choose your preferred time slot during checkout.
+              </p>
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-              <AlertCircle className="w-4 h-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
-              <span>No slots available in the next {DAYS_TO_CHECK} days</span>
+            <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>No slots in next {DAYS_TO_CHECK} days</span>
             </div>
           )}
 

@@ -266,15 +266,13 @@ const ProductTabs = ({ product, selectedVariant, customizations = {}, dynamicCon
             </div>
           </div>
 
-          {/* Key Features - Compact Horizontal Scroll on Mobile; edge fade + swipe hint instead of grey scrollbar */}
+          {/* Key Features - Compact Horizontal Scroll on Mobile; edge fade, swipe hint below */}
           <div className="space-y-2.5">
             <h4 className="text-[15px] font-semibold text-gray-900 dark:text-gray-100 tracking-tight">Key Features</h4>
             <div className="relative">
               {/* Edge fade to suggest more content (mobile only) */}
               <div className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-white dark:from-gray-800 to-transparent z-10 sm:hidden" aria-hidden />
-              <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white dark:from-gray-800 to-transparent z-10 sm:hidden flex items-center justify-end pr-1" aria-hidden>
-                <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500 whitespace-nowrap">Swipe →</span>
-              </div>
+              <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-white dark:from-gray-800 to-transparent z-10 sm:hidden" aria-hidden />
               <div className="flex sm:grid sm:grid-cols-2 gap-2 overflow-x-auto scrollbar-hide sm:overflow-x-visible pb-1.5 sm:pb-0 -mx-1 px-1 sm:mx-0 sm:px-0" style={{ WebkitOverflowScrolling: 'touch' }}>
               <div className="flex items-center space-x-2 p-2 bg-green-50/70 dark:bg-green-900/15 rounded-lg border border-green-200/50 dark:border-green-800/30 flex-shrink-0 sm:flex-shrink">
                 <div className="w-5 h-5 bg-green-100 dark:bg-green-900/40 rounded-full flex items-center justify-center">
