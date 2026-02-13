@@ -1843,12 +1843,12 @@ const Header = () => {
           </>
         )}
 
-        {/* Mobile category menu: portaled to body; z-index below PDP sticky footer so menu opens behind Add Combo / Add to Cart (mobile only) */}
+        {/* Mobile category menu: portaled to body; positioned above sticky footer */}
         {typeof document !== 'undefined' && (isCategoryMenuOpen || isMenuClosing) && createPortal(
           <>
-            {/* Mobile Backdrop Overlay - behind PDP sticky footer (z-[55] < footer z-[60]) */}
+            {/* Mobile Backdrop Overlay - above sticky footer */}
             <div 
-              className="fixed top-[3.6rem] left-0 right-0 bottom-0 bg-black/50 backdrop-blur-sm z-[55] lg:hidden"
+              className="fixed top-[3.6rem] left-0 right-0 bottom-[3.6rem] bg-black/50 backdrop-blur-sm z-[51] lg:hidden"
               style={{ 
                 animation: isMenuClosing 
                   ? 'fadeOut 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)' 
@@ -1858,13 +1858,13 @@ const Header = () => {
               aria-hidden="true"
             />
 
-            {/* Mobile Menu Side Panel - behind PDP sticky footer */}
+            {/* Mobile Menu Side Panel - positioned above sticky footer */}
             <div
               id="mobile-category-menu"
               role="dialog"
               aria-modal="true"
               aria-label="Category menu"
-              className="fixed top-[3.6rem] bottom-0 left-0 w-[90vw] max-w-sm bg-white dark:bg-gray-800 shadow-2xl dark:shadow-black/50 z-[56] lg:hidden overflow-y-auto"
+              className="fixed top-[3.6rem] bottom-[3.6rem] left-0 w-[90vw] max-w-sm bg-white dark:bg-gray-800 shadow-2xl dark:shadow-black/50 z-[52] lg:hidden overflow-y-auto"
             style={{ 
               animation: isMenuClosing 
                 ? 'slideOutLeft 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)' 
@@ -2097,8 +2097,8 @@ const Header = () => {
                 ))}
               </div>
             </div>
-            {/* Bottom padding so Log in / Sign up and last items are not cropped by sticky footer on mobile */}
-            <div className="h-20 min-h-[5rem]"></div>
+            {/* Bottom padding for better spacing */}
+            <div className="h-4 min-h-[1rem]"></div>
           </div>
           </>,
           document.body,

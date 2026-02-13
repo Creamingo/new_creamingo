@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { usePinCode } from '../../../../contexts/PinCodeContext';
 import { useWishlist } from '../../../../contexts/WishlistContext';
+import { useCustomerAuth } from '../../../../contexts/CustomerAuthContext';
+import { useAuthModal } from '../../../../contexts/AuthModalContext';
 import DeliverySlotPreview from '../../../../components/DeliverySlotPreview';
 import ProductCombos from './ProductCombos';
 import FlavorSelector from './FlavorSelector';
@@ -42,6 +44,8 @@ const ProductSummary = ({
 }) => {
   const { currentPinCode, isDeliveryAvailable, formatPinCode, getDeliveryLocality, getFormattedDeliveryCharge, validatePinCodeDebounced, tempValidationStatus, tempPinCode, checkPinCode } = usePinCode();
   const { isInWishlist, toggleWishlist } = useWishlist();
+  const { isAuthenticated } = useCustomerAuth();
+  const { openAuthModal } = useAuthModal();
   const [localPin, setLocalPin] = useState('');
   const isFavorite = product ? isInWishlist(product.id) : false;
   const [showShareMenu, setShowShareMenu] = useState(false);
@@ -356,9 +360,13 @@ const ProductSummary = ({
   if (product.is_eggless) badges.push({ text: 'Eggless Available', color: 'bg-blue-500' });
 
   const handleFavoriteToggle = async () => {
-    if (product) {
-      await toggleWishlist(product.id);
+    if (!product) return;
+    if (!isAuthenticated) {
+      if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('pending_wishlist_add', String(product.id));
+      openAuthModal();
+      return;
     }
+    await toggleWishlist(product.id);
   };
 
   const handleShare = (platform) => {
@@ -574,7 +582,7 @@ const ProductSummary = ({
       </div>
 
        {/* Price (left) and Quantity (right) - mobile: single row; laptop: horizontal */}
-       <div ref={priceSectionRef} className="flex items-center justify-between gap-3 pt-1 lg:pt-0 pb-2 border-b border-gray-200 dark:border-gray-700 w-full min-w-0 max-w-full overflow-x-hidden">
+       <div ref={priceSectionRef} className="flex items-center justify-between gap-3 pt-1 lg:pt-1 pb-2 border-b border-gray-200 dark:border-gray-700 w-full min-w-0 max-w-full overflow-x-hidden overflow-y-visible">
         {/* Pricing */}
         <div className="flex-1 min-w-0 max-w-full overflow-x-hidden">
           {/* Mobile: compact single-row pricing */}
@@ -660,8 +668,8 @@ const ProductSummary = ({
           </div>
       </div>
 
-        {/* Quantity - Compact */}
-        <div className="shrink-0 -mt-5">
+        {/* Quantity - Compact - pulled up on mobile to align with price; pt on laptop avoids clipping */}
+        <div className="shrink-0 -mt-4 lg:mt-0 pt-0.5 lg:pt-0.5">
           <div className="flex items-center gap-1.5 bg-rose-50 dark:bg-rose-900/20 rounded-full px-1.5 py-1 border border-rose-200 dark:border-rose-700">
           <button
             onClick={() => onQuantityChange(quantity - 1)}
@@ -813,7 +821,7 @@ const ProductSummary = ({
               </button>
             </div>
           ) : (
-            <div className="w-full h-[52px] sm:h-[56px] rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm flex items-stretch overflow-hidden">
+            <div className="w-full h-[52px] sm:h-[56px] rounded-xl border-2 border-pink-200 dark:border-pink-700/60 bg-white dark:bg-gray-800 shadow-sm flex items-stretch overflow-hidden focus-within:border-pink-500 dark:focus-within:border-pink-400 focus-within:ring-2 focus-within:ring-pink-500/20 dark:focus-within:ring-pink-400/20 transition-all duration-200">
               <input
                 type="text"
                 value={localPin}
@@ -822,8 +830,8 @@ const ProductSummary = ({
                   setLocalPin(v);
                   validatePinCodeDebounced && validatePinCodeDebounced(v);
                 }}
-                placeholder="Enter pincode"
-                className={`flex-1 bg-transparent outline-none border-none px-[3vw] sm:px-3 h-full text-base sm:text-lg font-medium tracking-[0.08em] sm:tracking-[0.12em] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                placeholder="Enter delivery pincode"
+                className={`flex-1 bg-transparent outline-none border-none px-[3vw] sm:px-4 h-full text-base sm:text-lg font-poppins font-medium tracking-[0.08em] sm:tracking-[0.12em] text-gray-900 dark:text-gray-100 placeholder:font-poppins placeholder:font-medium placeholder:tracking-wide placeholder:text-pink-300 dark:placeholder:text-pink-600/50 ${
                   tempValidationStatus === 'valid'
                     ? 'text-green-700 dark:text-green-400'
                     : tempValidationStatus === 'invalid'
@@ -837,7 +845,7 @@ const ProductSummary = ({
                   if (localPin.length === 6) await (checkPinCode && checkPinCode(localPin));
                 }}
                 disabled={localPin.length !== 6}
-                className="px-[3vw] sm:px-8 h-full min-w-[20vw] sm:min-w-[128px] rounded-none rounded-r-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs sm:text-[15px] font-semibold tracking-wide disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors shadow-[0_2px_6px_rgba(15,23,42,0.25)] flex items-center justify-center"
+                className="px-[3vw] sm:px-8 h-full min-w-[20vw] sm:min-w-[128px] rounded-none rounded-r-xl bg-pink-600 dark:bg-pink-700 text-white text-xs sm:text-[15px] font-poppins font-semibold tracking-wide disabled:opacity-50 disabled:cursor-not-allowed hover:bg-pink-700 dark:hover:bg-pink-600 active:bg-pink-800 dark:active:bg-pink-800 transition-colors shadow-sm flex items-center justify-center"
                 type="button"
               >
                 Check

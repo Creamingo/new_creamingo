@@ -161,7 +161,7 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
       )}
 
       <footer
-        className="fixed bottom-0 left-0 right-0 w-full z-50 h-[3.6rem] max-w-full bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-t-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 border border-white/20 dark:border-gray-700/50 border-t-2 border-t-pink-200 dark:border-t-pink-700"
+        className="fixed bottom-0 left-0 right-0 w-full z-50 h-[3.6rem] max-w-full bg-white dark:bg-gray-800 backdrop-blur-md rounded-t-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 border border-gray-200/50 dark:border-gray-700/50 border-t-2 border-t-pink-200 dark:border-t-pink-700"
       >
         <div className="flex items-center justify-around h-full px-2 gap-1">
           {footerItems.map((item, index) => {

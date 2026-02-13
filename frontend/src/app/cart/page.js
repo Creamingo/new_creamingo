@@ -2828,6 +2828,46 @@ export default function CartPage() {
         )}
       </div>
 
+      {/* Mobile Sticky Delivery Slot Summary */}
+      {mounted && isInitialized && cartItems.length > 0 && (() => {
+        // Get common delivery slot from cart items (non-deal items only)
+        const regularItems = cartItems.filter(item => !item.is_deal_item && item.deliverySlot);
+        const commonSlot = regularItems.length > 0 ? regularItems[0].deliverySlot : null;
+        
+        // Check if all regular items have the same slot
+        const allSameSlot = regularItems.length > 0 && regularItems.every(item => {
+          const slot1 = commonSlot;
+          const slot2 = item.deliverySlot;
+          const date1 = slot1?.date || slot1?.deliveryDate;
+          const date2 = slot2?.date || slot2?.deliveryDate;
+          const time1 = slot1?.time || slot1?.slot?.startTime;
+          const time2 = slot2?.time || slot2?.slot?.startTime;
+          return date1 === date2 && time1 === time2;
+        });
+
+        return commonSlot && allSameSlot ? (
+          <div className="lg:hidden fixed bottom-[72px] left-0 right-0 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-t border-green-200 dark:border-green-800 shadow-lg dark:shadow-black/30 z-39">
+            <div className="max-w-7xl mx-auto px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <Clock className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" />
+                  <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 truncate">
+                    <span className="font-semibold">Delivery:</span>{' '}
+                    {formatDeliveryDate(commonSlot.date || commonSlot.deliveryDate)} • {formatTimeSlot(commonSlot)}
+                  </span>
+                </div>
+                <button
+                  onClick={() => router.push('/checkout')}
+                  className="text-xs font-semibold text-green-700 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 underline underline-offset-2 flex-shrink-0"
+                >
+                  Change
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null;
+      })()}
+
       {/* Mobile Sticky Checkout Bar */}
       {mounted && isInitialized && cartItems.length > 0 && (
         <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-2xl dark:shadow-black/50 z-40">

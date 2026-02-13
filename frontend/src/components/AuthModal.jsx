@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertCircle,
@@ -11,7 +11,10 @@ import {
   Wallet,
   Phone,
   User,
-  X
+  X,
+  Gift,
+  ChevronDown,
+  ShieldCheck
 } from 'lucide-react';
 import { useCustomerAuth } from '../contexts/CustomerAuthContext';
 import customerAuthApi from '../api/customerAuthApi';
@@ -43,6 +46,8 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [showSignupConfirmPassword, setShowSignupConfirmPassword] = useState(false);
+  const [showReferralCode, setShowReferralCode] = useState(false);
+  const referralCodeInputRef = useRef(null);
   const isEmailValid = /\S+@\S+\.\S+/.test(authEmail.trim());
   const [isRendered, setIsRendered] = useState(false);
   const [isPanelVisible, setIsPanelVisible] = useState(false);
@@ -65,6 +70,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
     setShowLoginPassword(false);
     setShowSignupPassword(false);
     setShowSignupConfirmPassword(false);
+    setShowReferralCode(false);
   }, [isOpen]);
 
   useEffect(() => {
@@ -85,6 +91,13 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
       onClose?.();
     }
   }, [isAuthenticated, isOpen, onClose]);
+
+  // Auto-expand referral code field if a code is pre-filled
+  useEffect(() => {
+    if (signupData.referralCode && signupData.referralCode.trim() !== '') {
+      setShowReferralCode(true);
+    }
+  }, [signupData.referralCode]);
 
   const handleCheckEmail = async (e) => {
     e.preventDefault();
@@ -171,7 +184,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
   const modalContent = (
     <div className="fixed inset-0 z-[99999] pointer-events-none flex items-end justify-center lg:items-stretch">
       <div
-        className={`pointer-events-auto w-full max-w-md max-h-[80vh] lg:max-h-none bg-white dark:bg-gray-800 rounded-t-3xl border border-pink-200/60 dark:border-pink-700/40 border-b-0 lg:border-b shadow-2xl pb-2 lg:mb-0 lg:h-full lg:rounded-l-3xl lg:rounded-tr-none lg:ml-auto transform transition-transform duration-500 ease-out flex flex-col ${
+        className={`pointer-events-auto w-full max-w-md max-h-[90vh] lg:max-h-none bg-white dark:bg-gray-800 rounded-t-3xl border border-pink-200/60 dark:border-pink-700/40 border-b-0 lg:border-b shadow-2xl pb-2 lg:mb-0 lg:h-full lg:rounded-l-3xl lg:rounded-tr-none lg:ml-auto transform transition-transform duration-500 ease-out flex flex-col ${
           isPanelVisible ? 'translate-y-0 lg:translate-x-0' : 'translate-y-full lg:translate-x-full'
         }`}
       >
@@ -216,15 +229,15 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-3">
                       Email *
                     </label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <div className="relative p-[2px]">
+                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 z-10" />
                       <input
                         type="email"
                         autoComplete="email"
                         value={authEmail}
                         onChange={(e) => setAuthEmail(e.target.value)}
                         required
-                        className="w-full pl-9 pr-4 py-3 text-sm font-poppins border-2 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-poppins placeholder:tracking-wide border-pink-200 dark:border-pink-700/60 focus:ring-pink-500 dark:focus:ring-pink-400 shadow-sm"
+                        className="w-full pl-9 pr-4 py-3 text-sm font-poppins border-2 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-poppins placeholder:tracking-wide border-pink-200 dark:border-pink-700/60 focus:ring-pink-500 dark:focus:ring-pink-400 shadow-sm"
                         placeholder="you@email.com"
                       />
                     </div>
@@ -235,7 +248,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
                 <button
                   type="submit"
                   disabled={authLoading || !isEmailValid}
-                  className="w-full px-4 py-3 text-sm font-semibold font-poppins tracking-wide bg-pink-600 dark:bg-pink-700 text-white rounded-xl hover:bg-pink-700 dark:hover:bg-pink-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-pink-500/20"
+                  className="w-full px-4 py-3 text-sm font-semibold font-poppins tracking-wide bg-pink-600 dark:bg-pink-700 text-white rounded-lg hover:bg-pink-700 dark:hover:bg-pink-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-pink-500/20"
                 >
                   {authLoading ? 'Checking...' : 'Continue & Get Cashback'}
                 </button>
@@ -262,21 +275,21 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Password *
                     </label>
-                    <div className="relative">
+                    <div className="relative p-[2px]">
                       <input
                         type={showLoginPassword ? 'text' : 'password'}
                         autoComplete="current-password"
                         value={authPassword}
                         onChange={(e) => setAuthPassword(e.target.value)}
                         required
-                        className="w-full pr-10 px-3 py-2.5 text-sm font-poppins border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-poppins placeholder:tracking-wide border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                        className="w-full pr-10 px-3 py-2.5 text-sm font-poppins border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-poppins placeholder:tracking-wide border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
                         placeholder="Enter your password"
                       />
                       <button
                         type="button"
                         onClick={() => setShowLoginPassword((prev) => !prev)}
                         aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 z-10"
                       >
                         {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
@@ -320,15 +333,15 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Full Name *
                     </label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <div className="relative p-[2px]">
+                      <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 z-10" />
                       <input
                         type="text"
                         autoComplete="name"
                         value={signupData.name}
                         onChange={(e) => setSignupData((prev) => ({ ...prev, name: e.target.value }))}
                         required
-                        className="w-full pl-9 pr-4 py-2.5 text-sm font-poppins border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-poppins placeholder:tracking-wide border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                        className="w-full pl-9 pr-4 py-2.5 text-sm font-poppins border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-poppins placeholder:tracking-wide border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
                         placeholder="Enter your full name"
                       />
                     </div>
@@ -337,14 +350,14 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Mobile Number
                     </label>
-                    <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <div className="relative p-[2px]">
+                      <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 z-10" />
                       <input
                         type="tel"
                         autoComplete="tel"
                         value={signupData.phone}
                         onChange={(e) => setSignupData((prev) => ({ ...prev, phone: e.target.value }))}
-                        className="w-full pl-9 pr-4 py-2.5 text-sm font-poppins border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-poppins placeholder:tracking-wide border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                        className="w-full pl-9 pr-4 py-2.5 text-sm font-poppins border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-poppins placeholder:tracking-wide border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
                         placeholder="Enter mobile number"
                       />
                     </div>
@@ -354,21 +367,21 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
                       <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Password *
                       </label>
-                      <div className="relative">
+                      <div className="relative p-[2px]">
                         <input
                           type={showSignupPassword ? 'text' : 'password'}
                           autoComplete="new-password"
                           value={signupData.password}
                           onChange={(e) => setSignupData((prev) => ({ ...prev, password: e.target.value }))}
                           required
-                          className="w-full pr-10 px-3 py-2.5 text-sm font-poppins border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-poppins placeholder:tracking-wide border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                          className="w-full pr-10 px-3 py-2.5 text-sm font-poppins border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-poppins placeholder:tracking-wide border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
                           placeholder="Create password"
                         />
                         <button
                           type="button"
                           onClick={() => setShowSignupPassword((prev) => !prev)}
                           aria-label={showSignupPassword ? 'Hide password' : 'Show password'}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 z-10"
                         >
                           {showSignupPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
@@ -378,39 +391,76 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
                       <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Confirm Password *
                       </label>
-                      <div className="relative">
+                      <div className="relative p-[2px]">
                         <input
                           type={showSignupConfirmPassword ? 'text' : 'password'}
                           autoComplete="new-password"
                           value={signupData.confirmPassword}
                           onChange={(e) => setSignupData((prev) => ({ ...prev, confirmPassword: e.target.value }))}
                           required
-                          className="w-full pr-10 px-3 py-2.5 text-sm font-poppins border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-poppins placeholder:tracking-wide border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                          className="w-full pr-10 px-3 py-2.5 text-sm font-poppins border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-poppins placeholder:tracking-wide border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
                           placeholder="Confirm"
                         />
                         <button
                           type="button"
                           onClick={() => setShowSignupConfirmPassword((prev) => !prev)}
                           aria-label={showSignupConfirmPassword ? 'Hide password' : 'Show password'}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 z-10"
                         >
                           {showSignupConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
                     </div>
                   </div>
+                  
+                  {/* Collapsible Referral Code Section */}
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Referral Code (optional)
-                    </label>
-                    <input
-                      type="text"
-                      autoComplete="off"
-                      value={signupData.referralCode}
-                      onChange={(e) => setSignupData((prev) => ({ ...prev, referralCode: e.target.value }))}
-                      className="w-full px-3 py-2.5 text-sm font-poppins border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-poppins placeholder:tracking-wide border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
-                      placeholder="Enter referral code"
-                    />
+                    {!showReferralCode ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowReferralCode(true);
+                          // Auto-focus the input after a short delay to ensure it's rendered
+                          setTimeout(() => {
+                            referralCodeInputRef.current?.focus();
+                          }, 100);
+                        }}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 px-3 text-sm font-poppins text-pink-600 dark:text-pink-400 hover:text-pink-700 dark:hover:text-pink-300 transition-colors rounded-lg hover:bg-pink-50 dark:hover:bg-pink-900/20"
+                      >
+                        <Gift className="w-4 h-4 flex-shrink-0" />
+                        <span className="text-center">Referral code? Get extra cashback</span>
+                        <ChevronDown className="w-4 h-4 flex-shrink-0" />
+                      </button>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                            Referral Code (optional)
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowReferralCode(false);
+                              setSignupData((prev) => ({ ...prev, referralCode: '' }));
+                            }}
+                            className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                        <div className="relative p-[2px]">
+                          <input
+                            ref={referralCodeInputRef}
+                            type="text"
+                            autoComplete="off"
+                            value={signupData.referralCode}
+                            onChange={(e) => setSignupData((prev) => ({ ...prev, referralCode: e.target.value }))}
+                            className="w-full px-3 py-2.5 text-sm font-poppins border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-poppins placeholder:tracking-wide border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                            placeholder="Enter referral code"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -438,6 +488,14 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
               </div>
             </form>
           )}
+
+          {/* Laptop: bottom trust line only */}
+          <div className="hidden lg:flex flex-1 min-h-0 flex-col justify-end pt-6 pb-2">
+            <p className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+              <ShieldCheck className="w-3.5 h-3.5 text-green-500 dark:text-green-400 flex-shrink-0" />
+              Your data is secure and never shared.
+            </p>
+          </div>
         </div>
       </div>
     </div>

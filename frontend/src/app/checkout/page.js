@@ -37,6 +37,7 @@ import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import MobileFooter from '../../components/MobileFooter';
 import DeliverySlotSelector from '../../components/DeliverySlotSelector';
+import deliverySlotApi from '../../api/deliverySlotApi';
 import orderApi from '../../api/orderApi';
 import settingsApi from '../../api/settingsApi';
 import customerAuthApi from '../../api/customerAuthApi';
@@ -397,6 +398,8 @@ function CheckoutPageContent({ isClient }) {
   const [applyWalletDiscount, setApplyWalletDiscount] = useState(false);
   const [countdown, setCountdown] = useState(null); // { hours: number, minutes: number } or null
   const [dismissExpiringSoonWarning, setDismissExpiringSoonWarning] = useState(false);
+  const [isAutoSelected, setIsAutoSelected] = useState(false); // Track if slot was auto-selected
+  const [isLoadingEarliestSlot, setIsLoadingEarliestSlot] = useState(false);
   
   // Collapsible sections state for mobile accordion
   const [expandedSections, setExpandedSections] = useState({
@@ -1035,6 +1038,7 @@ function CheckoutPageContent({ isClient }) {
     // Clear selectedSlot if cartDeliverySlot is null (expired)
     if (!cartDeliverySlot && selectedSlot && hasInitializedSlot.current) {
       setSelectedSlot(null);
+      setIsAutoSelected(false); // Reset auto-selected flag
       setFormData(prev => ({
         ...prev,
         deliveryDate: '',
@@ -1042,6 +1046,11 @@ function CheckoutPageContent({ isClient }) {
       }));
       hasInitializedSlot.current = false;
       return;
+    }
+    
+    // Reset auto-selected flag if cart delivery slot exists (user has a slot from cart)
+    if (cartDeliverySlot) {
+      setIsAutoSelected(false);
     }
     
     // Only initialize once, and only if we don't have a selectedSlot already
@@ -1094,6 +1103,104 @@ function CheckoutPageContent({ isClient }) {
     // Only depend on cartDeliverySlot and currentPinCode to avoid re-initialization
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cartDeliverySlot, currentPinCode]);
+
+  // Smart Auto-Selection: Auto-select earliest available slot if no slot is selected
+  useEffect(() => {
+    // Only auto-select if:
+    // 1. No slot is currently selected
+    // 2. No cart delivery slot exists
+    // 3. Pin code is valid
+    // 4. We haven't already auto-selected
+    // 5. User hasn't manually interacted with slot selector
+    if (
+      !selectedSlot && 
+      !cartDeliverySlot && 
+      currentPinCode && 
+      isValidPinCode && 
+      !isAutoSelected &&
+      !showSlotSelector &&
+      !isLoadingEarliestSlot
+    ) {
+      setIsLoadingEarliestSlot(true);
+      
+      const autoSelectEarliestSlot = async () => {
+        try {
+          const today = new Date();
+          const endDate = new Date(today);
+          endDate.setDate(today.getDate() + 6); // Check next 7 days
+          
+          const startDateStr = today.toISOString().split('T')[0];
+          const endDateStr = endDate.toISOString().split('T')[0];
+          
+          const response = await deliverySlotApi.getSlotAvailability(startDateStr, endDateStr);
+          
+          if (response.success && response.data && response.data.length > 0) {
+            // Find earliest available slot
+            const now = new Date();
+            const currentTime = now.getHours() * 60 + now.getMinutes();
+            
+            for (const item of response.data) {
+              // Check if slot is available and not expired
+              if (item.isAvailable && item.availableOrders > 0) {
+                const slotDate = new Date(item.deliveryDate);
+                const slotDateOnly = new Date(slotDate.getFullYear(), slotDate.getMonth(), slotDate.getDate());
+                const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                
+                // If slot is today, check if time hasn't passed
+                if (slotDateOnly.getTime() === todayOnly.getTime()) {
+                  const [startHour, startMin] = item.startTime.split(':').map(Number);
+                  const slotStartTime = startHour * 60 + startMin;
+                  if (currentTime >= slotStartTime) {
+                    continue; // Skip expired slots
+                  }
+                }
+                
+                // Found earliest available slot - auto-select it
+                const slotDateObj = new Date(item.deliveryDate);
+                const timeString = item.endTime 
+                  ? `${formatTime(item.startTime)} - ${formatTime(item.endTime)}`
+                  : formatTime(item.startTime);
+                
+                const autoSelectedSlot = {
+                  date: slotDateObj,
+                  slot: { 
+                    id: item.slotId,
+                    startTime: item.startTime,
+                    endTime: item.endTime
+                  },
+                  time: timeString,
+                  pinCode: currentPinCode,
+                  slotId: item.slotId
+                };
+                
+                setSelectedSlot(autoSelectedSlot);
+                setIsAutoSelected(true);
+                setFormData(prev => ({
+                  ...prev,
+                  deliveryDate: slotDateObj.toISOString().split('T')[0],
+                  deliveryTime: timeString
+                }));
+                
+                break; // Stop after finding first available slot
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error auto-selecting earliest slot:', error);
+          // Don't show error to user - just silently fail
+        } finally {
+          setIsLoadingEarliestSlot(false);
+        }
+      };
+      
+      // Small delay to ensure page is fully loaded
+      const timer = setTimeout(() => {
+        autoSelectEarliestSlot();
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [selectedSlot, cartDeliverySlot, currentPinCode, isValidPinCode, isAutoSelected, showSlotSelector, isLoadingEarliestSlot]);
 
   // Auto-update expired delivery slots when checkout page loads
   useEffect(() => {
@@ -1657,6 +1764,9 @@ function CheckoutPageContent({ isClient }) {
     if (isSlotChanged) {
       setDismissExpiringSoonWarning(false);
     }
+    
+    // Clear auto-selected flag when user manually selects a slot
+    setIsAutoSelected(false);
     
     // Set the new slot
     setSelectedSlot(normalizedSlot);
@@ -2999,9 +3109,11 @@ function CheckoutPageContent({ isClient }) {
                   badgeBorder = 'border-2 border-green-200 dark:border-green-800';
                   badgeText = 'text-green-800 dark:text-green-300';
                   badgeIcon = <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 dark:text-green-400 flex-shrink-0" />;
-                  badgeMessage = countdown 
-                    ? `Slot expires in ${countdown.hours}h ${countdown.minutes}m`
-                    : 'Delivery Slot Selected';
+                  badgeMessage = isAutoSelected && selectedSlot
+                    ? 'Delivery Slot Pre-selected (Earliest Available)'
+                    : countdown 
+                      ? `Slot expires in ${countdown.hours}h ${countdown.minutes}m`
+                      : 'Delivery Slot Selected';
                 }
                 
                 return (
@@ -3010,22 +3122,32 @@ function CheckoutPageContent({ isClient }) {
                       <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
                         {badgeIcon}
                         <div className="flex-1 min-w-0">
-                          <p className={`text-xs sm:text-sm font-medium ${badgeText} mb-1`}>
-                            {badgeMessage}
-                          </p>
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <p className={`text-xs sm:text-sm font-medium ${badgeText}`}>
+                              {badgeMessage}
+                            </p>
+                            {isAutoSelected && selectedSlot && (
+                              <span className="px-2 py-0.5 text-[10px] sm:text-xs font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded border border-blue-200 dark:border-blue-800">
+                                Auto-selected
+                              </span>
+                            )}
+                          </div>
                           <p className={`text-xs sm:text-sm ${badgeText} opacity-90`}>
                             {formatDeliveryDate(currentSlot.date)} • {formatTimeSlot(currentSlot)}
-                            </p>
-                          </div>
+                          </p>
                         </div>
+                      </div>
                       <button
-                        onClick={() => setShowSlotSelector(true)}
+                        onClick={() => {
+                          setShowSlotSelector(true);
+                          setIsAutoSelected(false); // Clear auto-selected flag when user manually changes
+                        }}
                         className="px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium whitespace-nowrap flex-shrink-0"
                       >
                         Change
                       </button>
-                      </div>
                     </div>
+                  </div>
                 );
               })()}
                   

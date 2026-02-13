@@ -200,26 +200,78 @@ const DeliverySlotPreview = ({ className = '' }) => {
 
       {!loading && !error && (
         <div className="space-y-3">
-          <div className="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-300">
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-              {earliestAvailable ? (
-                <span>
-                  Earliest slot: {getDateLabel(earliestAvailable.deliveryDate)} •{' '}
+          {earliestAvailable ? (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Clock className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Earliest delivery: {getDateLabel(earliestAvailable.deliveryDate)} •{' '}
                   {formatTime(earliestAvailable.startTime)} - {formatTime(earliestAvailable.endTime)}
                 </span>
-              ) : (
-                <span>No slots available in the next {DAYS_TO_CHECK} days</span>
+                {/* Visual Availability Badge - label matches slot date (Today/Tomorrow) */}
+                {(() => {
+                  const status = getStatus(earliestAvailable);
+                  const dateLabel = getDateLabel(earliestAvailable.deliveryDate);
+                  const availableLabel = dateLabel === 'Today'
+                    ? '🟢 Available today'
+                    : dateLabel === 'Tomorrow'
+                      ? '🟢 Available tomorrow'
+                      : `🟢 Available ${dateLabel.toLowerCase()}`;
+                  const limitedLabel = dateLabel === 'Today'
+                    ? '🟡 Limited slots today'
+                    : dateLabel === 'Tomorrow'
+                      ? '🟡 Limited slots tomorrow'
+                      : `🟡 Limited slots`;
+                  const badgeConfig = {
+                    Available: {
+                      bg: 'bg-green-100 dark:bg-green-900/30',
+                      text: 'text-green-700 dark:text-green-400',
+                      label: availableLabel,
+                      border: 'border-green-200 dark:border-green-800'
+                    },
+                    Limited: {
+                      bg: 'bg-amber-100 dark:bg-amber-900/30',
+                      text: 'text-amber-700 dark:text-amber-400',
+                      label: limitedLabel,
+                      border: 'border-amber-200 dark:border-amber-800'
+                    },
+                    Full: {
+                      bg: 'bg-red-100 dark:bg-red-900/30',
+                      text: 'text-red-700 dark:text-red-400',
+                      label: '🔴 Fully booked',
+                      border: 'border-red-200 dark:border-red-800'
+                    }
+                  };
+                  const config = badgeConfig[status] || badgeConfig.Available;
+                  return (
+                    <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${config.bg} ${config.text} ${config.border}`}>
+                      {config.label}
+                    </span>
+                  );
+                })()}
+              </div>
+              {/* Slot Count Urgency Display */}
+              {earliestAvailable.availableOrders > 0 && earliestAvailable.availableOrders <= LIMITED_THRESHOLD && (
+                <div className="flex items-center gap-2 text-xs font-semibold text-amber-700 dark:text-amber-400 pl-6 bg-amber-50/50 dark:bg-amber-900/10 px-3 py-1.5 rounded-lg border border-amber-200/50 dark:border-amber-800/50">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>Only {earliestAvailable.availableOrders} slot{earliestAvailable.availableOrders !== 1 ? 's' : ''} left {getDateLabel(earliestAvailable.deliveryDate) === 'Today' ? 'today' : getDateLabel(earliestAvailable.deliveryDate).toLowerCase()}</span>
+                </div>
               )}
+              <div className="flex flex-col gap-0.5 pl-6">
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  This is the soonest we can deliver.{' '}
+                  <span className="font-semibold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-1.5 py-0.5 rounded">
+                    Choose your preferred time slot during checkout.
+                  </span>
+                </p>
+              </div>
             </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">
-              Next available date: {nextAvailableDate ? getDateLabel(nextAvailableDate) : '—'}
+          ) : (
+            <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <AlertCircle className="w-4 h-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
+              <span>No slots available in the next {DAYS_TO_CHECK} days</span>
             </div>
-          </div>
-
-          <div className="text-xs font-semibold text-rose-600 dark:text-rose-400">
-            Select your time slot at checkout.
-          </div>
+          )}
 
           {limitedFound && previewItems.length > 0 && (
             <div className="mt-2 rounded-lg border border-amber-200/70 dark:border-amber-800/50 bg-amber-50/60 dark:bg-amber-900/10 p-3">
@@ -229,18 +281,46 @@ const DeliverySlotPreview = ({ className = '' }) => {
               <div className="space-y-1.5">
                 {previewItems.map((item) => {
                   const status = getStatus(item);
-                  const statusColor =
-                    status === 'Limited'
-                      ? 'text-amber-700 dark:text-amber-300'
-                      : status === 'Available'
-                        ? 'text-green-700 dark:text-green-300'
-                        : 'text-gray-500 dark:text-gray-400';
+                  const badgeConfig = {
+                    Available: {
+                      bg: 'bg-green-100 dark:bg-green-900/30',
+                      text: 'text-green-700 dark:text-green-400',
+                      label: '🟢 Available',
+                      border: 'border-green-200 dark:border-green-800'
+                    },
+                    Limited: {
+                      bg: 'bg-amber-100 dark:bg-amber-900/30',
+                      text: 'text-amber-700 dark:text-amber-400',
+                      label: '🟡 Limited',
+                      border: 'border-amber-200 dark:border-amber-800'
+                    },
+                    Full: {
+                      bg: 'bg-red-100 dark:bg-red-900/30',
+                      text: 'text-red-700 dark:text-red-400',
+                      label: '🔴 Full',
+                      border: 'border-red-200 dark:border-red-800'
+                    },
+                    Closed: {
+                      bg: 'bg-gray-100 dark:bg-gray-700/50',
+                      text: 'text-gray-500 dark:text-gray-400',
+                      label: 'Closed',
+                      border: 'border-gray-200 dark:border-gray-600'
+                    }
+                  };
+                  const config = badgeConfig[status] || badgeConfig.Available;
                   return (
-                    <div key={`${item.deliveryDate}-${item.slotId}`} className="flex items-center justify-between text-xs">
-                      <span className="text-gray-700 dark:text-gray-300">
+                    <div key={`${item.deliveryDate}-${item.slotId}`} className="flex items-center justify-between text-xs gap-2">
+                      <span className="text-gray-700 dark:text-gray-300 flex-1">
                         {getDateLabel(item.deliveryDate)} • {formatTime(item.startTime)} - {formatTime(item.endTime)}
+                        {item.availableOrders > 0 && item.availableOrders <= LIMITED_THRESHOLD && (
+                          <span className="ml-2 text-amber-600 dark:text-amber-400 font-semibold">
+                            ({item.availableOrders} left)
+                          </span>
+                        )}
                       </span>
-                      <span className={`font-semibold ${statusColor}`}>{status}</span>
+                      <span className={`px-2 py-0.5 rounded text-xs font-semibold border ${config.bg} ${config.text} ${config.border}`}>
+                        {config.label}
+                      </span>
                     </div>
                   );
                 })}
