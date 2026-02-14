@@ -2795,7 +2795,7 @@ export default function CartPage() {
               </div>
 
               {/* You May Also Like Section - Collapsible */}
-              <div className="mt-4 sm:mt-6 mb-12 lg:mb-0 bg-gradient-to-br from-pink-50/80 to-rose-50/60 dark:from-pink-900/10 dark:to-rose-900/10 rounded-xl border border-pink-200/60 dark:border-pink-800/50 shadow-md dark:shadow-xl dark:shadow-black/20 p-4 sm:p-6 lg:overflow-hidden lg:min-w-0 lg:max-w-full lg:w-full">
+              <div className="mt-8 sm:mt-10 mb-0 bg-gradient-to-br from-pink-50/80 to-rose-50/60 dark:from-pink-900/10 dark:to-rose-900/10 rounded-xl border border-pink-200/60 dark:border-pink-800/50 shadow-md dark:shadow-xl dark:shadow-black/20 p-4 sm:p-6 lg:overflow-hidden lg:min-w-0 lg:max-w-full lg:w-full">
                 <button
                   onClick={() => setIsYouMayAlsoLikeOpen(!isYouMayAlsoLikeOpen)}
                   className="flex items-center justify-between w-full mb-2 sm:mb-4 group/header"

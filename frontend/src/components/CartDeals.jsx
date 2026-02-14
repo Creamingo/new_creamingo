@@ -112,10 +112,10 @@ const CartDeals = () => {
       const progressPercent = Math.min(100, (cartTotal / deals.next_deal.threshold) * 100);
 
       return (
-        <div className="bg-gradient-to-br from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20 rounded-lg sm:rounded-xl border border-pink-200 dark:border-pink-700 p-4 sm:p-6">
+        <div className="bg-gray-50 dark:bg-gray-800/80 rounded-lg sm:rounded-xl border border-gray-200 dark:border-gray-600 p-4 sm:p-6">
           <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-            <div className="p-1.5 sm:p-2 bg-pink-100 dark:bg-pink-900/30 rounded-lg">
-              <Gift className="w-4 h-4 sm:w-5 sm:h-5 text-pink-600 dark:text-pink-400" />
+            <div className="p-1.5 sm:p-2 bg-gray-200/80 dark:bg-gray-700 rounded-lg">
+              <Gift className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 dark:text-gray-400" />
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">
@@ -130,13 +130,13 @@ const CartDeals = () => {
           <div className="space-y-2 sm:space-y-2">
             <div className="flex items-center justify-between text-xs sm:text-sm">
               <span className="text-gray-700 dark:text-gray-300">Progress to next deal</span>
-              <span className="font-semibold text-pink-700 dark:text-pink-400">
+              <span className="font-semibold text-gray-800 dark:text-gray-200">
                 {formatPrice(cartTotal)} / {formatPrice(deals.next_deal.threshold)}
               </span>
             </div>
             <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 sm:h-2.5">
               <div
-                className="bg-gradient-to-r from-pink-500 to-rose-500 h-2 sm:h-2.5 rounded-full transition-all duration-300"
+                className="bg-gray-400 dark:bg-gray-500 h-2 sm:h-2.5 rounded-full transition-all duration-300"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
@@ -239,11 +239,11 @@ const CartDeals = () => {
                         <button
                           onClick={() => handleAddDeal(deal)}
                           disabled={isAdding || loading}
-                          className="w-full py-2 sm:py-2.5 px-3 rounded-lg text-xs sm:text-sm font-semibold transition-colors flex items-center justify-center gap-2 border-2 border-pink-500 dark:border-pink-500 text-pink-600 dark:text-pink-400 bg-transparent hover:bg-pink-50 dark:hover:bg-pink-900/20 hover:border-pink-600 dark:hover:border-pink-400 disabled:opacity-50"
+                          className="w-full py-2 sm:py-2.5 px-3 rounded-lg text-xs sm:text-sm font-semibold transition-colors flex items-center justify-center gap-2 border-2 border-gray-400 dark:border-gray-500 text-gray-700 dark:text-gray-300 bg-transparent hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-500 dark:hover:border-gray-400 disabled:opacity-50"
                         >
                           {isAdding ? (
                             <>
-                              <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" />
+                              <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin" />
                               <span>Adding...</span>
                             </>
                           ) : (
@@ -271,7 +271,7 @@ const CartDeals = () => {
             <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
               Upcoming Deals
             </h3>
-            <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 dark:bg-pink-900/30 text-pink-700 dark:text-pink-300 text-[10px] font-semibold px-2 py-0.5 border border-pink-200 dark:border-pink-800">
+            <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-[10px] font-semibold px-2 py-0.5 border border-gray-200 dark:border-gray-600">
               <Gift className="w-3 h-3" />
               Deal
             </span>
@@ -285,9 +285,9 @@ const CartDeals = () => {
 
               return (
                 <div key={deal.deal_id} className="rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
-                  {/* Top deal info bar */}
-                  <div className="bg-gradient-to-r from-pink-600 to-rose-600 text-white px-3 py-2 text-xs sm:text-sm font-semibold flex items-center gap-2">
-                    <Gift className="w-3.5 h-3.5" />
+                  {/* Top deal info bar - very light */}
+                  <div className="bg-gray-100 dark:bg-gray-700/80 text-gray-700 dark:text-gray-300 px-3 py-2 text-xs sm:text-sm font-semibold flex items-center gap-2 border-b border-gray-200 dark:border-gray-600">
+                    <Gift className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
                     <span>Shop for ₹{amountNeeded} more to unlock this deal</span>
                   </div>
 
@@ -325,7 +325,7 @@ const CartDeals = () => {
 
                     <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1.5 sm:h-2">
                       <div
-                        className="bg-gradient-to-r from-pink-500 to-rose-500 dark:from-pink-600 dark:to-rose-600 h-1.5 sm:h-2 rounded-full transition-all duration-300"
+                        className="bg-gray-400 dark:bg-gray-500 h-1.5 sm:h-2 rounded-full transition-all duration-300"
                         style={{ width: `${progressPercent}%` }}
                       />
                     </div>

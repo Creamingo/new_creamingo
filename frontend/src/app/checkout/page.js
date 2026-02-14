@@ -26,7 +26,8 @@ import {
   Gift,
   Navigation,
   Eye,
-  EyeOff
+  EyeOff,
+  ExternalLink
 } from 'lucide-react';
 import { useCart } from '../../contexts/CartContext';
 import { usePinCode } from '../../contexts/PinCodeContext';
@@ -495,56 +496,69 @@ function CheckoutPageContent({ isClient }) {
     return () => clearTimeout(timeoutId);
   }, [formData, selectedSlot, appliedPromo, applyWalletDiscount]);
   
-  // Load saved form progress on mount
+  // Load saved form progress on mount – prefill form and address so user doesn't re-enter
   useEffect(() => {
     try {
       const savedData = localStorage.getItem('checkout_form_progress');
       if (savedData) {
         const parsed = JSON.parse(savedData);
-        
-        // Only restore if form is empty (user hasn't started filling)
+        const savedAddress = parsed.formData?.address;
+        const hasSavedAddress = savedAddress && (savedAddress.street || savedAddress.city || savedAddress.state);
+        const currentAddressEmpty = !formData.address.street && !formData.address.city && !formData.address.state;
+
+        // Full restore when form is empty (name, email, phone not filled)
         if (!formData.name && !formData.email && !formData.phone) {
           if (parsed.formData) {
             setFormData(prev => ({
               ...prev,
               ...parsed.formData,
-              // Don't restore delivery date/time if slot is expired
               deliveryDate: parsed.formData.deliveryDate || prev.deliveryDate,
-              deliveryTime: parsed.formData.deliveryTime || prev.deliveryTime
+              deliveryTime: parsed.formData.deliveryTime || prev.deliveryTime,
+              address: {
+                street: savedAddress?.street ?? prev.address.street,
+                landmark: savedAddress?.landmark ?? prev.address.landmark,
+                city: savedAddress?.city ?? prev.address.city,
+                state: savedAddress?.state ?? prev.address.state,
+                zip_code: savedAddress?.zip_code ?? prev.address.zip_code ?? currentPinCode ?? '',
+                country: savedAddress?.country ?? prev.address.country ?? 'India',
+                location: null
+              }
             }));
-            
-            // Restore locationName if location exists
-            if (parsed.formData?.address?.location?.name) {
-              setLocationName(parsed.formData.address.location.name);
-            }
+            setLocationName(null);
           }
-          
+
           if (parsed.selectedSlot) {
-            const restoredDate = parsed.selectedSlot.date 
+            const restoredDate = parsed.selectedSlot.date
               ? new Date(parsed.selectedSlot.date)
               : null;
-            const restoredSlot = {
-              ...parsed.selectedSlot,
-              date: restoredDate
-            };
-            
-            // Only restore slot if it's not expired
+            const restoredSlot = { ...parsed.selectedSlot, date: restoredDate };
             if (restoredDate && getSlotExpirationStatus(restoredSlot) !== 'expired') {
               setSelectedSlot(restoredSlot);
             }
           }
-          
-          // DO NOT restore promo from checkout_form_progress
-          // Promo should ONLY come from applied_promo localStorage (Cart is source of truth)
-          // Clear any stale promo from checkout_form_progress
+
           if (parsed.appliedPromo) {
             const cleanedData = { ...parsed, appliedPromo: null };
             localStorage.setItem('checkout_form_progress', JSON.stringify(cleanedData));
           }
-          
           if (parsed.applyWalletDiscount !== undefined) {
             setApplyWalletDiscount(parsed.applyWalletDiscount);
           }
+        } else if (hasSavedAddress && currentAddressEmpty) {
+          // Form has name/email/phone (e.g. logged in) but address is empty – prefill address only
+          setFormData(prev => ({
+            ...prev,
+            address: {
+              ...prev.address,
+              street: savedAddress.street || prev.address.street,
+              landmark: savedAddress.landmark || prev.address.landmark,
+              city: savedAddress.city || prev.address.city,
+              state: savedAddress.state || prev.address.state,
+              zip_code: savedAddress.zip_code || prev.address.zip_code,
+              location: null
+            }
+          }));
+          setLocationName(null);
         }
       }
     } catch (error) {
@@ -945,6 +959,7 @@ function CheckoutPageContent({ isClient }) {
         // Only clear if this is a stale slot (from cart or previous selection)
         // Don't clear if user just actively selected it
         setError('Your delivery slot has expired. Please select a new slot.');
+        setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
         setShowSlotSelector(true);
         if (selectedSlot) {
           setSelectedSlot(null);
@@ -980,6 +995,7 @@ function CheckoutPageContent({ isClient }) {
       if (currentExpirationStatus === 'expired' && previousStatus !== 'expired' && !slotJustSelectedRef.current) {
         // Slot just expired - show error and open selector
         setError('Your delivery slot has just expired. Please select a new slot.');
+        setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
         setShowSlotSelector(true);
         setSelectedSlot(null);
         setFormData(prev => ({
@@ -1000,6 +1016,7 @@ function CheckoutPageContent({ isClient }) {
           setCountdown(null);
           if (currentExpirationStatus === 'expired' && previousStatus !== 'expired' && !slotJustSelectedRef.current) {
             setError('Your delivery slot has just expired. Please select a new slot.');
+            setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
             setShowSlotSelector(true);
             setSelectedSlot(null);
             setFormData(prev => ({
@@ -1670,16 +1687,7 @@ function CheckoutPageContent({ isClient }) {
           }
           
           setLocationAccuracy(accuracyInMeters);
-          
-          // Show warning (not error) if accuracy is poor but valid
-          if (accuracyInMeters && accuracyInMeters > 1000 && accuracyInMeters <= 100000) {
-            const accuracyKm = (accuracyInMeters / 1000).toFixed(1);
-            setLocationWarning(`Location accuracy is approximately ${accuracyKm} km. The detected location may not be precise. Please verify the address below.`);
-          } else if (accuracyInMeters === null) {
-            setLocationWarning('Location accuracy information is unavailable. Please verify the detected location is correct.');
-          } else {
-            setLocationWarning(null); // Clear warning if accuracy is good
-          }
+          setLocationWarning(null); // No accuracy warning shown in UI; user enters full address below
 
           // Reverse geocode to get city/locality name (with delay to respect rate limits)
           const locationNameResult = await reverseGeocode(latitude, longitude);
@@ -1750,6 +1758,7 @@ function CheckoutPageContent({ isClient }) {
     if (expirationStatus === 'expired') {
       // Slot is expired, don't set it and show error
       setError('The selected delivery slot has expired. Please choose a different slot.');
+      setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
       setShowSlotSelector(true); // Keep selector open
       return;
     }
@@ -1840,6 +1849,7 @@ function CheckoutPageContent({ isClient }) {
     const currentSlot = selectedSlot || cartDeliverySlot;
     if (!currentSlot) {
       setError('Please select a delivery date and time slot to place your order.');
+      setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
       setShowSlotSelector(true);
       return false;
     }
@@ -1848,6 +1858,7 @@ function CheckoutPageContent({ isClient }) {
     const expirationStatus = getSlotExpirationStatus(currentSlot);
     if (expirationStatus === 'expired') {
       setError('Your delivery slot has expired. Please select a new slot.');
+      setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
       setShowSlotSelector(true); // Auto-open slot selector
       return false;
     }
@@ -1867,6 +1878,7 @@ function CheckoutPageContent({ isClient }) {
     // Check if slot is selected first
     if (!selectedSlot && !cartDeliverySlot) {
       setError('Please select a delivery date and time slot to place your order.');
+      setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
       setShowSlotSelector(true);
       return;
     }
@@ -1882,6 +1894,7 @@ function CheckoutPageContent({ isClient }) {
       const expirationStatus = getSlotExpirationStatus(currentSlot);
       if (expirationStatus === 'expired') {
         setError('Your delivery slot has expired. Please select a new slot before placing your order.');
+        setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
         setShowSlotSelector(true);
         setSelectedSlot(null);
         setFormData(prev => ({
@@ -2426,7 +2439,10 @@ function CheckoutPageContent({ isClient }) {
                       Your selected delivery slot has expired. Please select a new slot to continue with your order.
                     </p>
                     <button
-                      onClick={() => setShowSlotSelector(true)}
+                      onClick={() => {
+                        setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+                        setShowSlotSelector(true);
+                      }}
                       className="px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-600 transition-colors font-medium"
                     >
                       Select New Slot
@@ -2458,7 +2474,10 @@ function CheckoutPageContent({ isClient }) {
                     </p>
                     <div className="flex flex-wrap gap-2">
                       <button
-                        onClick={() => setShowSlotSelector(true)}
+                        onClick={() => {
+                          setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+                          setShowSlotSelector(true);
+                        }}
                         className="px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm border border-yellow-600 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300 rounded-lg hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition-colors font-medium"
                       >
                         Change Slot
@@ -2846,33 +2865,29 @@ function CheckoutPageContent({ isClient }) {
               <div className={`px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6 transition-all duration-300 lg:block ${expandedSections.deliveryAddress ? 'block' : 'hidden'}`}>
               <div className="space-y-3 sm:space-y-4">
               <div>
-                  {/* Optional precise location capture for delivery */}
-                  <div className="mb-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
-                    <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-gray-600 dark:text-gray-300">
-                      <MapPin className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
-                      <span className="font-medium">Delivery location (optional)</span>
-                    </div>
+                  {/* Delivery location: label + Use current location button */}
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 mb-3">
+                    <label className="flex items-center gap-1.5 text-xs sm:text-sm text-gray-600 dark:text-gray-300 font-medium">
+                      <MapPin className="w-3.5 h-3.5 text-green-600 dark:text-green-400 flex-shrink-0" />
+                      Delivery location (optional)
+                    </label>
                     <button
                       type="button"
                       onClick={handleUseMyLocation}
                       disabled={isFetchingLocation}
-                      className={`group relative inline-flex items-center gap-2 text-xs sm:text-sm text-blue-700 dark:text-blue-300 font-semibold px-4 py-2 rounded-lg border-2 border-blue-400 dark:border-blue-600 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-800/30 hover:from-blue-100 hover:to-blue-200 dark:hover:from-blue-900/50 dark:hover:to-blue-800/40 hover:border-blue-500 dark:hover:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-md hover:shadow-lg hover:shadow-blue-200/50 dark:hover:shadow-blue-900/30 active:scale-95 ${
+                      className={`group relative inline-flex items-center justify-center gap-2 text-xs sm:text-sm text-blue-700 dark:text-blue-300 font-semibold px-4 py-2 rounded-lg border-2 border-blue-400 dark:border-blue-600 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-800/30 hover:from-blue-100 hover:to-blue-200 dark:hover:from-blue-900/50 dark:hover:to-blue-800/40 hover:border-blue-500 dark:hover:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-md hover:shadow-lg hover:shadow-blue-200/50 dark:hover:shadow-blue-900/30 active:scale-95 w-full sm:w-auto ${
                         isFetchingLocation ? 'grayscale-[0.3] backdrop-blur-[2px] pointer-events-none' : ''
                       }`}
                     >
-                      {/* Overlay when fetching location */}
                       {isFetchingLocation && (
-                        <div className="absolute inset-0 bg-white/30 dark:bg-gray-900/30 rounded-lg backdrop-blur-[1px] z-10"></div>
+                        <div className="absolute inset-0 bg-white/30 dark:bg-gray-900/30 rounded-lg backdrop-blur-[1px] z-10" />
                       )}
-                      {/* Subtle pulsing location indicator - only when not fetching */}
                       {!isFetchingLocation && (
-                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-blue-500 rounded-full animate-pulse opacity-80"></span>
+                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-blue-500 rounded-full animate-pulse opacity-80" />
                       )}
-                      {/* GPS/Location icon with rotation when fetching */}
                       <div className={`relative ${isFetchingLocation ? 'animate-spin' : ''}`}>
                         <Navigation className="w-4 h-4 text-blue-600 dark:text-blue-400" strokeWidth={2.5} />
                       </div>
-                      {/* Map pin icon as secondary indicator */}
                       <MapPin className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" strokeWidth={2} />
                       <span className="relative z-10">
                         {isFetchingLocation ? (
@@ -2887,40 +2902,28 @@ function CheckoutPageContent({ isClient }) {
                     </button>
                   </div>
 
+                  {/* Detected location block – only when location is set */}
                   {formData.address?.location && typeof formData.address.location.lat === 'number' && typeof formData.address.location.lng === 'number' && (
-                    <div className="mb-1 space-y-1">
-                      <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">
-                        Location captured: {locationName ? `${locationName} ` : ''}({formData.address.location.lat.toFixed(4)}, {formData.address.location.lng.toFixed(4)}). Add street & landmark for accurate delivery.
+                    <div className="rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 px-3 py-2.5 mb-4 space-y-1.5">
+                      <p className="text-[11px] sm:text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                        Current location detected
                       </p>
-                      {/* Location Warning (separate from error) */}
-                      {locationWarning && (
-                        <div className="p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
-                          <p className="text-[10px] sm:text-xs text-yellow-700 dark:text-yellow-300 flex items-start gap-1.5">
-                            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                            <span>{locationWarning}</span>
-                          </p>
-                        </div>
-                      )}
-                      {/* Accuracy indicator (only show if valid) */}
-                      {locationAccuracy && locationAccuracy <= 100000 && (
-                        <p className={`text-[10px] sm:text-xs flex items-center gap-1 ${
-                          locationAccuracy <= 100 
-                            ? 'text-green-600 dark:text-green-400' 
-                            : locationAccuracy <= 500 
-                              ? 'text-yellow-600 dark:text-yellow-400' 
-                              : 'text-orange-600 dark:text-orange-400'
-                        }`}>
-                          <AlertCircle className="w-3 h-3" />
-                          {locationAccuracy <= 100 
-                            ? `High accuracy (~${Math.round(locationAccuracy)}m)` 
-                            : locationAccuracy <= 500 
-                              ? `Moderate accuracy (~${Math.round(locationAccuracy)}m) - Please verify address` 
-                              : `Low accuracy (~${(locationAccuracy / 1000).toFixed(1)}km) - Location may be inaccurate, please verify and correct if needed`}
-                        </p>
-                      )}
-                      <p className="text-[10px] text-gray-400 dark:text-gray-500 italic">
-                        💡 Tip: If the location seems incorrect, please manually enter your complete address below.
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        {locationName || 'Location set'}
                       </p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400">
+                        Location already detected. Verify if it’s correct and also enter your full address below.
+                      </p>
+                      <a
+                        href={`https://www.google.com/maps?q=${formData.address.location.lat},${formData.address.location.lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 hover:underline"
+                      >
+                        <MapPin className="w-3.5 h-3.5" />
+                        View on map to verify
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
                     </div>
                   )}
 
@@ -2967,14 +2970,25 @@ function CheckoutPageContent({ isClient }) {
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
                       Landmark (Optional)
                     </label>
-                    <input
-                      type="text"
-                      name="address.landmark"
-                      value={formData.address.landmark}
-                      onChange={handleInputChange}
-                      className="w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500 dark:focus:ring-green-400 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500"
-                      placeholder="Nearby landmark or location (optional)"
-                    />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        name="address.landmark"
+                        value={formData.address.landmark}
+                        onChange={handleInputChange}
+                        className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 pr-10 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                          formData.address.landmark.trim().length >= 3
+                            ? 'border-green-400 dark:border-green-500 focus:ring-green-500 dark:focus:ring-green-400'
+                            : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
+                        }`}
+                        placeholder="Nearby landmark or location (optional)"
+                      />
+                      {formData.address.landmark.trim().length >= 3 && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                          <CheckCircle className="w-5 h-5 text-green-500 dark:text-green-400 animate-in fade-in duration-300" />
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -3143,6 +3157,7 @@ function CheckoutPageContent({ isClient }) {
                       </div>
                       <button
                         onClick={() => {
+                          setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
                           setShowSlotSelector(true);
                           setIsAutoSelected(false); // Clear auto-selected flag when user manually changes
                         }}
@@ -3159,7 +3174,10 @@ function CheckoutPageContent({ isClient }) {
                 /* Show Select Button if no slot */
                 !(selectedSlot || cartDeliverySlot) && (
                   <button
-                    onClick={() => setShowSlotSelector(true)}
+                    onClick={() => {
+                      setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+                      setShowSlotSelector(true);
+                    }}
                     className="w-full px-3 sm:px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
                   >
                     Select Delivery Slot
@@ -3563,7 +3581,10 @@ function CheckoutPageContent({ isClient }) {
                       </p>
                       {(!selectedSlot && !cartDeliverySlot) && (
                         <button
-                          onClick={() => setShowSlotSelector(true)}
+                          onClick={() => {
+                            setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+                            setShowSlotSelector(true);
+                          }}
                           className="mt-2 px-3 py-1.5 text-xs bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-600 transition-colors font-medium"
                         >
                           Select Delivery Slot
@@ -3640,7 +3661,10 @@ function CheckoutPageContent({ isClient }) {
                   </p>
                   {(!selectedSlot && !cartDeliverySlot) && (
                     <button
-                      onClick={() => setShowSlotSelector(true)}
+                      onClick={() => {
+                        setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+                        setShowSlotSelector(true);
+                      }}
                       className="mt-1.5 px-2.5 py-1 text-[10px] bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-600 transition-colors font-medium"
                     >
                       Select Slot
