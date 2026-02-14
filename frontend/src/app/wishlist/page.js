@@ -2,19 +2,22 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Heart, ArrowLeft, Trash2, ShoppingCart, Loader2, Package, AlertCircle, X } from 'lucide-react';
+import { Heart, ArrowLeft, Trash2, ShoppingCart, Loader2, Package, AlertCircle, X, LogIn } from 'lucide-react';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import MobileFooter from '../../components/MobileFooter';
 import LocationBar from '../../components/LocationBar';
-import ProtectedRoute from '../../components/ProtectedRoute';
 import { useWishlist } from '../../contexts/WishlistContext';
 import { useCart } from '../../contexts/CartContext';
 import { useToast } from '../../contexts/ToastContext';
+import { useCustomerAuth } from '../../contexts/CustomerAuthContext';
+import { useAuthModal } from '../../contexts/AuthModalContext';
 import Link from 'next/link';
 
 function WishlistPageContent() {
   const router = useRouter();
+  const { isAuthenticated, isLoading: isAuthLoading } = useCustomerAuth();
+  const { openAuthModal } = useAuthModal();
   const { wishlistItems, isLoading, isInitialized, removeFromWishlist, clearWishlist } = useWishlist();
   const { addToCart } = useCart();
   const { showSuccess, showError } = useToast();
@@ -104,6 +107,58 @@ function WishlistPageContent() {
   const formatPrice = (price) => {
     return `₹${parseFloat(price || 0).toFixed(0)}`;
   };
+
+  // Not logged in: show login CTA (no redirect)
+  if (!isAuthLoading && !isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Header />
+        <LocationBar />
+
+        <div className="bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
+          <div className="w-full px-4 sm:px-6 lg:px-12 xl:px-16 py-3">
+            <nav className="flex items-center space-x-2 text-xs text-gray-400 dark:text-gray-500 mb-2">
+              <button
+                onClick={() => router.push('/')}
+                className="hover:text-purple-600 dark:hover:text-purple-400 transition-colors duration-200 font-medium"
+              >
+                Home
+              </button>
+              <span className="text-gray-500 dark:text-gray-400 text-sm">›</span>
+              <span className="text-gray-700 dark:text-gray-300 font-medium">My Wishlist</span>
+            </nav>
+            <h1 className="text-xl lg:text-2xl font-semibold text-gray-900 dark:text-gray-100 font-poppins">
+              My Wishlist
+            </h1>
+          </div>
+        </div>
+
+        <div className="w-full px-4 sm:px-6 lg:px-12 xl:px-16 pt-4 pb-8">
+          <div className="text-center py-16 lg:py-24">
+            <div className="w-24 h-24 lg:w-32 lg:h-32 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Heart className="w-12 h-12 lg:w-16 lg:h-16 text-gray-300 dark:text-gray-600" />
+            </div>
+            <h2 className="text-xl lg:text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+              Log in to access your saved items
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
+              Sign in to view and manage your wishlist across devices.
+            </p>
+            <button
+              onClick={() => openAuthModal('/wishlist')}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-pink-600 dark:bg-pink-700 text-white rounded-lg hover:bg-pink-700 dark:hover:bg-pink-600 transition-colors font-medium"
+            >
+              <LogIn className="w-5 h-5" />
+              Log in
+            </button>
+          </div>
+        </div>
+
+        <Footer />
+        <MobileFooter />
+      </div>
+    );
+  }
 
   if (!isInitialized || isLoading) {
     return (
@@ -359,9 +414,5 @@ function WishlistPageContent() {
 }
 
 export default function WishlistPage() {
-  return (
-    <ProtectedRoute>
-      <WishlistPageContent />
-    </ProtectedRoute>
-  );
+  return <WishlistPageContent />;
 }
