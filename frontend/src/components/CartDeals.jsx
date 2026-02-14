@@ -239,11 +239,11 @@ const CartDeals = () => {
                         <button
                           onClick={() => handleAddDeal(deal)}
                           disabled={isAdding || loading}
-                          className="w-full py-2 sm:py-2.5 px-3 rounded-lg text-xs sm:text-sm font-semibold transition-colors flex items-center justify-center gap-2 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 disabled:opacity-50"
+                          className="w-full py-2 sm:py-2.5 px-3 rounded-lg text-xs sm:text-sm font-semibold transition-colors flex items-center justify-center gap-2 border-2 border-pink-500 dark:border-pink-500 text-pink-600 dark:text-pink-400 bg-transparent hover:bg-pink-50 dark:hover:bg-pink-900/20 hover:border-pink-600 dark:hover:border-pink-400 disabled:opacity-50"
                         >
                           {isAdding ? (
                             <>
-                              <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" />
                               <span>Adding...</span>
                             </>
                           ) : (

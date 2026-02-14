@@ -34,6 +34,7 @@ import ConfirmModal from '../../components/ConfirmModal';
 import promoCodeApi from '../../api/promoCodeApi';
 import promoCodeTrackingApi from '../../api/promoCodeTrackingApi';
 import productApi from '../../api/productApi';
+import addOnApi from '../../api/addOnApi';
 import settingsApi from '../../api/settingsApi';
 import { formatPrice } from '../../utils/priceFormatter';
 import { resolveImageUrl } from '../../utils/imageUrl';
@@ -151,6 +152,7 @@ export default function CartPage() {
     removeSavedItem,
     updateComboItemQuantity,
     removeComboItem,
+    updateCartItemCombos,
     autoUpdateExpiredSlots,
     addToCart
   } = useCart();
@@ -227,7 +229,7 @@ export default function CartPage() {
     currentPinCode 
   } = usePinCode();
   
-  const { showSuccess, showError } = useToast();
+  const { showSuccess, showError, showInfo } = useToast();
 
   const [promoCode, setPromoCode] = useState('');
   const [appliedPromo, setAppliedPromo] = useState(null);
@@ -251,6 +253,14 @@ export default function CartPage() {
   const [selectedItemForActions, setSelectedItemForActions] = useState(null);
   const [suggestedProducts, setSuggestedProducts] = useState([]);
   const [suggestedProductsLoading, setSuggestedProductsLoading] = useState(false);
+  // Recommendation sections: addOns, gift (flowers/sweets), smallTreats, premiumCakes
+  const [suggestedSections, setSuggestedSections] = useState({
+    addOns: [],
+    gift: [],
+    smallTreats: [],
+    premiumCakes: []
+  });
+  const [suggestedSectionsLoading, setSuggestedSectionsLoading] = useState(false);
   const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState(1500); // Default value, will be fetched from API
   const [confirmModal, setConfirmModal] = useState({
     open: false,
@@ -273,44 +283,23 @@ export default function CartPage() {
     closeConfirmModal();
   };
 
-  // Fetch suggested products from Small Treats Desserts and Sweets and Dry Fruits
+  // Fetch suggested products (legacy single list, kept for fallback)
   useEffect(() => {
     const fetchSuggestedProducts = async () => {
       if (!mounted || !isInitialized) return;
       
       setSuggestedProductsLoading(true);
       try {
-        // Fetch products from both categories
         const [treatsResponse, sweetsResponse] = await Promise.all([
-          productApi.getProductsByCategory('small-treats-desserts', null, { 
-            page: 1, 
-            limit: 8
-          }),
-          productApi.getProductsByCategory('sweets-dry-fruits', null, { 
-            page: 1, 
-            limit: 8
-          })
+          productApi.getProductsByCategory('small-treats-desserts', null, { page: 1, limit: 8 }),
+          productApi.getProductsByCategory('sweets-dry-fruits', null, { page: 1, limit: 8 })
         ]);
-
-        // Combine products from both categories
         const treatsProducts = treatsResponse?.products || treatsResponse?.data?.products || [];
         const sweetsProducts = sweetsResponse?.products || sweetsResponse?.data?.products || [];
-        
-        // Mix and randomize products
         const allProducts = [...treatsProducts, ...sweetsProducts];
-        
-        // Shuffle array to randomize
         const shuffled = allProducts.sort(() => Math.random() - 0.5);
-        
-        // Take 12-15 products (or all if less)
-        const selectedProducts = shuffled.slice(0, Math.min(15, shuffled.length));
-        
-        // Filter out products already in cart
         const cartProductIds = new Set(cartItems.map(item => item.product?.id));
-        const filteredProducts = selectedProducts.filter(product => 
-          !cartProductIds.has(product.id)
-        );
-        
+        const filteredProducts = shuffled.filter(p => !cartProductIds.has(p.id)).slice(0, 15);
         setSuggestedProducts(filteredProducts);
       } catch (error) {
         console.error('Error fetching suggested products:', error);
@@ -319,8 +308,56 @@ export default function CartPage() {
         setSuggestedProductsLoading(false);
       }
     };
-
     fetchSuggestedProducts();
+  }, [mounted, isInitialized, cartItems.length]);
+
+  // Fetch all 4 recommendation sections: Add-ons, Gift (flowers/sweets), Small Treats, Premium Cakes
+  useEffect(() => {
+    const extractProducts = (res) => res?.products || res?.data?.products || [];
+    const cartProductIds = new Set(cartItems.map(item => item.product?.id));
+
+    const fetchSections = async () => {
+      if (!mounted || !isInitialized) return;
+      setSuggestedSectionsLoading(true);
+      try {
+        const [
+          addOnProductsAll,
+          flowersRes,
+          sweetsRes,
+          treatsRes,
+          premiumRes
+        ] = await Promise.all([
+          addOnApi.getAddOnProducts(),
+          productApi.getProductsByCategory('flowers', null, { page: 1, limit: 6 }),
+          productApi.getProductsByCategory('sweets-dry-fruits', null, { page: 1, limit: 6 }),
+          productApi.getProductsByCategory('small-treats-desserts', null, { page: 1, limit: 6 }),
+          productApi.getProductsByCategory('crowd-favorite-cakes', null, { page: 1, limit: 2, sortBy: 'price-high' })
+        ]);
+
+        const flowers = extractProducts(flowersRes);
+        const sweets = extractProducts(sweetsRes);
+        const giftCombined = [...flowers, ...sweets].sort(() => Math.random() - 0.5).slice(0, 6);
+        const giftFiltered = giftCombined.filter(p => !cartProductIds.has(p.id));
+
+        const treats = extractProducts(treatsRes).filter(p => !cartProductIds.has(p.id)).slice(0, 6);
+        const premium = extractProducts(premiumRes).filter(p => !cartProductIds.has(p.id)).slice(0, 2);
+
+        const addOns = Array.isArray(addOnProductsAll) ? addOnProductsAll.slice(0, 8) : [];
+
+        setSuggestedSections({
+          addOns,
+          gift: giftFiltered,
+          smallTreats: treats,
+          premiumCakes: premium
+        });
+      } catch (error) {
+        console.error('Error fetching recommendation sections:', error);
+        setSuggestedSections({ addOns: [], gift: [], smallTreats: [], premiumCakes: [] });
+      } finally {
+        setSuggestedSectionsLoading(false);
+      }
+    };
+    fetchSections();
   }, [mounted, isInitialized, cartItems.length]);
 
   // Expand all items by default when cart items change
@@ -2761,105 +2798,222 @@ export default function CartPage() {
                       Add these popular items to complete your order
                     </p>
                     
-                    {suggestedProductsLoading ? (
+                    {suggestedSectionsLoading ? (
                       <div className="text-center py-6 sm:py-8">
                         <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-pink-600"></div>
                         <p className="text-xs sm:text-sm text-gray-400 dark:text-gray-500 mt-2">Loading suggestions...</p>
                       </div>
-                    ) : suggestedProducts.length === 0 ? (
+                    ) : (suggestedSections.addOns.length === 0 && suggestedSections.gift.length === 0 && suggestedSections.smallTreats.length === 0 && suggestedSections.premiumCakes.length === 0) ? (
                       <div className="text-center py-6 sm:py-8 text-gray-400 dark:text-gray-400">
                         <Package className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 opacity-50" />
                         <p className="text-xs sm:text-sm">No suggestions available at the moment</p>
                       </div>
                     ) : (
-                      <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0 w-full lg:max-w-full lg:min-w-0">
-                        <div className="flex gap-3 sm:gap-4 lg:gap-4 pb-2 lg:min-w-0">
-                          {suggestedProducts.map((product) => {
-                            const productPrice = product.discounted_price || product.base_price || 0;
-                            const originalPrice = product.base_price;
-                            const hasDiscount = product.discounted_price && product.discounted_price < originalPrice;
-                            const productWeight = product.base_weight || product.variants?.[0]?.weight || null;
-                            
-                            return (
-                              <div
-                                key={product.id}
-                                className="relative flex-shrink-0 w-[140px] sm:w-[160px] lg:w-[170px] bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm hover:shadow-lg dark:hover:shadow-xl dark:hover:shadow-black/30 transition-all duration-300 hover:border-pink-300 dark:hover:border-pink-600 group"
-                              >
-                                {/* Discount Badge - Positioned at card's top-right corner */}
-                                {hasDiscount && (
-                                  <div className="absolute top-0 right-0 bg-gradient-to-r from-red-500 to-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-tr-xl rounded-bl-md shadow-md z-10">
-                                    {Math.round(((originalPrice - product.discounted_price) / originalPrice) * 100)}% OFF
-                                  </div>
-                                )}
-                                
-                                {/* Product Image */}
-                                <div 
-                                  className="relative w-full h-[140px] sm:h-[160px] lg:h-[180px] bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 cursor-pointer overflow-hidden"
-                                  onClick={() => router.push(`/product/${product.slug || product.id}`)}
-                                >
-                                  <img
-                                    src={resolveImageUrl(product.image_url)}
-                                    alt={product.name}
-                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                  />
-                                </div>
-                                
-                                {/* Product Info */}
-                                <div className="p-2.5 sm:p-3 lg:p-3 space-y-2">
-                                  {/* Product Name */}
-                                  <h4 
-                                    className="text-xs sm:text-sm lg:text-sm font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 cursor-pointer hover:text-pink-600 dark:hover:text-pink-400 transition-colors leading-tight"
-                                    onClick={() => router.push(`/product/${product.slug || product.id}`)}
-                                  >
-                                    {product.name}
-                                  </h4>
-                                  
-                                  {/* Weight */}
-                                  {productWeight && (
-                                    <div className="flex items-center gap-1">
-                                      <Package className="w-3 h-3 text-gray-500 dark:text-gray-400" />
-                                      <span className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 font-medium">
-                                        {productWeight}
-                                      </span>
+                      <div className="space-y-6 sm:space-y-7">
+                        {/* Section 1: Make Your Cake Extra Special - Add-ons */}
+                        {suggestedSections.addOns.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <Sparkles className="w-4 h-4 text-pink-600 dark:text-pink-400 flex-shrink-0" />
+                              <h4 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">Make Your Cake Extra Special</h4>
+                            </div>
+                            <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Add-ons (candles, balloons, toppers)</p>
+                            <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
+                              <div className="flex gap-3 sm:gap-4 pb-2">
+                                {suggestedSections.addOns.map((item) => {
+                                  const price = item.discounted_price ?? item.price ?? 0;
+                                  const firstCakeItem = cartItems.find(i => !i.is_deal_item);
+                                    const handleAddAddOn = () => {
+                                    if (!firstCakeItem) {
+                                      showInfo('Add a cake first', 'Add a cake to your cart to include add-ons like candles, balloons & toppers.');
+                                      return;
+                                    }
+                                    const newCombo = {
+                                      id: Date.now(),
+                                      add_on_product_id: item.id,
+                                      product_id: item.id,
+                                      product_name: item.name || 'Product',
+                                      category_name: item.category_name || '',
+                                      price: item.price ?? 0,
+                                      discounted_price: item.discounted_price ?? null,
+                                      discount_percentage: item.discount_percentage ?? 0,
+                                      quantity: 1,
+                                      image_url: item.image_url || null
+                                    };
+                                    const existingCombos = firstCakeItem.combos || [];
+                                    const existingIndex = existingCombos.findIndex(c => (c.add_on_product_id === item.id || c.product_id === item.id));
+                                    const updatedCombos = existingIndex >= 0
+                                      ? existingCombos.map((c, i) => i === existingIndex ? { ...c, quantity: (c.quantity || 1) + 1 } : c)
+                                      : [...existingCombos, newCombo];
+                                    updateCartItemCombos(firstCakeItem.id, updatedCombos);
+                                    showSuccess('Added', `${item.name} added to your cake.`);
+                                  };
+                                  return (
+                                    <div key={item.id} className="relative flex-shrink-0 w-[140px] sm:w-[160px] bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm hover:shadow-lg dark:hover:shadow-xl dark:hover:shadow-black/30 transition-all duration-300 hover:border-pink-300 dark:hover:border-pink-600 group">
+                                      <div className="relative w-full h-[100px] sm:h-[120px] bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 overflow-hidden">
+                                        <img src={resolveImageUrl(item.image_url)} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                      </div>
+                                      <div className="p-2.5 sm:p-3 space-y-1.5">
+                                        <h4 className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight">{item.name}</h4>
+                                        <p className="text-sm font-bold text-pink-600 dark:text-pink-400">{formatPrice(price)}</p>
+                                        <button onClick={handleAddAddOn} className="w-full py-2 border-2 border-pink-500 dark:border-pink-600 text-pink-600 dark:text-pink-400 text-xs sm:text-sm font-semibold rounded-lg hover:bg-pink-50 dark:hover:bg-pink-900/20 transition-all duration-200 active:scale-95">
+                                          + Include
+                                        </button>
+                                      </div>
                                     </div>
-                                  )}
-                                  
-                                  {/* Price */}
-                                  <div className="flex items-baseline gap-1.5">
-                                    <span className="text-sm lg:text-base font-bold text-pink-600 dark:text-pink-400">
-                                      {formatPrice(productPrice)}
-                                    </span>
-                                    {hasDiscount && (
-                                      <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 line-through">
-                                        {formatPrice(originalPrice)}
-                                      </span>
-                                    )}
-                                  </div>
-                                  
-                                  {/* Add to Cart Button */}
-                                  <button
-                                    onClick={() => {
-                                      addToCart({
-                                        product: product,
-                                        quantity: 1,
-                                        variant: null,
-                                        flavor: null,
-                                        tier: null,
-                                        combos: [],
-                                        deliverySlot: null,
-                                        cakeMessage: ''
-                                      });
-                                      // Note: addToCart already shows a success toast, so we don't need to show another one
-                                    }}
-                                    className="w-full py-2 sm:py-2 lg:py-2 border-2 border-pink-500 dark:border-pink-600 text-pink-600 dark:text-pink-400 text-xs sm:text-sm lg:text-sm font-semibold rounded-lg hover:bg-pink-50 dark:hover:bg-pink-900/20 hover:border-pink-600 dark:hover:border-pink-500 transition-all duration-200 active:scale-95"
-                                  >
-                                    Add to Cart
-                                  </button>
-                                </div>
+                                  );
+                                })}
                               </div>
-                            );
-                          })}
-                        </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Section 2: Complete Your Gift - Flowers, chocolates, dry fruits */}
+                        {suggestedSections.gift.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <Gift className="w-4 h-4 text-pink-600 dark:text-pink-400 flex-shrink-0" />
+                              <h4 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">Complete Your Gift</h4>
+                            </div>
+                            <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Flowers, chocolates, teddy, dry fruits</p>
+                            <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
+                              <div className="flex gap-3 sm:gap-4 pb-2">
+                                {suggestedSections.gift.map((product) => {
+                                  const productPrice = product.discounted_price || product.base_price || 0;
+                                  const originalPrice = product.base_price;
+                                  const hasDiscount = product.discounted_price && product.discounted_price < originalPrice;
+                                  const productWeight = product.base_weight || product.variants?.[0]?.weight || null;
+                                  return (
+                                    <div key={product.id} className="relative flex-shrink-0 w-[140px] sm:w-[160px] lg:w-[170px] bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm hover:shadow-lg dark:hover:shadow-xl dark:hover:shadow-black/30 transition-all duration-300 hover:border-pink-300 dark:hover:border-pink-600 group">
+                                      {hasDiscount && (
+                                        <div className="absolute top-0 right-0 bg-gradient-to-r from-red-500 to-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-tr-xl rounded-bl-md shadow-md z-10">
+                                          {Math.round(((originalPrice - product.discounted_price) / originalPrice) * 100)}% OFF
+                                        </div>
+                                      )}
+                                      <div className="relative w-full h-[140px] sm:h-[160px] bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 cursor-pointer overflow-hidden" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
+                                        <img src={resolveImageUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                      </div>
+                                      <div className="p-2.5 sm:p-3 space-y-2">
+                                        <h4 className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 cursor-pointer hover:text-pink-600 dark:hover:text-pink-400 transition-colors leading-tight" onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
+                                        {productWeight && (
+                                          <div className="flex items-center gap-1">
+                                            <Package className="w-3 h-3 text-gray-500 dark:text-gray-400" />
+                                            <span className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 font-medium">{productWeight}</span>
+                                          </div>
+                                        )}
+                                        <div className="flex items-baseline gap-1.5">
+                                          <span className="text-sm lg:text-base font-bold text-pink-600 dark:text-pink-400">{formatPrice(productPrice)}</span>
+                                          {hasDiscount && <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 line-through">{formatPrice(originalPrice)}</span>}
+                                        </div>
+                                        <button onClick={() => addToCart({ product, quantity: 1, variant: null, flavor: null, tier: null, combos: [], deliverySlot: null, cakeMessage: '' })} className="w-full py-2 border-2 border-pink-500 dark:border-pink-600 text-pink-600 dark:text-pink-400 text-xs sm:text-sm font-semibold rounded-lg hover:bg-pink-50 dark:hover:bg-pink-900/20 hover:border-pink-600 dark:hover:border-pink-500 transition-all duration-200 active:scale-95">
+                                          + Include
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Section 3: Small Treats for Guests */}
+                        {suggestedSections.smallTreats.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <Package className="w-4 h-4 text-pink-600 dark:text-pink-400 flex-shrink-0" />
+                              <h4 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">Small Treats for Guests</h4>
+                            </div>
+                            <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Brownies, pastries, mini desserts</p>
+                            <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
+                              <div className="flex gap-3 sm:gap-4 pb-2">
+                                {suggestedSections.smallTreats.map((product) => {
+                                  const productPrice = product.discounted_price || product.base_price || 0;
+                                  const originalPrice = product.base_price;
+                                  const hasDiscount = product.discounted_price && product.discounted_price < originalPrice;
+                                  const productWeight = product.base_weight || product.variants?.[0]?.weight || null;
+                                  return (
+                                    <div key={product.id} className="relative flex-shrink-0 w-[140px] sm:w-[160px] lg:w-[170px] bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm hover:shadow-lg dark:hover:shadow-xl dark:hover:shadow-black/30 transition-all duration-300 hover:border-pink-300 dark:hover:border-pink-600 group">
+                                      {hasDiscount && (
+                                        <div className="absolute top-0 right-0 bg-gradient-to-r from-red-500 to-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-tr-xl rounded-bl-md shadow-md z-10">
+                                          {Math.round(((originalPrice - product.discounted_price) / originalPrice) * 100)}% OFF
+                                        </div>
+                                      )}
+                                      <div className="relative w-full h-[140px] sm:h-[160px] bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 cursor-pointer overflow-hidden" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
+                                        <img src={resolveImageUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                      </div>
+                                      <div className="p-2.5 sm:p-3 space-y-2">
+                                        <h4 className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 cursor-pointer hover:text-pink-600 dark:hover:text-pink-400 transition-colors leading-tight" onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
+                                        {productWeight && (
+                                          <div className="flex items-center gap-1">
+                                            <Package className="w-3 h-3 text-gray-500 dark:text-gray-400" />
+                                            <span className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 font-medium">{productWeight}</span>
+                                          </div>
+                                        )}
+                                        <div className="flex items-baseline gap-1.5">
+                                          <span className="text-sm lg:text-base font-bold text-pink-600 dark:text-pink-400">{formatPrice(productPrice)}</span>
+                                          {hasDiscount && <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 line-through">{formatPrice(originalPrice)}</span>}
+                                        </div>
+                                        <button onClick={() => addToCart({ product, quantity: 1, variant: null, flavor: null, tier: null, combos: [], deliverySlot: null, cakeMessage: '' })} className="w-full py-2 border-2 border-pink-500 dark:border-pink-600 text-pink-600 dark:text-pink-400 text-xs sm:text-sm font-semibold rounded-lg hover:bg-pink-50 dark:hover:bg-pink-900/20 hover:border-pink-600 dark:hover:border-pink-500 transition-all duration-200 active:scale-95">
+                                          Add Extra
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Section 4: Upgrade Your Cake - Premium cakes (optional, 1–2) */}
+                        {suggestedSections.premiumCakes.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <TrendingUp className="w-4 h-4 text-pink-600 dark:text-pink-400 flex-shrink-0" />
+                              <h4 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">Upgrade Your Cake</h4>
+                            </div>
+                            <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Premium cakes</p>
+                            <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
+                              <div className="flex gap-3 sm:gap-4 pb-2">
+                                {suggestedSections.premiumCakes.map((product) => {
+                                  const productPrice = product.discounted_price || product.base_price || 0;
+                                  const originalPrice = product.base_price;
+                                  const hasDiscount = product.discounted_price && product.discounted_price < originalPrice;
+                                  const productWeight = product.base_weight || product.variants?.[0]?.weight || null;
+                                  return (
+                                    <div key={product.id} className="relative flex-shrink-0 w-[140px] sm:w-[160px] lg:w-[170px] bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm hover:shadow-lg dark:hover:shadow-xl dark:hover:shadow-black/30 transition-all duration-300 hover:border-pink-300 dark:hover:border-pink-600 group">
+                                      {hasDiscount && (
+                                        <div className="absolute top-0 right-0 bg-gradient-to-r from-red-500 to-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-tr-xl rounded-bl-md shadow-md z-10">
+                                          {Math.round(((originalPrice - product.discounted_price) / originalPrice) * 100)}% OFF
+                                        </div>
+                                      )}
+                                      <div className="relative w-full h-[140px] sm:h-[160px] bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 cursor-pointer overflow-hidden" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
+                                        <img src={resolveImageUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                      </div>
+                                      <div className="p-2.5 sm:p-3 space-y-2">
+                                        <h4 className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 cursor-pointer hover:text-pink-600 dark:hover:text-pink-400 transition-colors leading-tight" onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
+                                        {productWeight && (
+                                          <div className="flex items-center gap-1">
+                                            <Package className="w-3 h-3 text-gray-500 dark:text-gray-400" />
+                                            <span className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 font-medium">{productWeight}</span>
+                                          </div>
+                                        )}
+                                        <div className="flex items-baseline gap-1.5">
+                                          <span className="text-sm lg:text-base font-bold text-pink-600 dark:text-pink-400">{formatPrice(productPrice)}</span>
+                                          {hasDiscount && <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 line-through">{formatPrice(originalPrice)}</span>}
+                                        </div>
+                                        <button onClick={() => addToCart({ product, quantity: 1, variant: null, flavor: null, tier: null, combos: [], deliverySlot: null, cakeMessage: '' })} className="w-full py-2 border-2 border-pink-500 dark:border-pink-600 text-pink-600 dark:text-pink-400 text-xs sm:text-sm font-semibold rounded-lg hover:bg-pink-50 dark:hover:bg-pink-900/20 hover:border-pink-600 dark:hover:border-pink-500 transition-all duration-200 active:scale-95">
+                                          + Add
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </>
@@ -2910,9 +3064,9 @@ export default function CartPage() {
         ) : null;
       })()}
 
-      {/* Mobile Sticky Checkout Bar - sits above MobileFooter when cart has items */}
+      {/* Mobile Sticky Checkout Bar (Amount + Proceed to Checkout) - when cart has items; no bottom nav shown so bar sits at bottom */}
       {mounted && isInitialized && cartItems.length > 0 && (
-        <div className="lg:hidden fixed left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-2xl dark:shadow-black/50 z-40 bottom-[3.6rem]">
+        <div className="lg:hidden fixed left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-2xl dark:shadow-black/50 z-40 bottom-0">
           <div className="max-w-7xl mx-auto px-2 py-1.5">
             {/* Total Box and Checkout Button Row */}
             <div className="flex items-center gap-1.5 mb-1">
@@ -3052,9 +3206,9 @@ export default function CartPage() {
         <Footer />
       </div>
 
-      {/* Mobile Footer - Sticky bottom nav when on cart page */}
+      {/* Mobile Footer (Home, Wishlist, Cart, etc.) - show only when cart is empty after mount to avoid hydration mismatch */}
       <div className="lg:hidden">
-        <MobileFooter />
+        {mounted && cartItems.length === 0 && <MobileFooter />}
       </div>
 
       {/* Duplicate Products Validation Modal */}
