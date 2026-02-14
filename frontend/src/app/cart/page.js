@@ -38,6 +38,7 @@ import addOnApi from '../../api/addOnApi';
 import settingsApi from '../../api/settingsApi';
 import { formatPrice } from '../../utils/priceFormatter';
 import { resolveImageUrl } from '../../utils/imageUrl';
+import { getRecommendationConfig } from '../../utils/cartRecommendationRules';
 
 // Helper functions for formatting dates and times
 const formatDeliveryDate = (date) => {
@@ -253,12 +254,11 @@ export default function CartPage() {
   const [selectedItemForActions, setSelectedItemForActions] = useState(null);
   const [suggestedProducts, setSuggestedProducts] = useState([]);
   const [suggestedProductsLoading, setSuggestedProductsLoading] = useState(false);
-  // Recommendation sections: addOns, gift (flowers/sweets), smallTreats, premiumCakes
+  // Recommendation sections: addOns, gift (flowers/sweets), smallTreats (3 sections only)
   const [suggestedSections, setSuggestedSections] = useState({
     addOns: [],
     gift: [],
-    smallTreats: [],
-    premiumCakes: []
+    smallTreats: []
   });
   const [suggestedSectionsLoading, setSuggestedSectionsLoading] = useState(false);
   const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState(1500); // Default value, will be fetched from API
@@ -311,54 +311,67 @@ export default function CartPage() {
     fetchSuggestedProducts();
   }, [mounted, isInitialized, cartItems.length]);
 
-  // Fetch all 4 recommendation sections: Add-ons, Gift (flowers/sweets), Small Treats, Premium Cakes
+  // Fetch recommendation sections using rules (when to show flowers vs sweets vs small treats, limits)
+  const cartTotalForRules = useMemo(() => cartItems.reduce((sum, i) => sum + (i.totalPrice || 0), 0), [cartItems]);
   useEffect(() => {
     const extractProducts = (res) => res?.products || res?.data?.products || [];
     const cartProductIds = new Set(cartItems.map(item => item.product?.id));
+    const config = getRecommendationConfig(cartItems);
 
     const fetchSections = async () => {
       if (!mounted || !isInitialized) return;
       setSuggestedSectionsLoading(true);
       try {
-        const [
-          addOnProductsAll,
-          flowersRes,
-          sweetsRes,
-          treatsRes,
-          premiumRes
-        ] = await Promise.all([
-          addOnApi.getAddOnProducts(),
-          productApi.getProductsByCategory('flowers', null, { page: 1, limit: 6 }),
-          productApi.getProductsByCategory('sweets-dry-fruits', null, { page: 1, limit: 6 }),
-          productApi.getProductsByCategory('small-treats-desserts', null, { page: 1, limit: 6 }),
-          productApi.getProductsByCategory('crowd-favorite-cakes', null, { page: 1, limit: 2, sortBy: 'price-high' })
-        ]);
+        const promises = [];
 
-        const flowers = extractProducts(flowersRes);
-        const sweets = extractProducts(sweetsRes);
-        const giftCombined = [...flowers, ...sweets].sort(() => Math.random() - 0.5).slice(0, 6);
-        const giftFiltered = giftCombined.filter(p => !cartProductIds.has(p.id));
+        if (config.fetchAddOns) {
+          promises.push(addOnApi.getAddOnProducts());
+        }
+        if (config.fetchGift) {
+          promises.push(productApi.getProductsByCategory('flowers', null, { page: 1, limit: config.flowersLimit }));
+          promises.push(productApi.getProductsByCategory('sweets-dry-fruits', null, { page: 1, limit: config.sweetsLimit }));
+        }
+        if (config.fetchSmallTreats) {
+          promises.push(productApi.getProductsByCategory('small-treats-desserts', null, { page: 1, limit: config.smallTreatsLimit }));
+        }
 
-        const treats = extractProducts(treatsRes).filter(p => !cartProductIds.has(p.id)).slice(0, 6);
-        const premium = extractProducts(premiumRes).filter(p => !cartProductIds.has(p.id)).slice(0, 2);
+        const results = await Promise.all(promises);
+        let idx = 0;
 
-        const addOns = Array.isArray(addOnProductsAll) ? addOnProductsAll.slice(0, 8) : [];
+        const addOns = config.fetchAddOns
+          ? (Array.isArray(results[idx]) ? results[idx] : []).slice(0, config.addOnsLimit)
+          : [];
+        if (config.fetchAddOns) idx += 1;
+
+        let gift = [];
+        if (config.fetchGift) {
+          const flowers = extractProducts(results[idx]);
+          const sweets = extractProducts(results[idx + 1]);
+          idx += 2;
+          gift = [...flowers, ...sweets]
+            .sort(() => Math.random() - 0.5)
+            .filter(p => !cartProductIds.has(p.id))
+            .slice(0, config.totalGiftLimit);
+        }
+
+        const smallTreats = config.fetchSmallTreats
+          ? extractProducts(results[idx]).filter(p => !cartProductIds.has(p.id)).slice(0, config.smallTreatsLimit)
+          : [];
 
         setSuggestedSections({
           addOns,
-          gift: giftFiltered,
-          smallTreats: treats,
-          premiumCakes: premium
+          gift,
+          smallTreats
         });
       } catch (error) {
         console.error('Error fetching recommendation sections:', error);
-        setSuggestedSections({ addOns: [], gift: [], smallTreats: [], premiumCakes: [] });
+        setSuggestedSections({ addOns: [], gift: [], smallTreats: [] });
       } finally {
         setSuggestedSectionsLoading(false);
       }
     };
     fetchSections();
-  }, [mounted, isInitialized, cartItems.length]);
+  }, [mounted, isInitialized, cartItems.length, cartTotalForRules]);
 
   // Expand all items by default when cart items change
   useEffect(() => {
@@ -2777,13 +2790,13 @@ export default function CartPage() {
               </div>
 
               {/* You May Also Like Section - Collapsible */}
-              <div className="mt-4 sm:mt-6 mb-12 lg:mb-0 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-xl dark:shadow-black/20 p-4 sm:p-6 lg:overflow-hidden lg:min-w-0 lg:max-w-full lg:w-full">
+              <div className="mt-4 sm:mt-6 mb-12 lg:mb-0 bg-gray-50/50 dark:bg-gray-800/80 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-xl dark:shadow-black/20 p-4 sm:p-6 lg:overflow-hidden lg:min-w-0 lg:max-w-full lg:w-full">
                 <button
                   onClick={() => setIsYouMayAlsoLikeOpen(!isYouMayAlsoLikeOpen)}
                   className="flex items-center justify-between w-full mb-2 sm:mb-4"
                 >
                   <div className="flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-pink-600 dark:text-pink-400" />
+                    <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 dark:text-gray-400" />
                     <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">You May Also Like</h3>
                 </div>
                   {isYouMayAlsoLikeOpen ? (
@@ -2794,7 +2807,7 @@ export default function CartPage() {
                 </button>
                 {isYouMayAlsoLikeOpen && (
                   <>
-                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 mb-3 sm:mb-4">
+                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-4 sm:mb-5">
                       Add these popular items to complete your order
                     </p>
                     
@@ -2803,7 +2816,7 @@ export default function CartPage() {
                         <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-pink-600"></div>
                         <p className="text-xs sm:text-sm text-gray-400 dark:text-gray-500 mt-2">Loading suggestions...</p>
                       </div>
-                    ) : (suggestedSections.addOns.length === 0 && suggestedSections.gift.length === 0 && suggestedSections.smallTreats.length === 0 && suggestedSections.premiumCakes.length === 0) ? (
+                    ) : (suggestedSections.addOns.length === 0 && suggestedSections.gift.length === 0 && suggestedSections.smallTreats.length === 0) ? (
                       <div className="text-center py-6 sm:py-8 text-gray-400 dark:text-gray-400">
                         <Package className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 opacity-50" />
                         <p className="text-xs sm:text-sm">No suggestions available at the moment</p>
@@ -2813,11 +2826,12 @@ export default function CartPage() {
                         {/* Section 1: Make Your Cake Extra Special - Add-ons */}
                         {suggestedSections.addOns.length > 0 && (
                           <div>
-                            <div className="flex items-center gap-2 mb-2">
-                              <Sparkles className="w-4 h-4 text-pink-600 dark:text-pink-400 flex-shrink-0" />
+                            <div className="flex items-center gap-2 mb-1">
+                              <Sparkles className="w-4 h-4 text-amber-500 dark:text-amber-400 flex-shrink-0" />
                               <h4 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">Make Your Cake Extra Special</h4>
                             </div>
-                            <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Add-ons (candles, balloons, toppers)</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Candles, balloons, toppers</p>
+                            <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-500 mb-3">Make the moment memorable—add to your cake in one tap.</p>
                             <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
                               <div className="flex gap-3 sm:gap-4 pb-2">
                                 {suggestedSections.addOns.map((item) => {
@@ -2849,14 +2863,14 @@ export default function CartPage() {
                                     showSuccess('Added', `${item.name} added to your cake.`);
                                   };
                                   return (
-                                    <div key={item.id} className="relative flex-shrink-0 w-[140px] sm:w-[160px] bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm hover:shadow-lg dark:hover:shadow-xl dark:hover:shadow-black/30 transition-all duration-300 hover:border-pink-300 dark:hover:border-pink-600 group">
-                                      <div className="relative w-full h-[100px] sm:h-[120px] bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 overflow-hidden">
-                                        <img src={resolveImageUrl(item.image_url)} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                    <div key={item.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-gray-500 transition-all duration-200 group">
+                                      <div className="relative w-full h-[90px] sm:h-[100px] bg-gray-50 dark:bg-gray-700/50 overflow-hidden rounded-t-lg">
+                                        <img src={resolveImageUrl(item.image_url)} alt={item.name} className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-200" />
                                       </div>
-                                      <div className="p-2.5 sm:p-3 space-y-1.5">
-                                        <h4 className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight">{item.name}</h4>
-                                        <p className="text-sm font-bold text-pink-600 dark:text-pink-400">{formatPrice(price)}</p>
-                                        <button onClick={handleAddAddOn} className="w-full py-2 border-2 border-pink-500 dark:border-pink-600 text-pink-600 dark:text-pink-400 text-xs sm:text-sm font-semibold rounded-lg hover:bg-pink-50 dark:hover:bg-pink-900/20 transition-all duration-200 active:scale-95">
+                                      <div className="p-2 space-y-1">
+                                        <h4 className="text-[11px] sm:text-xs font-medium text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight min-h-[2rem]">{item.name}</h4>
+                                        <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">{formatPrice(price)}</p>
+                                        <button onClick={handleAddAddOn} className="w-full py-1.5 text-[11px] sm:text-xs font-medium rounded-md border border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-400 dark:hover:border-gray-400 transition-colors active:scale-[0.98]">
                                           + Include
                                         </button>
                                       </div>
@@ -2871,11 +2885,12 @@ export default function CartPage() {
                         {/* Section 2: Complete Your Gift - Flowers, chocolates, dry fruits */}
                         {suggestedSections.gift.length > 0 && (
                           <div>
-                            <div className="flex items-center gap-2 mb-2">
-                              <Gift className="w-4 h-4 text-pink-600 dark:text-pink-400 flex-shrink-0" />
+                            <div className="flex items-center gap-2 mb-1">
+                              <Gift className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                               <h4 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">Complete Your Gift</h4>
                             </div>
-                            <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Flowers, chocolates, teddy, dry fruits</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Flowers, chocolates, teddy, dry fruits</p>
+                            <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-500 mb-3">Pair with your cake for a complete, gift-ready surprise.</p>
                             <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
                               <div className="flex gap-3 sm:gap-4 pb-2">
                                 {suggestedSections.gift.map((product) => {
@@ -2884,29 +2899,29 @@ export default function CartPage() {
                                   const hasDiscount = product.discounted_price && product.discounted_price < originalPrice;
                                   const productWeight = product.base_weight || product.variants?.[0]?.weight || null;
                                   return (
-                                    <div key={product.id} className="relative flex-shrink-0 w-[140px] sm:w-[160px] lg:w-[170px] bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm hover:shadow-lg dark:hover:shadow-xl dark:hover:shadow-black/30 transition-all duration-300 hover:border-pink-300 dark:hover:border-pink-600 group">
+                                    <div key={product.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] lg:w-[160px] bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-gray-500 transition-all duration-200 group">
                                       {hasDiscount && (
-                                        <div className="absolute top-0 right-0 bg-gradient-to-r from-red-500 to-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-tr-xl rounded-bl-md shadow-md z-10">
+                                        <div className="absolute top-0 right-0 bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-bl-md z-10">
                                           {Math.round(((originalPrice - product.discounted_price) / originalPrice) * 100)}% OFF
                                         </div>
                                       )}
-                                      <div className="relative w-full h-[140px] sm:h-[160px] bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 cursor-pointer overflow-hidden" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
-                                        <img src={resolveImageUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                      <div className="relative w-full h-[110px] sm:h-[120px] bg-gray-50 dark:bg-gray-700/50 cursor-pointer overflow-hidden rounded-t-lg" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
+                                        <img src={resolveImageUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
                                       </div>
-                                      <div className="p-2.5 sm:p-3 space-y-2">
-                                        <h4 className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 cursor-pointer hover:text-pink-600 dark:hover:text-pink-400 transition-colors leading-tight" onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
+                                      <div className="p-2 space-y-1">
+                                        <h4 className="text-[11px] sm:text-xs font-medium text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight min-h-[2rem] cursor-pointer hover:text-gray-600 dark:hover:text-gray-300 transition-colors" onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
                                         {productWeight && (
                                           <div className="flex items-center gap-1">
-                                            <Package className="w-3 h-3 text-gray-500 dark:text-gray-400" />
-                                            <span className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 font-medium">{productWeight}</span>
+                                            <Package className="w-3 h-3 text-gray-400 dark:text-gray-500" />
+                                            <span className="text-[10px] text-gray-500 dark:text-gray-400">{productWeight}</span>
                                           </div>
                                         )}
-                                        <div className="flex items-baseline gap-1.5">
-                                          <span className="text-sm lg:text-base font-bold text-pink-600 dark:text-pink-400">{formatPrice(productPrice)}</span>
-                                          {hasDiscount && <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 line-through">{formatPrice(originalPrice)}</span>}
+                                        <div className="flex items-baseline gap-1.5 flex-wrap">
+                                          <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">{formatPrice(productPrice)}</span>
+                                          {hasDiscount && <span className="text-[10px] text-gray-400 line-through">{formatPrice(originalPrice)}</span>}
                                         </div>
-                                        <button onClick={() => addToCart({ product, quantity: 1, variant: null, flavor: null, tier: null, combos: [], deliverySlot: null, cakeMessage: '' })} className="w-full py-2 border-2 border-pink-500 dark:border-pink-600 text-pink-600 dark:text-pink-400 text-xs sm:text-sm font-semibold rounded-lg hover:bg-pink-50 dark:hover:bg-pink-900/20 hover:border-pink-600 dark:hover:border-pink-500 transition-all duration-200 active:scale-95">
-                                          + Include
+                                        <button onClick={() => addToCart({ product, quantity: 1, variant: null, flavor: null, tier: null, combos: [], deliverySlot: null, cakeMessage: '' })} className="w-full py-1.5 text-[11px] sm:text-xs font-medium rounded-md border border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-400 dark:hover:border-gray-400 transition-colors active:scale-[0.98]">
+                                          + Add
                                         </button>
                                       </div>
                                     </div>
@@ -2920,11 +2935,12 @@ export default function CartPage() {
                         {/* Section 3: Small Treats for Guests */}
                         {suggestedSections.smallTreats.length > 0 && (
                           <div>
-                            <div className="flex items-center gap-2 mb-2">
-                              <Package className="w-4 h-4 text-pink-600 dark:text-pink-400 flex-shrink-0" />
+                            <div className="flex items-center gap-2 mb-1">
+                              <Package className="w-4 h-4 text-slate-600 dark:text-slate-400 flex-shrink-0" />
                               <h4 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">Small Treats for Guests</h4>
                             </div>
-                            <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Brownies, pastries, mini desserts</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Brownies, pastries, mini desserts</p>
+                            <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-500 mb-3">Light bites everyone will love—easy to add.</p>
                             <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
                               <div className="flex gap-3 sm:gap-4 pb-2">
                                 {suggestedSections.smallTreats.map((product) => {
@@ -2933,29 +2949,29 @@ export default function CartPage() {
                                   const hasDiscount = product.discounted_price && product.discounted_price < originalPrice;
                                   const productWeight = product.base_weight || product.variants?.[0]?.weight || null;
                                   return (
-                                    <div key={product.id} className="relative flex-shrink-0 w-[140px] sm:w-[160px] lg:w-[170px] bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm hover:shadow-lg dark:hover:shadow-xl dark:hover:shadow-black/30 transition-all duration-300 hover:border-pink-300 dark:hover:border-pink-600 group">
+                                    <div key={product.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] lg:w-[160px] bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-gray-500 transition-all duration-200 group">
                                       {hasDiscount && (
-                                        <div className="absolute top-0 right-0 bg-gradient-to-r from-red-500 to-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-tr-xl rounded-bl-md shadow-md z-10">
+                                        <div className="absolute top-0 right-0 bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-bl-md z-10">
                                           {Math.round(((originalPrice - product.discounted_price) / originalPrice) * 100)}% OFF
                                         </div>
                                       )}
-                                      <div className="relative w-full h-[140px] sm:h-[160px] bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 cursor-pointer overflow-hidden" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
-                                        <img src={resolveImageUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                      <div className="relative w-full h-[110px] sm:h-[120px] bg-gray-50 dark:bg-gray-700/50 cursor-pointer overflow-hidden rounded-t-lg" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
+                                        <img src={resolveImageUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
                                       </div>
-                                      <div className="p-2.5 sm:p-3 space-y-2">
-                                        <h4 className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 cursor-pointer hover:text-pink-600 dark:hover:text-pink-400 transition-colors leading-tight" onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
+                                      <div className="p-2 space-y-1">
+                                        <h4 className="text-[11px] sm:text-xs font-medium text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight min-h-[2rem] cursor-pointer hover:text-gray-600 dark:hover:text-gray-300 transition-colors" onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
                                         {productWeight && (
                                           <div className="flex items-center gap-1">
-                                            <Package className="w-3 h-3 text-gray-500 dark:text-gray-400" />
-                                            <span className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 font-medium">{productWeight}</span>
+                                            <Package className="w-3 h-3 text-gray-400 dark:text-gray-500" />
+                                            <span className="text-[10px] text-gray-500 dark:text-gray-400">{productWeight}</span>
                                           </div>
                                         )}
-                                        <div className="flex items-baseline gap-1.5">
-                                          <span className="text-sm lg:text-base font-bold text-pink-600 dark:text-pink-400">{formatPrice(productPrice)}</span>
-                                          {hasDiscount && <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 line-through">{formatPrice(originalPrice)}</span>}
+                                        <div className="flex items-baseline gap-1.5 flex-wrap">
+                                          <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">{formatPrice(productPrice)}</span>
+                                          {hasDiscount && <span className="text-[10px] text-gray-400 line-through">{formatPrice(originalPrice)}</span>}
                                         </div>
-                                        <button onClick={() => addToCart({ product, quantity: 1, variant: null, flavor: null, tier: null, combos: [], deliverySlot: null, cakeMessage: '' })} className="w-full py-2 border-2 border-pink-500 dark:border-pink-600 text-pink-600 dark:text-pink-400 text-xs sm:text-sm font-semibold rounded-lg hover:bg-pink-50 dark:hover:bg-pink-900/20 hover:border-pink-600 dark:hover:border-pink-500 transition-all duration-200 active:scale-95">
-                                          Add Extra
+                                        <button onClick={() => addToCart({ product, quantity: 1, variant: null, flavor: null, tier: null, combos: [], deliverySlot: null, cakeMessage: '' })} className="w-full py-1.5 text-[11px] sm:text-xs font-medium rounded-md border border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-400 dark:hover:border-gray-400 transition-colors active:scale-[0.98]">
+                                          + Add Extra
                                         </button>
                                       </div>
                                     </div>
@@ -2966,54 +2982,6 @@ export default function CartPage() {
                           </div>
                         )}
 
-                        {/* Section 4: Upgrade Your Cake - Premium cakes (optional, 1–2) */}
-                        {suggestedSections.premiumCakes.length > 0 && (
-                          <div>
-                            <div className="flex items-center gap-2 mb-2">
-                              <TrendingUp className="w-4 h-4 text-pink-600 dark:text-pink-400 flex-shrink-0" />
-                              <h4 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">Upgrade Your Cake</h4>
-                            </div>
-                            <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Premium cakes</p>
-                            <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
-                              <div className="flex gap-3 sm:gap-4 pb-2">
-                                {suggestedSections.premiumCakes.map((product) => {
-                                  const productPrice = product.discounted_price || product.base_price || 0;
-                                  const originalPrice = product.base_price;
-                                  const hasDiscount = product.discounted_price && product.discounted_price < originalPrice;
-                                  const productWeight = product.base_weight || product.variants?.[0]?.weight || null;
-                                  return (
-                                    <div key={product.id} className="relative flex-shrink-0 w-[140px] sm:w-[160px] lg:w-[170px] bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm hover:shadow-lg dark:hover:shadow-xl dark:hover:shadow-black/30 transition-all duration-300 hover:border-pink-300 dark:hover:border-pink-600 group">
-                                      {hasDiscount && (
-                                        <div className="absolute top-0 right-0 bg-gradient-to-r from-red-500 to-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-tr-xl rounded-bl-md shadow-md z-10">
-                                          {Math.round(((originalPrice - product.discounted_price) / originalPrice) * 100)}% OFF
-                                        </div>
-                                      )}
-                                      <div className="relative w-full h-[140px] sm:h-[160px] bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 cursor-pointer overflow-hidden" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
-                                        <img src={resolveImageUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                                      </div>
-                                      <div className="p-2.5 sm:p-3 space-y-2">
-                                        <h4 className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 cursor-pointer hover:text-pink-600 dark:hover:text-pink-400 transition-colors leading-tight" onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
-                                        {productWeight && (
-                                          <div className="flex items-center gap-1">
-                                            <Package className="w-3 h-3 text-gray-500 dark:text-gray-400" />
-                                            <span className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 font-medium">{productWeight}</span>
-                                          </div>
-                                        )}
-                                        <div className="flex items-baseline gap-1.5">
-                                          <span className="text-sm lg:text-base font-bold text-pink-600 dark:text-pink-400">{formatPrice(productPrice)}</span>
-                                          {hasDiscount && <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 line-through">{formatPrice(originalPrice)}</span>}
-                                        </div>
-                                        <button onClick={() => addToCart({ product, quantity: 1, variant: null, flavor: null, tier: null, combos: [], deliverySlot: null, cakeMessage: '' })} className="w-full py-2 border-2 border-pink-500 dark:border-pink-600 text-pink-600 dark:text-pink-400 text-xs sm:text-sm font-semibold rounded-lg hover:bg-pink-50 dark:hover:bg-pink-900/20 hover:border-pink-600 dark:hover:border-pink-500 transition-all duration-200 active:scale-95">
-                                          + Add
-                                        </button>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          </div>
-                        )}
                       </div>
                     )}
                   </>
