@@ -2778,10 +2778,10 @@ export default function CartPage() {
                   )}
                 </div>
 
-                {/* Checkout Button - Hidden on mobile, shown on desktop; height matches PDP Add to Cart (52px) */}
+                {/* Checkout Button - Hidden on mobile, shown on desktop */}
                 <button
                   onClick={handleCheckout}
-                  className="hidden lg:block w-full min-h-[52px] py-2.5 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white rounded-lg hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all duration-200 font-semibold text-base sm:text-lg shadow-lg dark:shadow-xl dark:shadow-black/30 hover:shadow-xl transform hover:scale-[1.02]"
+                  className="hidden lg:block w-full min-h-[48px] py-2 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white rounded-lg hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all duration-200 font-semibold text-base sm:text-lg shadow-lg dark:shadow-xl dark:shadow-black/30 hover:shadow-xl transform hover:scale-[1.02]"
                 >
                   PROCEED TO CHECKOUT
                 </button>
@@ -2795,24 +2795,26 @@ export default function CartPage() {
               </div>
 
               {/* You May Also Like Section - Collapsible */}
-              <div className="mt-4 sm:mt-6 mb-12 lg:mb-0 bg-gray-50/50 dark:bg-gray-800/80 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-xl dark:shadow-black/20 p-4 sm:p-6 lg:overflow-hidden lg:min-w-0 lg:max-w-full lg:w-full">
+              <div className="mt-4 sm:mt-6 mb-12 lg:mb-0 bg-gradient-to-br from-pink-50/80 to-rose-50/60 dark:from-pink-900/10 dark:to-rose-900/10 rounded-xl border border-pink-200/60 dark:border-pink-800/50 shadow-md dark:shadow-xl dark:shadow-black/20 p-4 sm:p-6 lg:overflow-hidden lg:min-w-0 lg:max-w-full lg:w-full">
                 <button
                   onClick={() => setIsYouMayAlsoLikeOpen(!isYouMayAlsoLikeOpen)}
-                  className="flex items-center justify-between w-full mb-2 sm:mb-4"
+                  className="flex items-center justify-between w-full mb-2 sm:mb-4 group/header"
                 >
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 dark:text-gray-400" />
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 rounded-lg bg-pink-100 dark:bg-pink-900/40">
+                      <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-pink-600 dark:text-pink-400" />
+                    </div>
                     <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">You May Also Like</h3>
                 </div>
                   {isYouMayAlsoLikeOpen ? (
-                    <ChevronUp className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                    <ChevronUp className="w-4 h-4 text-pink-500 dark:text-pink-400" />
                   ) : (
-                    <ChevronDown className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                    <ChevronDown className="w-4 h-4 text-pink-500 dark:text-pink-400" />
                   )}
                 </button>
                 {isYouMayAlsoLikeOpen && (
                   <>
-                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-4 sm:mb-5">
+                    <p className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 mb-4 sm:mb-5">
                       Add these popular items to complete your order
                     </p>
                     
@@ -2832,11 +2834,13 @@ export default function CartPage() {
                         {suggestedSections.addOns.length > 0 && (
                           <div>
                             <div className="flex items-center gap-2 mb-1">
-                              <Sparkles className="w-4 h-4 text-amber-500 dark:text-amber-400 flex-shrink-0" />
+                              <div className="p-1 rounded-md bg-amber-100 dark:bg-amber-800/40">
+                                <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                              </div>
                               <h4 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">Make Your Cake Extra Special</h4>
                             </div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Candles, balloons, toppers</p>
-                            <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-500 mb-3">Make the moment memorable—add to your cake in one tap.</p>
+                            <p className="text-xs text-amber-800/80 dark:text-amber-200/80 mb-0.5">Candles, balloons, toppers</p>
+                            <p className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mb-3">Make the moment memorable—add to your cake in one tap.</p>
                             <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
                               <div className="flex gap-3 sm:gap-4 pb-2">
                                 {suggestedSections.addOns.map((item) => {
@@ -2868,14 +2872,14 @@ export default function CartPage() {
                                     showSuccess('Added', `${item.name} added to your cake.`);
                                   };
                                   return (
-                                    <div key={item.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-gray-500 transition-all duration-200 group">
-                                      <div className="relative w-full h-[90px] sm:h-[100px] bg-gray-50 dark:bg-gray-700/50 overflow-hidden rounded-t-lg">
+                                    <div key={item.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] bg-white dark:bg-gray-800 rounded-xl border border-amber-200/70 dark:border-amber-600/40 overflow-hidden shadow-md hover:shadow-lg hover:border-amber-300 dark:hover:border-amber-500/60 transition-all duration-200 group">
+                                      <div className="relative w-full h-[90px] sm:h-[100px] bg-amber-50/80 dark:bg-amber-900/20 overflow-hidden rounded-t-xl">
                                         <img src={resolveImageUrl(item.image_url)} alt={item.name} className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-200" loading="lazy" />
                                       </div>
                                       <div className="p-2 space-y-1">
-                                        <h4 className="text-[11px] sm:text-xs font-medium text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight min-h-[2rem]">{item.name}</h4>
-                                        <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">{formatPrice(price)}</p>
-                                        <button onClick={handleAddAddOn} className="w-full py-1.5 text-[11px] sm:text-xs font-medium rounded-md border border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-400 dark:hover:border-gray-400 transition-colors active:scale-[0.98]">
+                                        <h4 className="text-[11px] sm:text-xs font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight min-h-[2rem]">{item.name}</h4>
+                                        <p className="text-xs font-bold text-amber-700 dark:text-amber-400">{formatPrice(price)}</p>
+                                        <button onClick={handleAddAddOn} className="w-full py-1.5 text-[11px] sm:text-xs font-semibold rounded-lg border-2 border-amber-500 dark:border-amber-500 text-amber-700 dark:text-amber-300 bg-amber-50/80 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-800/30 hover:border-amber-600 transition-colors active:scale-[0.98]">
                                           + Include
                                         </button>
                                       </div>
@@ -2891,11 +2895,13 @@ export default function CartPage() {
                         {suggestedSections.gift.length > 0 && (
                           <div>
                             <div className="flex items-center gap-2 mb-1">
-                              <Gift className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                              <div className="p-1 rounded-md bg-emerald-100 dark:bg-emerald-800/40">
+                                <Gift className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                              </div>
                               <h4 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">Complete Your Gift</h4>
                             </div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Flowers, chocolates, teddy, dry fruits</p>
-                            <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-500 mb-3">Pair with your cake for a complete, gift-ready surprise.</p>
+                            <p className="text-xs text-emerald-800/80 dark:text-emerald-200/80 mb-0.5">Flowers, chocolates, teddy, dry fruits</p>
+                            <p className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mb-3">Pair with your cake for a complete, gift-ready surprise.</p>
                             <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
                               <div className="flex gap-3 sm:gap-4 pb-2">
                                 {suggestedSections.gift.map((product) => {
@@ -2904,28 +2910,28 @@ export default function CartPage() {
                                   const hasDiscount = product.discounted_price && product.discounted_price < originalPrice;
                                   const productWeight = product.base_weight || product.variants?.[0]?.weight || null;
                                   return (
-                                    <div key={product.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] lg:w-[160px] bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-gray-500 transition-all duration-200 group">
+                                    <div key={product.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] lg:w-[160px] bg-white dark:bg-gray-800 rounded-xl border border-emerald-200/70 dark:border-emerald-600/40 overflow-hidden shadow-md hover:shadow-lg hover:border-emerald-300 dark:hover:border-emerald-500/60 transition-all duration-200 group">
                                       {hasDiscount && (
                                         <div className="absolute top-0 right-0 bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-bl-md z-10">
                                           {Math.round(((originalPrice - product.discounted_price) / originalPrice) * 100)}% OFF
                                         </div>
                                       )}
-                                      <div className="relative w-full h-[110px] sm:h-[120px] bg-gray-50 dark:bg-gray-700/50 cursor-pointer overflow-hidden rounded-t-lg" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
+                                      <div className="relative w-full h-[110px] sm:h-[120px] bg-emerald-50/70 dark:bg-emerald-900/20 cursor-pointer overflow-hidden rounded-t-xl" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
                                         <img src={resolveImageUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" loading="lazy" />
                                       </div>
                                       <div className="p-2 space-y-1">
-                                        <h4 className="text-[11px] sm:text-xs font-medium text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight min-h-[2rem] cursor-pointer hover:text-gray-600 dark:hover:text-gray-300 transition-colors" onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
+                                        <h4 className="text-[11px] sm:text-xs font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight min-h-[2rem] cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors" onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
                                         {productWeight && (
                                           <div className="flex items-center gap-1">
-                                            <Package className="w-3 h-3 text-gray-400 dark:text-gray-500" />
-                                            <span className="text-[10px] text-gray-500 dark:text-gray-400">{productWeight}</span>
+                                            <Package className="w-3 h-3 text-emerald-500 dark:text-emerald-400" />
+                                            <span className="text-[10px] text-gray-600 dark:text-gray-400">{productWeight}</span>
                                           </div>
                                         )}
                                         <div className="flex items-baseline gap-1.5 flex-wrap">
-                                          <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">{formatPrice(productPrice)}</span>
+                                          <span className="text-xs font-bold text-pink-600 dark:text-pink-400">{formatPrice(productPrice)}</span>
                                           {hasDiscount && <span className="text-[10px] text-gray-400 line-through">{formatPrice(originalPrice)}</span>}
                                         </div>
-                                        <button onClick={() => addToCart({ product, quantity: 1, variant: null, flavor: null, tier: null, combos: [], deliverySlot: null, cakeMessage: '' })} className="w-full py-1.5 text-[11px] sm:text-xs font-medium rounded-md border border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-400 dark:hover:border-gray-400 transition-colors active:scale-[0.98]">
+                                        <button onClick={() => addToCart({ product, quantity: 1, variant: null, flavor: null, tier: null, combos: [], deliverySlot: null, cakeMessage: '' })} className="w-full py-1.5 text-[11px] sm:text-xs font-semibold rounded-lg border-2 border-emerald-500 dark:border-emerald-500 text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-800/30 hover:border-emerald-600 transition-colors active:scale-[0.98]">
                                           + Add
                                         </button>
                                       </div>
@@ -2941,11 +2947,13 @@ export default function CartPage() {
                         {suggestedSections.smallTreats.length > 0 && (
                           <div>
                             <div className="flex items-center gap-2 mb-1">
-                              <Package className="w-4 h-4 text-slate-600 dark:text-slate-400 flex-shrink-0" />
+                              <div className="p-1 rounded-md bg-rose-100 dark:bg-rose-800/40">
+                                <Package className="w-4 h-4 text-rose-600 dark:text-rose-400 flex-shrink-0" />
+                              </div>
                               <h4 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">Small Treats for Guests</h4>
                             </div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Brownies, pastries, mini desserts</p>
-                            <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-500 mb-3">Light bites everyone will love—easy to add.</p>
+                            <p className="text-xs text-rose-800/80 dark:text-rose-200/80 mb-0.5">Brownies, pastries, mini desserts</p>
+                            <p className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mb-3">Light bites everyone will love—easy to add.</p>
                             <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
                               <div className="flex gap-3 sm:gap-4 pb-2">
                                 {suggestedSections.smallTreats.map((product) => {
@@ -2954,28 +2962,28 @@ export default function CartPage() {
                                   const hasDiscount = product.discounted_price && product.discounted_price < originalPrice;
                                   const productWeight = product.base_weight || product.variants?.[0]?.weight || null;
                                   return (
-                                    <div key={product.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] lg:w-[160px] bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-gray-500 transition-all duration-200 group">
+                                    <div key={product.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] lg:w-[160px] bg-white dark:bg-gray-800 rounded-xl border border-rose-200/70 dark:border-rose-600/40 overflow-hidden shadow-md hover:shadow-lg hover:border-rose-300 dark:hover:border-rose-500/60 transition-all duration-200 group">
                                       {hasDiscount && (
                                         <div className="absolute top-0 right-0 bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-bl-md z-10">
                                           {Math.round(((originalPrice - product.discounted_price) / originalPrice) * 100)}% OFF
                                         </div>
                                       )}
-                                      <div className="relative w-full h-[110px] sm:h-[120px] bg-gray-50 dark:bg-gray-700/50 cursor-pointer overflow-hidden rounded-t-lg" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
+                                      <div className="relative w-full h-[110px] sm:h-[120px] bg-rose-50/70 dark:bg-rose-900/20 cursor-pointer overflow-hidden rounded-t-xl" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
                                         <img src={resolveImageUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" loading="lazy" />
                                       </div>
                                       <div className="p-2 space-y-1">
-                                        <h4 className="text-[11px] sm:text-xs font-medium text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight min-h-[2rem] cursor-pointer hover:text-gray-600 dark:hover:text-gray-300 transition-colors" onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
+                                        <h4 className="text-[11px] sm:text-xs font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight min-h-[2rem] cursor-pointer hover:text-rose-600 dark:hover:text-rose-400 transition-colors" onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
                                         {productWeight && (
                                           <div className="flex items-center gap-1">
-                                            <Package className="w-3 h-3 text-gray-400 dark:text-gray-500" />
-                                            <span className="text-[10px] text-gray-500 dark:text-gray-400">{productWeight}</span>
+                                            <Package className="w-3 h-3 text-rose-500 dark:text-rose-400" />
+                                            <span className="text-[10px] text-gray-600 dark:text-gray-400">{productWeight}</span>
                                           </div>
                                         )}
                                         <div className="flex items-baseline gap-1.5 flex-wrap">
-                                          <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">{formatPrice(productPrice)}</span>
+                                          <span className="text-xs font-bold text-pink-600 dark:text-pink-400">{formatPrice(productPrice)}</span>
                                           {hasDiscount && <span className="text-[10px] text-gray-400 line-through">{formatPrice(originalPrice)}</span>}
                                         </div>
-                                        <button onClick={() => addToCart({ product, quantity: 1, variant: null, flavor: null, tier: null, combos: [], deliverySlot: null, cakeMessage: '' })} className="w-full py-1.5 text-[11px] sm:text-xs font-medium rounded-md border border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-400 dark:hover:border-gray-400 transition-colors active:scale-[0.98]">
+                                        <button onClick={() => addToCart({ product, quantity: 1, variant: null, flavor: null, tier: null, combos: [], deliverySlot: null, cakeMessage: '' })} className="w-full py-1.5 text-[11px] sm:text-xs font-semibold rounded-lg border-2 border-rose-500 dark:border-rose-500 text-rose-700 dark:text-rose-300 bg-rose-50/80 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-800/30 hover:border-rose-600 transition-colors active:scale-[0.98]">
                                           + Add Extra
                                         </button>
                                       </div>
@@ -3041,9 +3049,9 @@ export default function CartPage() {
       {mounted && isInitialized && cartItems.length > 0 && (
         <div className="lg:hidden fixed left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-black/40 z-40 bottom-0">
           <div className="max-w-7xl mx-auto px-2 py-1">
-            {/* Total Box and Checkout Button Row - same height as PDP Add to Cart (52px) */}
+            {/* Total Box and Checkout Button Row */}
             <div className="flex items-center gap-1.5 mb-0.5">
-              <div className="w-[20vw] min-w-[64px] h-[52px] bg-gray-50 dark:bg-gray-700/50 rounded-lg px-1.5 py-1 border border-pink-300 dark:border-pink-500/50 flex items-center justify-center shrink-0">
+              <div className="w-[20vw] min-w-[64px] h-[48px] bg-gray-50 dark:bg-gray-700/50 rounded-lg px-1.5 py-1 border border-pink-300 dark:border-pink-500/50 flex items-center justify-center shrink-0">
                 <div className="flex flex-col items-center justify-center text-center leading-tight">
                   <p className="text-xs font-bold text-pink-600 dark:text-pink-400">{formatPrice(total)}</p>
                   <span className="text-[9px] text-gray-500 dark:text-gray-400">{cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'}</span>
@@ -3051,7 +3059,7 @@ export default function CartPage() {
               </div>
               <button
                 onClick={handleCheckout}
-                className="flex-1 min-h-[52px] h-[52px] py-2.5 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all font-bold text-sm shadow-lg dark:shadow-xl dark:shadow-black/30 active:scale-[0.98] flex items-center justify-center gap-1.5"
+                className="flex-1 min-h-[48px] h-[48px] py-2 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all font-bold text-sm shadow-lg dark:shadow-xl dark:shadow-black/30 active:scale-[0.98] flex items-center justify-center gap-1.5"
               >
                 <span>PROCEED TO CHECKOUT</span>
                 <ChevronRight className="w-4 h-4" />
