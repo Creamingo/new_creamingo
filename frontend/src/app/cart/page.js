@@ -2773,10 +2773,10 @@ export default function CartPage() {
                   )}
                 </div>
 
-                {/* Checkout Button - Hidden on mobile, shown on desktop */}
+                {/* Checkout Button - Hidden on mobile, shown on desktop; height matches PDP Add to Cart (52px) */}
                 <button
                   onClick={handleCheckout}
-                  className="hidden lg:block w-full py-3 sm:py-4 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white rounded-lg hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all duration-200 font-semibold text-base sm:text-lg shadow-lg dark:shadow-xl dark:shadow-black/30 hover:shadow-xl transform hover:scale-[1.02]"
+                  className="hidden lg:block w-full min-h-[52px] py-2.5 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white rounded-lg hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all duration-200 font-semibold text-base sm:text-lg shadow-lg dark:shadow-xl dark:shadow-black/30 hover:shadow-xl transform hover:scale-[1.02]"
                 >
                   PROCEED TO CHECKOUT
                 </button>
@@ -3032,42 +3032,32 @@ export default function CartPage() {
         ) : null;
       })()}
 
-      {/* Mobile Sticky Checkout Bar (Amount + Proceed to Checkout) - when cart has items; no bottom nav shown so bar sits at bottom */}
+      {/* Mobile Sticky Checkout Bar - compact height; action button matches PDP (52px) */}
       {mounted && isInitialized && cartItems.length > 0 && (
-        <div className="lg:hidden fixed left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-2xl dark:shadow-black/50 z-40 bottom-0">
-          <div className="max-w-7xl mx-auto px-2 py-1.5">
-            {/* Total Box and Checkout Button Row */}
-            <div className="flex items-center gap-1.5 mb-1">
-              {/* Total Box - 20vw, height matches PDP Add to Cart button (52px) */}
-              <div className="w-[20vw] min-w-[70px] bg-gray-50 dark:bg-gray-700/50 rounded-lg px-1.5 py-1.5 border border-pink-300 dark:border-pink-500/50 min-h-[52px] flex items-center">
-                <div className="flex flex-col w-full items-center text-center">
-                  <p className="text-sm font-bold text-pink-600 dark:text-pink-400 leading-tight mb-0.5">{formatPrice(total)}</p>
-                  <span className="text-[9px] text-gray-500 dark:text-gray-400 leading-tight">
-                    {cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'}
-                  </span>
+        <div className="lg:hidden fixed left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-black/40 z-40 bottom-0">
+          <div className="max-w-7xl mx-auto px-2 py-1">
+            {/* Total Box and Checkout Button Row - same height as PDP Add to Cart (52px) */}
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <div className="w-[20vw] min-w-[64px] h-[52px] bg-gray-50 dark:bg-gray-700/50 rounded-lg px-1.5 py-1 border border-pink-300 dark:border-pink-500/50 flex items-center justify-center shrink-0">
+                <div className="flex flex-col items-center justify-center text-center leading-tight">
+                  <p className="text-xs font-bold text-pink-600 dark:text-pink-400">{formatPrice(total)}</p>
+                  <span className="text-[9px] text-gray-500 dark:text-gray-400">{cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'}</span>
                 </div>
               </div>
-              
-              {/* Checkout Button - 80vw, height matches PDP Add to Cart (52px) */}
               <button
                 onClick={handleCheckout}
-                className="flex-1 w-[80vw] min-h-[52px] py-2.5 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all font-bold text-base shadow-lg dark:shadow-xl dark:shadow-black/30 active:scale-95 flex items-center justify-center gap-2"
+                className="flex-1 min-h-[52px] h-[52px] py-2.5 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all font-bold text-sm shadow-lg dark:shadow-xl dark:shadow-black/30 active:scale-[0.98] flex items-center justify-center gap-1.5"
               >
                 <span>PROCEED TO CHECKOUT</span>
-                <ChevronRight className="w-5 h-5" />
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
-            
-            {/* Free Delivery Message & Security Badge - Inline */}
-            <div className="flex items-center justify-center gap-1.5">
-            {!isFreeDeliveryEligible && (
-                <p className="text-[9px] text-gray-500 dark:text-gray-400">
-                Add {formatPrice(amountToFreeDelivery)} more for free delivery
-              </p>
-            )}
-              <p className="text-[8px] text-gray-400 dark:text-gray-500">
-                🔒 Secure checkout
-              </p>
+            {/* Helper line - compact */}
+            <div className="flex items-center justify-center gap-2 min-h-[14px]">
+              {!isFreeDeliveryEligible && (
+                <p className="text-[8px] text-gray-500 dark:text-gray-400">Add {formatPrice(amountToFreeDelivery)} more for free delivery</p>
+              )}
+              <p className="text-[8px] text-gray-400 dark:text-gray-500">🔒 Secure checkout</p>
             </div>
           </div>
         </div>
