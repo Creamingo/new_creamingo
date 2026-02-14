@@ -28,6 +28,7 @@ import { usePinCode } from '../../contexts/PinCodeContext';
 import { useToast } from '../../contexts/ToastContext';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
+import MobileFooter from '../../components/MobileFooter';
 import CartDeals from '../../components/CartDeals';
 import ConfirmModal from '../../components/ConfirmModal';
 import promoCodeApi from '../../api/promoCodeApi';
@@ -1158,7 +1159,7 @@ export default function CartPage() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header />
       
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 pb-20 lg:pb-8">
+      <div className={`max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 lg:pb-8 ${mounted && isInitialized && cartItems.length > 0 ? 'pb-40' : 'pb-20'}`}>
         {/* Page Header */}
         <div className="mb-3 sm:mb-4">
           <div className="flex items-center justify-between">
@@ -2887,7 +2888,7 @@ export default function CartPage() {
         });
 
         return commonSlot && allSameSlot ? (
-          <div className="lg:hidden fixed bottom-[72px] left-0 right-0 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-t border-green-200 dark:border-green-800 shadow-lg dark:shadow-black/30 z-39">
+          <div className="lg:hidden fixed left-0 right-0 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-t border-green-200 dark:border-green-800 shadow-lg dark:shadow-black/30 z-39 bottom-[8.5rem]">
             <div className="max-w-7xl mx-auto px-3 py-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -2909,9 +2910,9 @@ export default function CartPage() {
         ) : null;
       })()}
 
-      {/* Mobile Sticky Checkout Bar */}
+      {/* Mobile Sticky Checkout Bar - sits above MobileFooter when cart has items */}
       {mounted && isInitialized && cartItems.length > 0 && (
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-2xl dark:shadow-black/50 z-40">
+        <div className="lg:hidden fixed left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-2xl dark:shadow-black/50 z-40 bottom-[3.6rem]">
           <div className="max-w-7xl mx-auto px-2 py-1.5">
             {/* Total Box and Checkout Button Row */}
             <div className="flex items-center gap-1.5 mb-1">
@@ -3049,6 +3050,11 @@ export default function CartPage() {
       {/* Footer: Hidden on mobile for better UX, visible on desktop, always in DOM for SEO */}
       <div className="hidden lg:block">
         <Footer />
+      </div>
+
+      {/* Mobile Footer - Sticky bottom nav when on cart page */}
+      <div className="lg:hidden">
+        <MobileFooter />
       </div>
 
       {/* Duplicate Products Validation Modal */}

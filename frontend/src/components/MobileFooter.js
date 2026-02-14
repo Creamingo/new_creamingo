@@ -8,6 +8,7 @@ import { useWishlist } from '../contexts/WishlistContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { useCustomerAuth } from '../contexts/CustomerAuthContext'
 import { useAuthModal } from '../contexts/AuthModalContext'
+import { useToast } from '../contexts/ToastContext'
 import CartDisplay from './CartDisplay'
 
 const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }) => {
@@ -21,6 +22,7 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
   const { unreadCount: notificationCount, openNotificationCenter } = useNotifications()
   const { isAuthenticated } = useCustomerAuth()
   const { isAuthModalOpen, openAuthModal } = useAuthModal()
+  const { showInfo } = useToast()
   const [cartItemCount, setCartItemCount] = useState(0)
   
   // Use context wishlist count if available, otherwise use prop (for backwards compatibility)
@@ -117,6 +119,18 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
       router.push('/cart')
       setIsHelpExpanded(false)
       setActiveTab('cart')
+    } else if (tabId === 'wallet') {
+      if (!isAuthenticated) {
+        showInfo(
+          'Log in required',
+          'Please log in to access your wallet. Sign up & get wallet cashback up to ₹100.'
+        )
+        openAuthModal('/wallet')
+        return
+      }
+      router.push('/wallet')
+      setIsHelpExpanded(false)
+      setActiveTab('wallet')
     } else if (href && href !== '#') {
       // Navigate to the href if it exists and is not a placeholder
       router.push(href)
