@@ -1312,6 +1312,7 @@ export default function CartPage() {
                               src={resolveImageUrl(item.product.image_url)}
                               alt={item.product.name}
                               className="w-full h-full object-cover"
+                              loading="lazy"
                             />
                           </div>
 
@@ -1533,6 +1534,7 @@ export default function CartPage() {
                               src={resolveImageUrl(item.product.image_url)}
                               alt={item.product.name}
                               className="w-full h-full object-cover"
+                              loading="lazy"
                             />
                             {/* Product Number Label */}
                             <div className="absolute top-0 left-0 bg-gradient-to-r from-blue-600 to-blue-500 dark:from-blue-500 dark:to-blue-600 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded-br-md shadow-sm z-10 leading-tight">
@@ -1683,6 +1685,7 @@ export default function CartPage() {
                                 src={resolveImageUrl(item.product.image_url)}
                                 alt={item.product.name}
                                 className="w-full h-full object-cover"
+                                loading="lazy"
                               />
                             </div>
 
@@ -1909,6 +1912,7 @@ export default function CartPage() {
                                 src={resolveImageUrl(item.product.image_url)}
                                 alt={item.product.name}
                                 className="w-full h-full object-cover"
+                                loading="lazy"
                               />
                             </div>
 
@@ -2296,6 +2300,7 @@ export default function CartPage() {
                                 src={resolveImageUrl(item.product.image_url)}
                                 alt={item.product.name}
                                 className="w-full h-full object-cover"
+                                loading="lazy"
                               />
                             </div>
 
@@ -2865,7 +2870,7 @@ export default function CartPage() {
                                   return (
                                     <div key={item.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-gray-500 transition-all duration-200 group">
                                       <div className="relative w-full h-[90px] sm:h-[100px] bg-gray-50 dark:bg-gray-700/50 overflow-hidden rounded-t-lg">
-                                        <img src={resolveImageUrl(item.image_url)} alt={item.name} className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-200" />
+                                        <img src={resolveImageUrl(item.image_url)} alt={item.name} className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-200" loading="lazy" />
                                       </div>
                                       <div className="p-2 space-y-1">
                                         <h4 className="text-[11px] sm:text-xs font-medium text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight min-h-[2rem]">{item.name}</h4>
@@ -2906,7 +2911,7 @@ export default function CartPage() {
                                         </div>
                                       )}
                                       <div className="relative w-full h-[110px] sm:h-[120px] bg-gray-50 dark:bg-gray-700/50 cursor-pointer overflow-hidden rounded-t-lg" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
-                                        <img src={resolveImageUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
+                                        <img src={resolveImageUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" loading="lazy" />
                                       </div>
                                       <div className="p-2 space-y-1">
                                         <h4 className="text-[11px] sm:text-xs font-medium text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight min-h-[2rem] cursor-pointer hover:text-gray-600 dark:hover:text-gray-300 transition-colors" onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
@@ -2956,7 +2961,7 @@ export default function CartPage() {
                                         </div>
                                       )}
                                       <div className="relative w-full h-[110px] sm:h-[120px] bg-gray-50 dark:bg-gray-700/50 cursor-pointer overflow-hidden rounded-t-lg" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
-                                        <img src={resolveImageUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
+                                        <img src={resolveImageUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" loading="lazy" />
                                       </div>
                                       <div className="p-2 space-y-1">
                                         <h4 className="text-[11px] sm:text-xs font-medium text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight min-h-[2rem] cursor-pointer hover:text-gray-600 dark:hover:text-gray-300 transition-colors" onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
@@ -3211,6 +3216,7 @@ export default function CartPage() {
                               src={resolveImageUrl(item.product?.image_url)}
                               alt={item.product?.name}
                               className="w-full h-full object-cover"
+                              loading="lazy"
                             />
                           </div>
                           <div className="flex-1 min-w-0">
