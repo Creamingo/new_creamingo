@@ -35,7 +35,9 @@ import {
 } from 'lucide-react';
 import { createWish, getMyWishes, deleteWish } from '../../api/midnightWishApi';
 import productApi from '../../api/productApi';
+import weightTierApi from '../../api/weightTierApi';
 import { getMidnightWishDraft, addToMidnightWishDraft, DRAFT_STORAGE_KEY } from '../../utils/midnightWishDraft';
+import { formatPrice } from '../../utils/priceFormatter';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -121,6 +123,13 @@ export default function MidnightWishPage() {
   const [deleteSuccessShow, setDeleteSuccessShow] = useState(false);
   const [removeDraftItemConfirm, setRemoveDraftItemConfirm] = useState(null);
   const [expandedMessageCategoryIndex, setExpandedMessageCategoryIndex] = useState(0);
+  const [addToWishModalProduct, setAddToWishModalProduct] = useState(null);
+  const [addToWishModalFull, setAddToWishModalFull] = useState(null);
+  const [addToWishModalLoading, setAddToWishModalLoading] = useState(false);
+  const [addToWishModalImageIndex, setAddToWishModalImageIndex] = useState(0);
+  const [addToWishModalVariant, setAddToWishModalVariant] = useState(null);
+  const [addToWishModalTier, setAddToWishModalTier] = useState(null);
+  const [addToWishWeightTierMappings, setAddToWishWeightTierMappings] = useState({});
   const [linkCopyFeedbackUntil, setLinkCopyFeedbackUntil] = useState(0);
   const [shortLinkCopyFeedbackUntil, setShortLinkCopyFeedbackUntil] = useState(0);
   const [canNativeShare, setCanNativeShare] = useState(false);
@@ -157,6 +166,73 @@ export default function MidnightWishPage() {
     const index = wishType?.id === 'birthday' ? 0 : wishType?.id === 'anniversary' ? 1 : wishType?.id === 'kids' ? 2 : wishType?.id === 'surprise' ? 3 : 0;
     setExpandedMessageCategoryIndex(index);
   }, [step, wishType?.id]);
+
+  // Fetch full product when Add to Wish modal is opened
+  useEffect(() => {
+    if (!addToWishModalProduct) {
+      setAddToWishModalFull(null);
+      setAddToWishModalVariant(null);
+      setAddToWishModalTier(null);
+      setAddToWishModalImageIndex(0);
+      return;
+    }
+    setAddToWishModalLoading(true);
+    setAddToWishModalFull(null);
+    const slug = addToWishModalProduct.slug;
+    const id = addToWishModalProduct.id;
+    const fetchProduct = slug
+      ? productApi.getProductBySlug(slug)
+      : productApi.getProductById(id);
+    fetchProduct
+      .then((res) => {
+        const product = res?.data?.product || res?.product;
+        if (product) {
+          setAddToWishModalFull(product);
+          const firstVariant = product.variants?.[0] || null;
+          setAddToWishModalVariant(firstVariant);
+          const w = firstVariant?.weight || product.base_weight;
+          setAddToWishModalTier(w ? null : null);
+        }
+      })
+      .catch(() => showError('Could not load product', 'Try again'))
+      .finally(() => setAddToWishModalLoading(false));
+    weightTierApi.getAllWeightTierMappings?.()
+      .then((r) => {
+        const mappings = {};
+        if (r?.data?.mappings && Array.isArray(r.data.mappings)) {
+          r.data.mappings.forEach((m) => {
+            if (m?.weight) mappings[m.weight] = m.available_tiers || [];
+          });
+        }
+        setAddToWishWeightTierMappings(mappings);
+      })
+      .catch(() => {});
+  }, [addToWishModalProduct?.id]);
+
+  const inferServingsFromWeight = (weightText) => {
+    if (!weightText) return null;
+    const lower = String(weightText).toLowerCase().trim();
+    let kg = 0;
+    const gMatch = lower.match(/(\d+)\s*g(?:m)?/);
+    const kgMatch = lower.match(/(\d+(?:\.\d+)?)\s*k(?:g)?/);
+    if (kgMatch) kg = parseFloat(kgMatch[1]);
+    else if (gMatch) kg = parseFloat(gMatch[1]) / 1000;
+    if (kg <= 0) return null;
+    if (kg <= 0.6) return '4–6 servings';
+    if (kg <= 1.0) return '8–10 servings';
+    if (kg <= 1.5) return '12–15 servings';
+    if (kg <= 2.0) return '16–20 servings';
+    if (kg <= 2.5) return '20–25 servings';
+    if (kg <= 3.0) return '24–30 servings';
+    return `${Math.round(kg * 10)}+ servings`;
+  };
+
+  const getAvailableTiersForWeight = (weight) => {
+    if (!weight) return ['1 Tier'];
+    const w = addToWishWeightTierMappings[weight] || addToWishWeightTierMappings[weight?.toLowerCase?.()];
+    if (Array.isArray(w)) return w.map((t) => `${t} Tier`);
+    return ['1 Tier'];
+  };
 
   const persistDraft = (items) => {
     if (typeof window === 'undefined') return;
@@ -757,7 +833,7 @@ export default function MidnightWishPage() {
                     <div className="p-3">
                       <p className="text-white font-medium text-sm line-clamp-2">{p.name}</p>
                       <p className="text-amber-400 text-xs mt-1">₹{Number(p.discounted_price ?? p.base_price ?? 0).toFixed(0)}</p>
-                      <button onClick={() => addToDraft(p)} className="mt-2 w-full py-2 rounded-xl bg-amber-500/20 text-amber-400 text-xs font-semibold hover:bg-amber-500/30 flex items-center justify-center gap-1">
+                      <button onClick={() => setAddToWishModalProduct(p)} className="mt-2 w-full py-2 rounded-xl bg-amber-500/20 text-amber-400 text-xs font-semibold hover:bg-amber-500/30 flex items-center justify-center gap-1">
                         <Plus className="w-4 h-4" /> Add to wish
                       </button>
                     </div>
@@ -802,7 +878,7 @@ export default function MidnightWishPage() {
                     <div className="p-2">
                       <p className="text-white text-sm font-medium line-clamp-2">{p.name}</p>
                       <p className="text-amber-400 text-xs">₹{Number(p.discounted_price ?? p.base_price ?? 0).toFixed(0)}</p>
-                      <button onClick={() => addToDraft(p)} className="mt-2 w-full py-1.5 rounded-lg bg-amber-500/20 text-amber-400 text-xs font-semibold hover:bg-amber-500/30 flex items-center justify-center gap-1">
+                      <button onClick={() => setAddToWishModalProduct(p)} className="mt-2 w-full py-1.5 rounded-lg bg-amber-500/20 text-amber-400 text-xs font-semibold hover:bg-amber-500/30 flex items-center justify-center gap-1">
                         <Plus className="w-3.5 h-3.5" /> Add
                       </button>
                     </div>
@@ -920,6 +996,204 @@ export default function MidnightWishPage() {
                     Remove
                   </button>
                 </div>
+              </div>
+            </div>,
+            document.body
+          )}
+
+          {/* Add to Wish modal: PDP-style with images, weight, tier, serving */}
+          {typeof document !== 'undefined' && addToWishModalProduct != null && createPortal(
+            <div
+              className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70"
+              onClick={() => setAddToWishModalProduct(null)}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="add-to-wish-modal-title"
+            >
+              <div
+                className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#1a1a1f] shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {addToWishModalLoading ? (
+                  <div className="flex items-center justify-center py-16">
+                    <Loader2 className="w-10 h-10 animate-spin text-amber-400" />
+                  </div>
+                ) : addToWishModalFull ? (
+                  (() => {
+                    const full = addToWishModalFull;
+                    const allImages = [full.image_url, ...(full.gallery_images || [])].filter(Boolean).map(resolveImageUrl);
+                    const mainImage = allImages[addToWishModalImageIndex] || allImages[0];
+                    const baseWeight = full.base_weight;
+                    const variants = full.variants || [];
+                    const currentWeight = addToWishModalVariant?.weight || baseWeight;
+                    const tierOptions = getAvailableTiersForWeight(currentWeight);
+                    const selectedTier = addToWishModalTier || tierOptions[0];
+                    const servingText = inferServingsFromWeight(currentWeight);
+                    const actualPrice = addToWishModalVariant
+                      ? (addToWishModalVariant.price ?? full.base_price)
+                      : (full.base_price ?? 0);
+                    const discountedPrice = addToWishModalVariant
+                      ? (addToWishModalVariant.discount_percent > 0 ? (addToWishModalVariant.discounted_price ?? addToWishModalVariant.price) : addToWishModalVariant.price)
+                      : (full.discount_percent > 0 ? (full.discounted_price ?? full.base_price) : full.base_price);
+                    let discountPercent = addToWishModalVariant
+                      ? (addToWishModalVariant.discount_percent ?? 0)
+                      : (full.discount_percent ?? 0);
+                    if (discountPercent <= 0 && actualPrice > 0 && (addToWishModalVariant?.discounted_price ?? full.discounted_price) < actualPrice) {
+                      discountPercent = Math.round(((actualPrice - discountedPrice) / actualPrice) * 100);
+                    }
+                    const hasDiscount = discountPercent > 0;
+                    const productForDraft = {
+                      id: full.id,
+                      name: full.name,
+                      slug: full.slug,
+                      image_url: full.image_url,
+                      base_price: full.base_price,
+                      discounted_price: full.discounted_price ?? full.base_price
+                    };
+                    const variantForDraft = addToWishModalVariant
+                      ? {
+                          id: addToWishModalVariant.id,
+                          name: addToWishModalVariant.name,
+                          weight: addToWishModalVariant.weight,
+                          price: addToWishModalVariant.price,
+                          discounted_price: addToWishModalVariant.discounted_price ?? addToWishModalVariant.price
+                        }
+                      : null;
+                    const displayPrice = discountedPrice;
+                    const handleAddToWish = () => {
+                      addToDraft(productForDraft, variantForDraft, 1);
+                      setAddToWishModalProduct(null);
+                    };
+                    return (
+                      <>
+                        <div className="sticky top-0 flex justify-end p-2 bg-[#1a1a1f] border-b border-white/5 z-10">
+                          <button
+                            type="button"
+                            onClick={() => setAddToWishModalProduct(null)}
+                            className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white"
+                            aria-label="Close"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+                        <div className="p-4 sm:p-6">
+                          <div className="flex gap-4 mb-6">
+                            <div className="flex flex-col gap-2 w-16 flex-shrink-0">
+                              {allImages.map((src, i) => (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  onClick={() => setAddToWishModalImageIndex(i)}
+                                  className={`w-14 h-14 rounded-lg overflow-hidden border-2 flex-shrink-0 ${addToWishModalImageIndex === i ? 'border-amber-500' : 'border-white/10'}`}
+                                >
+                                  <img src={src} alt="" className="w-full h-full object-cover" />
+                                </button>
+                              ))}
+                            </div>
+                            <div className="flex-1 min-w-0 aspect-square max-w-sm rounded-xl overflow-hidden bg-white/5">
+                              {mainImage && <img src={mainImage} alt={full.name} className="w-full h-full object-cover" />}
+                            </div>
+                          </div>
+                          <div className="space-y-4">
+                            <h2 id="add-to-wish-modal-title" className="text-xl font-bold text-white">{full.name}</h2>
+
+                            {/* Price: clear structure, catchy card */}
+                            <div className="rounded-xl border border-amber-500/20 bg-gradient-to-br from-amber-500/10 via-white/5 to-transparent p-3.5">
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+                                <span className="text-xs font-medium uppercase tracking-wider text-gray-500">Price for</span>
+                                <span className="rounded-md bg-amber-500/20 px-2 py-0.5 text-sm font-bold text-amber-400 ring-1 ring-amber-500/30">{currentWeight}</span>
+                              </div>
+                              <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                                {hasDiscount ? (
+                                  <>
+                                    <span className="text-sm line-through text-gray-500">{formatPrice(actualPrice)}</span>
+                                    <span className="text-xl font-bold tracking-tight text-amber-400">{formatPrice(discountedPrice)}</span>
+                                    <span className="rounded-md bg-red-500/90 px-2 py-0.5 text-xs font-bold text-white shadow-sm">−{Math.round(discountPercent)}%</span>
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-400 ring-1 ring-emerald-500/30">
+                                      Save {formatPrice(actualPrice - discountedPrice)}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span className="text-xl font-bold tracking-tight text-amber-400">{formatPrice(actualPrice)}</span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div>
+                              <p className="text-gray-400 text-sm mb-2">Weight</p>
+                              <div className="flex flex-wrap gap-2">
+                                {baseWeight && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setAddToWishModalVariant(null);
+                                      const baseTiers = getAvailableTiersForWeight(baseWeight);
+                                      setAddToWishModalTier(baseTiers[0] || null);
+                                    }}
+                                    className={`px-3 py-1.5 rounded-lg text-sm font-medium ${!addToWishModalVariant ? 'bg-amber-500/30 border border-amber-500/50 text-amber-400' : 'bg-white/10 border border-white/10 text-gray-300 hover:bg-white/15'}`}
+                                  >
+                                    {baseWeight}
+                                  </button>
+                                )}
+                                {variants.map((v) => (
+                                  <button
+                                    key={v.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setAddToWishModalVariant(v);
+                                      const tiers = getAvailableTiersForWeight(v.weight);
+                                      setAddToWishModalTier(tiers[0] || null);
+                                    }}
+                                    className={`px-3 py-1.5 rounded-lg text-sm font-medium ${addToWishModalVariant?.id === v.id ? 'bg-amber-500/30 border border-amber-500/50 text-amber-400' : 'bg-white/10 border border-white/10 text-gray-300 hover:bg-white/15'}`}
+                                  >
+                                    {v.weight}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            {(tierOptions.length > 0 || servingText) && (
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                                {tierOptions.length > 0 && (
+                                  <>
+                                    <span className="text-gray-400 font-semibold">Tier</span>
+                                    <div className="flex items-center gap-3" role="radiogroup" aria-label="Tier selection">
+                                      {tierOptions.map((t) => (
+                                        <label key={t} className="flex items-center gap-1.5 cursor-pointer">
+                                          <input
+                                            type="radio"
+                                            name="addToWishTier"
+                                            value={t}
+                                            checked={selectedTier === t}
+                                            onChange={() => setAddToWishModalTier(t)}
+                                            className="w-3.5 h-3.5 text-amber-500 border-white/30 focus:ring-amber-500"
+                                          />
+                                          <span className="font-medium text-white">{t}</span>
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </>
+                                )}
+                                {servingText && (
+                                  <span className="text-gray-400"><span className="text-gray-500">Serving:</span> {servingText}</span>
+                                )}
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              onClick={handleAddToWish}
+                              className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-[#0d0d12] font-bold flex items-center justify-center gap-2"
+                            >
+                              <Heart className="w-5 h-5" />
+                              Add to wish
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()
+                ) : (
+                  <div className="py-16 text-center text-gray-400">Could not load product.</div>
+                )}
               </div>
             </div>,
             document.body
