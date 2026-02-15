@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { Home, Wallet, ShoppingCart, Headphones, Heart, MessageSquare, Phone, Ticket, ClipboardList, User, Star, Bell } from 'lucide-react'
+import { Home, Wallet, ShoppingCart, Headphones, Heart, MessageSquare, Phone, Ticket, ClipboardList, User, Star, Bell, Gift } from 'lucide-react'
 import { useCart } from '../contexts/CartContext'
 import { useWishlist } from '../contexts/WishlistContext'
 import { useNotifications } from '../contexts/NotificationContext'
@@ -88,6 +88,7 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
   const footerItems = [
     { icon: Home, label: 'Home', href: '/', id: 'home' },
     { icon: Star, label: 'Midnight Wish', href: '/midnight-wish', id: 'midnight-wish', desktopOnly: true },
+    { icon: Gift, label: 'Fulfill a wish', href: '/midnight-wish/fulfill', id: 'fulfill-wish', desktopOnly: true },
     { icon: ClipboardList, label: 'Orders', href: '/orders', id: 'orders', desktopOnly: true },
     { 
       icon: Heart, 

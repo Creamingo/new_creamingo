@@ -178,10 +178,12 @@ const Header = () => {
     { icon: User, label: 'Profile', href: '/profile' },
     { icon: ClipboardList, label: 'Order History', href: '/orders' },
     { icon: Star, label: 'Midnight Wish', href: '/midnight-wish' },
+    { icon: Heart, label: 'Fulfill a wish', href: '/midnight-wish/fulfill' },
     { icon: Store, label: 'Become a Vendor', href: '/vendor' },
     { icon: LogOut, label: 'Logout', href: '#', isLogout: true }
   ] : [
     { icon: Star, label: 'Midnight wish', href: '/midnight-wish' },
+    { icon: Heart, label: 'Fulfill a wish', href: '/midnight-wish/fulfill' },
     { icon: LogIn, label: 'Log in / Sign up', href: '#', isAuth: true }
   ]
 

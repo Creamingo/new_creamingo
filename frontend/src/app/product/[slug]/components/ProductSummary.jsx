@@ -14,10 +14,13 @@ import {
   Calendar,
   ChevronRight
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { usePinCode } from '../../../../contexts/PinCodeContext';
 import { useWishlist } from '../../../../contexts/WishlistContext';
 import { useCustomerAuth } from '../../../../contexts/CustomerAuthContext';
 import { useAuthModal } from '../../../../contexts/AuthModalContext';
+import { useToast } from '../../../../contexts/ToastContext';
+import { addToMidnightWishDraft } from '../../../../utils/midnightWishDraft';
 import DeliverySlotPreview from '../../../../components/DeliverySlotPreview';
 import ProductCombos from './ProductCombos';
 import FlavorSelector from './FlavorSelector';
@@ -42,10 +45,12 @@ const ProductSummary = ({
   selectedTier,
   onTierChange
 }) => {
+  const router = useRouter();
   const { currentPinCode, isDeliveryAvailable, formatPinCode, getDeliveryLocality, getFormattedDeliveryCharge, validatePinCodeDebounced, tempValidationStatus, tempPinCode, checkPinCode } = usePinCode();
   const { isInWishlist, toggleWishlist } = useWishlist();
   const { isAuthenticated } = useCustomerAuth();
   const { openAuthModal } = useAuthModal();
+  const { showSuccess } = useToast();
   const [localPin, setLocalPin] = useState('');
   const isFavorite = product ? isInWishlist(product.id) : false;
   const [showShareMenu, setShowShareMenu] = useState(false);
@@ -573,6 +578,20 @@ const ProductSummary = ({
                 </div>
               )}
             </div>
+            <button
+              onClick={() => {
+                if (!product) return;
+                const variant = selectedVariant ? { id: selectedVariant.id, name: selectedVariant.name, weight: selectedVariant.weight, price: selectedVariant.price, discounted_price: selectedVariant.discounted_price } : null;
+                addToMidnightWishDraft(product, variant, quantity);
+                showSuccess('Added to Midnight Wish', 'View and share your wish list');
+                router.push('/midnight-wish');
+              }}
+              className="h-10 px-3 rounded-lg border border-amber-400/50 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors flex items-center justify-center flex-shrink-0"
+              aria-label="Add to Midnight Wish"
+              title="Add to Midnight Wish"
+            >
+              <Star className="w-5 h-5" />
+            </button>
           </div>
         </div>
 

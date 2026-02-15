@@ -36,6 +36,7 @@ const scratchCardRoutes = require('./routes/scratchCardRoutes');
 const referralRoutes = require('./routes/referralRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const dealRoutes = require('./routes/dealRoutes');
+const midnightWishRoutes = require('./routes/midnightWishRoutes');
 const schemaHealthRoutes = require('./routes/schemaHealthRoutes');
 const { runSchemaHealthCheck } = require('./controllers/schemaHealthController');
 
@@ -269,6 +270,7 @@ app.use('/api/scratch-cards', scratchCardRoutes);
 app.use('/api/referrals', referralRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/deals', dealRoutes);
+app.use('/api/midnight-wish', midnightWishRoutes);
 app.use('/api/schema-health', schemaHealthRoutes);
 
 // Run schema diagnostics on startup
