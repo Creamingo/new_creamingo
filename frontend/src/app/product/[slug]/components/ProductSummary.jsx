@@ -994,8 +994,17 @@ const ProductSummary = ({
         </div>
       </div>
 
-       {/* Mobile Sticky Footer - Above category menu (z-[60]) so Add Combo / Add to Cart stay on top when menu is open */}
-       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-xl dark:shadow-black/30 z-[60]" style={{ willChange: 'transform', transform: 'translateZ(0)', backfaceVisibility: 'hidden', maxWidth: '100vw' }}>
+       {/* Mobile Sticky Footer - Above category menu (z-[60]); safe-area so buttons stay above iPhone home indicator */}
+       <div
+         className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-xl dark:shadow-black/30 z-[60]"
+         style={{
+           willChange: 'transform',
+           transform: 'translateZ(0)',
+           backfaceVisibility: 'hidden',
+           maxWidth: '100vw',
+           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+         }}
+       >
         {/* Delivery Details Notification - Mobile - Always render to reserve space and prevent layout shift */}
          <div className={`px-3 transition-all duration-200 ease-in-out ${showDeliveryNotification ? 'pt-2 pb-1 opacity-100 max-h-20' : 'pt-0 pb-0 opacity-0 max-h-0 overflow-hidden'}`}>
            <div className="bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-800 rounded-sm px-3 py-1.5">

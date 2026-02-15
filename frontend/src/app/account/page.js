@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { LogOut } from 'lucide-react';
+import { LogOut, User } from 'lucide-react';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import MobileFooter from '../../components/MobileFooter';
-import ProtectedRoute from '../../components/ProtectedRoute';
 import { useCustomerAuth } from '../../contexts/CustomerAuthContext';
+import { useAuthModal } from '../../contexts/AuthModalContext';
 import UserProfileCard from './components/UserProfileCard';
 import BirthdaySection from './components/BirthdaySection';
 import AppearanceSection from './components/AppearanceSection';
@@ -20,6 +20,79 @@ import CouponsSection from './components/sections/CouponsSection';
 import FAQsSection from './components/sections/FAQsSection';
 import ReviewsSection from './components/sections/ReviewsSection';
 import ReferAndEarn from '../../components/ReferAndEarn';
+
+function GuestAccountView() {
+  const { openAuthModal } = useAuthModal();
+  const router = useRouter();
+
+  return (
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+      <Header />
+      {/* Same sticky greeting as logged-in Account – guest mode */}
+      <div className="sticky top-[3.6rem] lg:top-16 z-40 bg-white dark:bg-gray-800 border-b border-gray-200/60 dark:border-gray-700/60">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+          <p className="font-poppins text-base lg:text-lg font-medium text-gray-700 dark:text-gray-200 leading-tight tracking-tight">
+            Hello, Guest 👋
+          </p>
+        </div>
+      </div>
+
+      {/* Same section structure as logged-in Account page */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-3 pb-20 lg:pb-24 space-y-4 lg:space-y-6">
+        {/* Guest profile card – same style as UserProfileCard */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-[0_2px_8px_0_rgba(0,0,0,0.08)] dark:shadow-[0_2px_8px_0_rgba(0,0,0,0.3)] border border-gray-200/60 dark:border-gray-700/60 p-5 sm:p-6">
+          <div className="flex items-start gap-4">
+            <div className="w-14 h-14 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center flex-shrink-0">
+              <User className="w-7 h-7 text-gray-500 dark:text-gray-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="font-poppins text-lg font-semibold text-gray-900 dark:text-white">Guest</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Sign in to see your profile, orders & rewards.</p>
+              <button
+                onClick={() => openAuthModal('/account')}
+                className="mt-3 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-medium"
+              >
+                Sign in / Create account
+              </button>
+              <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">or</p>
+              <button
+                onClick={() => router.push('/')}
+                className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:underline"
+              >
+                Continue browsing
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Appearance – same as logged-in (no auth required) */}
+        <div className="relative">
+          <AppearanceSection />
+        </div>
+
+        {/* Order History & Coupons – guest placeholder */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-[0_2px_8px_0_rgba(0,0,0,0.08)] dark:shadow-[0_2px_8px_0_rgba(0,0,0,0.3)] border border-gray-200/60 dark:border-gray-700/60 overflow-hidden">
+          <div className="px-4 pt-4 pb-3 border-b border-gray-200/60 dark:border-gray-700/60">
+            <h3 className="font-poppins text-base font-semibold text-gray-900 dark:text-white">Order History & Coupons</h3>
+          </div>
+          <div className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <p className="text-sm text-gray-500 dark:text-gray-400">Sign in to view your orders and coupons.</p>
+            <button onClick={() => openAuthModal('/account')} className="text-sm font-medium text-green-600 dark:text-green-400 hover:underline whitespace-nowrap">
+              Sign in
+            </button>
+          </div>
+        </div>
+
+        {/* Refer & Earn – guest CTA */}
+        <div className="relative">
+          <ReferAndEarn compact={true} />
+        </div>
+      </div>
+
+      <MobileFooter />
+    </div>
+  );
+}
 
 function AccountPageContent() {
   const router = useRouter();
@@ -227,10 +300,23 @@ function AccountPageContent() {
 }
 
 export default function AccountPage() {
-  return (
-    <ProtectedRoute>
-      <AccountPageContent />
-    </ProtectedRoute>
-  );
+  const { isAuthenticated, isLoading } = useCustomerAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <GuestAccountView />;
+  }
+
+  return <AccountPageContent />;
 }
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { Home, Wallet, ShoppingCart, Headphones, Heart, MessageSquare, Phone, Ticket, ClipboardList, User, Star, Bell } from 'lucide-react'
 import { useCart } from '../contexts/CartContext'
 import { useWishlist } from '../contexts/WishlistContext'
@@ -13,7 +13,19 @@ import CartDisplay from './CartDisplay'
 
 const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }) => {
   const router = useRouter()
+  const pathname = usePathname()
   const [activeTab, setActiveTab] = useState('home')
+
+  // Sync active tab with current pathname so redirects (e.g. close login modal → Account) show correct tab
+  useEffect(() => {
+    if (!pathname) return
+    if (pathname === '/') setActiveTab('home')
+    else if (pathname === '/account') setActiveTab('account')
+    else if (pathname === '/wishlist') setActiveTab('wishlist')
+    else if (pathname === '/cart') setActiveTab('cart')
+    else if (pathname === '/wallet') setActiveTab('wallet')
+    else if (pathname === '/orders') setActiveTab('orders')
+  }, [pathname])
   const [isHelpExpanded, setIsHelpExpanded] = useState(false)
   const [isCartOpen, setIsCartOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -108,6 +120,12 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
       setActiveTab('help')
     } else if (tabId === 'account') {
       if (!isAuthenticated) {
+        if (pathname === '/account') {
+          router.push('/')
+          setIsHelpExpanded(false)
+          setActiveTab('home')
+          return
+        }
         openAuthModal('/account')
         return
       }

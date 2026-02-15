@@ -1,6 +1,7 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 
 const AuthModalContext = createContext(null);
 
@@ -13,18 +14,27 @@ export function useAuthModal() {
 }
 
 export function AuthModalProvider({ children }) {
+  const router = useRouter();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authRedirectPath, setAuthRedirectPath] = useState(null);
+  const redirectPathRef = useRef(null);
 
   const openAuthModal = useCallback((redirectPath = null) => {
-    setAuthRedirectPath(redirectPath);
+    redirectPathRef.current = redirectPath ?? null;
+    setAuthRedirectPath(redirectPath ?? null);
     setIsAuthModalOpen(true);
   }, []);
 
   const closeAuthModal = useCallback(() => {
-    setIsAuthModalOpen(false);
+    const pathToRedirect = redirectPathRef.current;
+    redirectPathRef.current = null;
     setAuthRedirectPath(null);
-  }, []);
+    // Close modal first so Account page doesn't mount with modal still open
+    setIsAuthModalOpen(false);
+    if (pathToRedirect) {
+      router.replace(pathToRedirect);
+    }
+  }, [router]);
 
   const value = {
     isAuthModalOpen,

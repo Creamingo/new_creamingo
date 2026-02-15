@@ -743,10 +743,13 @@ const Header = () => {
                 <button
                   onClick={() => {
                     if (!isAuthenticated) {
+                      if (pathname === '/account') {
+                        router.push('/')
+                        return
+                      }
                       openAuthModal('/account')
                       return
                     }
-                    // On mobile, if on account page, navigate back; otherwise navigate to account
                     if (pathname === '/account') {
                       router.push('/')
                     } else {

@@ -12,11 +12,14 @@ export const useTheme = () => {
   return context;
 };
 
+// Default mode when nothing is set (first-time visitors): Light
+const DEFAULT_THEME = 'light';
+
 export const ThemeProvider = ({ children }) => {
-  const [theme, setTheme] = useState('auto'); // 'light', 'dark', or 'auto'
+  const [theme, setTheme] = useState(DEFAULT_THEME); // 'light', 'dark', or 'auto'
   const [resolvedTheme, setResolvedTheme] = useState('light');
 
-  // Initialize theme from localStorage or default to 'auto'
+  // Initialize theme from localStorage or keep default (Light)
   useEffect(() => {
     const savedTheme = localStorage.getItem('appearanceMode');
     if (savedTheme && ['light', 'dark', 'auto'].includes(savedTheme)) {
