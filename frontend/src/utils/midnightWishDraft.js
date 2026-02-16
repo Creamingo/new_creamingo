@@ -1,4 +1,5 @@
 const DRAFT_STORAGE_KEY = 'creamingo_midnight_wish_draft';
+const DRAFT_MESSAGE_STORAGE_KEY = 'creamingo_midnight_wish_draft_message';
 
 /**
  * Get current draft items from localStorage
@@ -21,10 +22,12 @@ export function getMidnightWishDraft() {
  * @param {{ id, name, slug, image_url, base_price, discounted_price }} product
  * @param {{ id, name, weight, price, discounted_price }?} variant
  * @param {number} quantity
+ * @param {{ weight?: string, tier?: string }} [options] optional weight and tier for display
  * @returns {Array} updated draft items
  */
-export function addToMidnightWishDraft(product, variant = null, quantity = 1) {
+export function addToMidnightWishDraft(product, variant = null, quantity = 1, options = {}) {
   const draft = getMidnightWishDraft();
+  const { weight: weightDisplay, tier: tierDisplay } = options;
   const existing = draft.find(
     (i) => i.product_id === product.id && (i.variant_id || null) === (variant?.id || null)
   );
@@ -32,7 +35,7 @@ export function addToMidnightWishDraft(product, variant = null, quantity = 1) {
   if (existing) {
     next = draft.map((i) =>
       i.product_id === product.id && (i.variant_id || null) === (variant?.id || null)
-        ? { ...i, quantity: (i.quantity || 1) + quantity }
+        ? { ...i, quantity: (i.quantity || 1) + quantity, weight: weightDisplay ?? i.weight, tier: tierDisplay ?? i.tier }
         : i
     );
   } else {
@@ -46,7 +49,9 @@ export function addToMidnightWishDraft(product, variant = null, quantity = 1) {
         product_slug: product.slug,
         image_url: product.image_url,
         base_price: product.base_price,
-        discounted_price: product.discounted_price ?? product.base_price
+        discounted_price: product.discounted_price ?? product.base_price,
+        weight: weightDisplay ?? variant?.weight ?? null,
+        tier: tierDisplay ?? null
       }
     ];
   }
@@ -57,4 +62,30 @@ export function addToMidnightWishDraft(product, variant = null, quantity = 1) {
   return next;
 }
 
-export { DRAFT_STORAGE_KEY };
+/**
+ * Get saved message from draft (for restore on refresh)
+ * @returns {string}
+ */
+export function getMidnightWishDraftMessage() {
+  if (typeof window === 'undefined') return '';
+  try {
+    return localStorage.getItem(DRAFT_MESSAGE_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Save message to draft storage (persists across refresh)
+ * @param {string} message
+ */
+export function setMidnightWishDraftMessage(message) {
+  if (typeof window === 'undefined') return;
+  try {
+    const val = String(message || '').trim();
+    if (val) localStorage.setItem(DRAFT_MESSAGE_STORAGE_KEY, val);
+    else localStorage.removeItem(DRAFT_MESSAGE_STORAGE_KEY);
+  } catch {}
+}
+
+export { DRAFT_STORAGE_KEY, DRAFT_MESSAGE_STORAGE_KEY };

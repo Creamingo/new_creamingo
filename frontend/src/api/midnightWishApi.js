@@ -72,6 +72,25 @@ export async function deleteWish(wishId) {
 }
 
 /**
+ * Delete a single item from a wish (authenticated). If no items remain, the wish is deleted.
+ * @param {number} wishId
+ * @param {number} itemId - midnight_wish_items.id
+ */
+export async function deleteWishItem(wishId, itemId) {
+  const token = getAuthToken();
+  if (!token) throw new Error('Authentication required');
+
+  const response = await fetch(`${API_BASE_URL}/midnight-wish/${wishId}/items/${itemId}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    }
+  });
+  return handleResponse(response);
+}
+
+/**
  * Get wish by public ID (no auth - for share link / fulfill page)
  * @param {string} publicId
  */

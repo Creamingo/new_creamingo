@@ -166,8 +166,49 @@ const getMyWishes = async (req, res) => {
       occasion: row.occasion,
       status: row.status,
       item_count: row.item_count || 0,
-      created_at: row.created_at
+      created_at: row.created_at,
+      items: []
     }));
+
+    const wishIds = wishes.map((w) => w.id);
+    if (wishIds.length > 0) {
+      const placeholders = wishIds.map(() => '?').join(',');
+      const itemsResult = await query(
+        `SELECT mwi.wish_id, mwi.id AS item_id, mwi.product_id, mwi.variant_id, mwi.quantity,
+                p.name AS product_name, p.image_url, p.base_price, p.base_weight, p.discount_percent, p.discounted_price AS product_discounted_price,
+                pv.weight AS variant_weight, pv.name AS variant_name, pv.price AS variant_price, pv.discounted_price AS variant_discounted_price
+         FROM midnight_wish_items mwi
+         JOIN products p ON p.id = mwi.product_id
+         LEFT JOIN product_variants pv ON pv.id = mwi.variant_id
+         WHERE mwi.wish_id IN (${placeholders})
+         ORDER BY mwi.wish_id, mwi.sort_order ASC, mwi.id ASC`,
+        wishIds
+      );
+      const rows = itemsResult.rows || [];
+      rows.forEach((row) => {
+        const wish = wishes.find((w) => w.id === row.wish_id);
+        if (!wish) return;
+        const imageUrl = row.image_url
+          ? buildPublicUrlWithBase(baseUrl, normalizeUploadUrl(row.image_url))
+          : null;
+        const weight = row.variant_weight || row.base_weight || null;
+        const hasVariantPrice = row.variant_id && (row.variant_discounted_price != null || row.variant_price != null);
+        const price = hasVariantPrice
+          ? (parseFloat(row.variant_discounted_price) || parseFloat(row.variant_price))
+          : (row.product_discounted_price != null && row.discount_percent > 0 ? parseFloat(row.product_discounted_price) : parseFloat(row.base_price));
+        wish.items.push({
+          id: row.item_id,
+          product_id: row.product_id,
+          variant_id: row.variant_id,
+          quantity: row.quantity,
+          product_name: row.product_name,
+          image_url: imageUrl,
+          variation: weight,
+          weight: weight,
+          price: price
+        });
+      });
+    }
 
     res.json({
       success: true,
@@ -353,9 +394,74 @@ const deleteWish = async (req, res) => {
   }
 };
 
+/**
+ * Delete a single item from a wish (authenticated, own wish only).
+ * If no items remain, the wish is deleted.
+ */
+const deleteWishItem = async (req, res) => {
+  try {
+    const customer_id = req.customer.id;
+    const wishId = parseInt(req.params.wishId, 10);
+    const itemId = parseInt(req.params.itemId, 10);
+
+    if (!wishId || isNaN(wishId) || !itemId || isNaN(itemId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid wish or item'
+      });
+    }
+
+    const wishRow = await query(
+      'SELECT id FROM midnight_wishes WHERE id = ? AND customer_id = ?',
+      [wishId, customer_id]
+    );
+    if (!wishRow.rows || wishRow.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Wish not found or you cannot modify it'
+      });
+    }
+
+    const itemRow = await query(
+      'SELECT id FROM midnight_wish_items WHERE id = ? AND wish_id = ?',
+      [itemId, wishId]
+    );
+    if (!itemRow.rows || itemRow.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Item not found in this wish'
+      });
+    }
+
+    await query('DELETE FROM midnight_wish_items WHERE id = ? AND wish_id = ?', [itemId, wishId]);
+
+    const remaining = await query(
+      'SELECT COUNT(*) AS cnt FROM midnight_wish_items WHERE wish_id = ?',
+      [wishId]
+    );
+    const count = (remaining.rows && remaining.rows[0] && parseInt(remaining.rows[0].cnt, 10)) || 0;
+    if (count === 0) {
+      await query('DELETE FROM midnight_wishes WHERE id = ? AND customer_id = ?', [wishId, customer_id]);
+    }
+
+    res.json({
+      success: true,
+      message: count === 0 ? 'Wish deleted' : 'Item removed from wish'
+    });
+  } catch (error) {
+    console.error('Error deleting wish item:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to remove item',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 module.exports = {
   createWish,
   getMyWishes,
   getWishByPublicId,
-  deleteWish
+  deleteWish,
+  deleteWishItem
 };

@@ -31,12 +31,14 @@ import {
   Download,
   Info,
   Cake,
-  Link2
+  Link2,
+  Pencil,
+  ShoppingCart
 } from 'lucide-react';
-import { createWish, getMyWishes, deleteWish } from '../../api/midnightWishApi';
+import { createWish, getMyWishes, deleteWish, deleteWishItem } from '../../api/midnightWishApi';
 import productApi from '../../api/productApi';
 import weightTierApi from '../../api/weightTierApi';
-import { getMidnightWishDraft, addToMidnightWishDraft, DRAFT_STORAGE_KEY } from '../../utils/midnightWishDraft';
+import { getMidnightWishDraft, addToMidnightWishDraft, getMidnightWishDraftMessage, setMidnightWishDraftMessage, DRAFT_STORAGE_KEY } from '../../utils/midnightWishDraft';
 import { formatPrice } from '../../utils/priceFormatter';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
@@ -121,6 +123,8 @@ export default function MidnightWishPage() {
   const [deletingWishId, setDeletingWishId] = useState(null);
   const [deleteConfirmWishId, setDeleteConfirmWishId] = useState(null);
   const [deleteSuccessShow, setDeleteSuccessShow] = useState(false);
+  const [removingWishItemKey, setRemovingWishItemKey] = useState(null);
+  const [openWishModal, setOpenWishModal] = useState(null);
   const [removeDraftItemConfirm, setRemoveDraftItemConfirm] = useState(null);
   const [expandedMessageCategoryIndex, setExpandedMessageCategoryIndex] = useState(0);
   const [addToWishModalProduct, setAddToWishModalProduct] = useState(null);
@@ -129,6 +133,8 @@ export default function MidnightWishPage() {
   const [addToWishModalImageIndex, setAddToWishModalImageIndex] = useState(0);
   const [addToWishModalVariant, setAddToWishModalVariant] = useState(null);
   const [addToWishModalTier, setAddToWishModalTier] = useState(null);
+  const [addToWishModalEditIndex, setAddToWishModalEditIndex] = useState(null);
+  const [addToWishModalEditVariantId, setAddToWishModalEditVariantId] = useState(null);
   const [addToWishWeightTierMappings, setAddToWishWeightTierMappings] = useState({});
   const [linkCopyFeedbackUntil, setLinkCopyFeedbackUntil] = useState(0);
   const [shortLinkCopyFeedbackUntil, setShortLinkCopyFeedbackUntil] = useState(0);
@@ -138,25 +144,45 @@ export default function MidnightWishPage() {
   const [showWhatIsWish, setShowWhatIsWish] = useState(false);
   const shareCardRef = useRef(null);
   const fulfillInputRef = useRef(null);
+  const wishScrollRef = useRef(null);
+  const [wishScrollIndex, setWishScrollIndex] = useState(0);
+  const [wishFooterExpanded, setWishFooterExpanded] = useState(false); // collapsed by default on Home
 
   useEffect(() => {
     setCanNativeShare(typeof navigator !== 'undefined' && !!navigator.share);
   }, []);
 
   useEffect(() => {
+    setWishScrollIndex(0);
+  }, [draftItems.length]);
+
+  const isFirstMessageEffectRef = useRef(true);
+  useEffect(() => {
     const draft = getMidnightWishDraft();
     if (draft.length > 0) setDraftItems(draft);
+    const savedMessage = getMidnightWishDraftMessage();
+    if (savedMessage) setMessage(savedMessage);
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (isFirstMessageEffectRef.current) {
+      isFirstMessageEffectRef.current = false;
+      return;
+    }
+    setMidnightWishDraftMessage(message);
+  }, [message]);
+
+  const COPY_FEEDBACK_MS_EFFECT = 2500;
+  useEffect(() => {
     if (linkCopyFeedbackUntil <= 0) return;
-    const t = setTimeout(() => setLinkCopyFeedbackUntil(0), 2000);
+    const t = setTimeout(() => setLinkCopyFeedbackUntil(0), COPY_FEEDBACK_MS_EFFECT);
     return () => clearTimeout(t);
   }, [linkCopyFeedbackUntil]);
 
   useEffect(() => {
     if (shortLinkCopyFeedbackUntil <= 0) return;
-    const t = setTimeout(() => setShortLinkCopyFeedbackUntil(0), 2000);
+    const t = setTimeout(() => setShortLinkCopyFeedbackUntil(0), COPY_FEEDBACK_MS_EFFECT);
     return () => clearTimeout(t);
   }, [shortLinkCopyFeedbackUntil]);
 
@@ -174,12 +200,15 @@ export default function MidnightWishPage() {
       setAddToWishModalVariant(null);
       setAddToWishModalTier(null);
       setAddToWishModalImageIndex(0);
+      setAddToWishModalEditIndex(null);
+      setAddToWishModalEditVariantId(null);
       return;
     }
     setAddToWishModalLoading(true);
     setAddToWishModalFull(null);
     const slug = addToWishModalProduct.slug;
     const id = addToWishModalProduct.id;
+    const editVariantId = addToWishModalEditVariantId;
     const fetchProduct = slug
       ? productApi.getProductBySlug(slug)
       : productApi.getProductById(id);
@@ -188,10 +217,25 @@ export default function MidnightWishPage() {
         const product = res?.data?.product || res?.product;
         if (product) {
           setAddToWishModalFull(product);
-          const firstVariant = product.variants?.[0] || null;
-          setAddToWishModalVariant(firstVariant);
-          const w = firstVariant?.weight || product.base_weight;
-          setAddToWishModalTier(w ? null : null);
+          const variants = product.variants || [];
+          const baseWeight = product.base_weight;
+          let variant = null;
+          let tier = null;
+          if (editVariantId != null) {
+            const found = variants.find((v) => v.id === editVariantId);
+            if (found) {
+              variant = found;
+              const tiers = getAvailableTiersForWeight(found.weight);
+              tier = tiers[0] || null;
+            }
+          }
+          if (!variant) {
+            variant = variants[0] || null;
+            const w = variant?.weight || baseWeight;
+            if (w) tier = getAvailableTiersForWeight(w)[0] || null;
+          }
+          setAddToWishModalVariant(variant);
+          setAddToWishModalTier(tier);
         }
       })
       .catch(() => showError('Could not load product', 'Try again'))
@@ -207,16 +251,17 @@ export default function MidnightWishPage() {
         setAddToWishWeightTierMappings(mappings);
       })
       .catch(() => {});
-  }, [addToWishModalProduct?.id]);
+  }, [addToWishModalProduct?.id, addToWishModalEditVariantId]);
 
   const inferServingsFromWeight = (weightText) => {
-    if (!weightText) return null;
+    if (weightText == null || weightText === '') return null;
     const lower = String(weightText).toLowerCase().trim();
     let kg = 0;
     const gMatch = lower.match(/(\d+)\s*g(?:m)?/);
     const kgMatch = lower.match(/(\d+(?:\.\d+)?)\s*k(?:g)?/);
     if (kgMatch) kg = parseFloat(kgMatch[1]);
     else if (gMatch) kg = parseFloat(gMatch[1]) / 1000;
+    else if (/^\d+(\.\d+)?$/.test(lower)) kg = parseFloat(lower);
     if (kg <= 0) return null;
     if (kg <= 0.6) return '4–6 servings';
     if (kg <= 1.0) return '8–10 servings';
@@ -236,12 +281,16 @@ export default function MidnightWishPage() {
 
   const persistDraft = (items) => {
     if (typeof window === 'undefined') return;
-    if (items.length === 0) localStorage.removeItem(DRAFT_STORAGE_KEY);
-    else localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(items));
+    if (items.length === 0) {
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+      setMidnightWishDraftMessage('');
+    } else {
+      localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(items));
+    }
   };
 
-  const addToDraft = (product, variant = null, quantity = 1) => {
-    const next = addToMidnightWishDraft(product, variant, quantity);
+  const addToDraft = (product, variant = null, quantity = 1, options = {}) => {
+    const next = addToMidnightWishDraft(product, variant, quantity, options);
     setDraftItems(next);
     showSuccess('Added to wish', `${product.name} added`);
   };
@@ -253,6 +302,43 @@ export default function MidnightWishPage() {
       );
       persistDraft(next);
       return next;
+    });
+  };
+
+  const updateDraftAtIndex = (index, product, variant, quantity = 1, options = {}) => {
+    setDraftItems((prev) => {
+      if (index < 0 || index >= prev.length) return prev;
+      const next = [...prev];
+      const { weight: weightDisplay, tier: tierDisplay } = options;
+      next[index] = {
+        product_id: product.id,
+        variant_id: variant?.id || null,
+        quantity,
+        product_name: product.name,
+        product_slug: product.slug,
+        image_url: product.image_url,
+        base_price: product.base_price,
+        discounted_price: product.discounted_price ?? product.base_price,
+        weight: weightDisplay ?? variant?.weight ?? null,
+        tier: tierDisplay ?? null
+      };
+      persistDraft(next);
+      return next;
+    });
+  };
+
+  const openAddToWishModalForEdit = (index) => {
+    const item = draftItems[index];
+    if (!item) return;
+    setAddToWishModalEditIndex(index);
+    setAddToWishModalEditVariantId(item.variant_id ?? null);
+    setAddToWishModalProduct({
+      id: item.product_id,
+      slug: item.product_slug,
+      name: item.product_name,
+      image_url: item.image_url,
+      base_price: item.base_price,
+      discounted_price: item.discounted_price
     });
   };
 
@@ -290,7 +376,15 @@ export default function MidnightWishPage() {
     setLoadingMyWishes(true);
     try {
       const res = await getMyWishes();
-      setMyWishes(res.wishes || []);
+      const raw = res.wishes || [];
+      const seen = new Set();
+      const deduped = raw.filter((w) => {
+        const key = w.public_id || w.id || `wish-${w.id}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      setMyWishes(deduped);
     } catch (_) {
       setMyWishes([]);
     } finally {
@@ -300,6 +394,16 @@ export default function MidnightWishPage() {
 
   useEffect(() => {
     if (isAuthenticated) fetchMyWishes();
+  }, [isAuthenticated]);
+
+  // Clear draft when user is not authenticated (logout or guest) so no cross-user draft leakage
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!isAuthenticated) {
+      persistDraft([]);
+      setDraftItems([]);
+      setMidnightWishDraftMessage('');
+    }
   }, [isAuthenticated]);
 
   const handleCreateWish = async () => {
@@ -320,7 +424,6 @@ export default function MidnightWishPage() {
       };
       const res = await createWish(payload);
       setCreatedWish(res.wish);
-      setStep(null);
       setWishType(null);
       const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/midnight-wish/wish/${res.wish.public_id}` : res.wish.share_url;
       if (typeof navigator !== 'undefined' && navigator.clipboard && shareUrl) {
@@ -347,11 +450,13 @@ export default function MidnightWishPage() {
       ? `${window.location.origin}/w/${createdWish.public_id}`
       : '';
 
+  const COPY_FEEDBACK_MS = 2500;
+
   const copyShareUrl = () => {
     const url = getShareUrl();
     if (typeof navigator !== 'undefined' && navigator.clipboard && url) {
       navigator.clipboard.writeText(url);
-      setLinkCopyFeedbackUntil(Date.now() + 2000);
+      setLinkCopyFeedbackUntil(Date.now() + COPY_FEEDBACK_MS);
     }
   };
 
@@ -359,8 +464,7 @@ export default function MidnightWishPage() {
     const url = getShortShareUrl();
     if (typeof navigator !== 'undefined' && navigator.clipboard && url) {
       navigator.clipboard.writeText(url);
-      setShortLinkCopyFeedbackUntil(Date.now() + 2000);
-      showSuccess('Copied', 'Short link copied');
+      setShortLinkCopyFeedbackUntil(Date.now() + COPY_FEEDBACK_MS);
     }
   };
 
@@ -418,18 +522,26 @@ export default function MidnightWishPage() {
   };
 
   const openFulfillLink = () => {
-    const raw = fulfillLinkInput.trim();
+    let raw = fulfillLinkInput.trim();
     if (!raw) {
       showError('Paste a link', 'Paste the wish link you received');
       return;
+    }
+    // Normalize: support full URL, short URL (/w/...), host+path (example.com/w/...), or raw id
+    if (!/^https?:\/\//i.test(raw) && !raw.startsWith('/') && raw.includes('/')) {
+      raw = 'https://' + raw;
     }
     const match =
       raw.match(/\/midnight-wish\/wish\/([a-f0-9]+)/i) ||
       raw.match(/\/w\/([a-f0-9]+)/i) ||
       raw.match(/([a-f0-9]{8,})/);
-    const publicId = match ? match[1] : raw;
-    if (publicId) router.push(`/midnight-wish/wish/${publicId}`);
-    else showError('Invalid link', 'Paste the full or short wish link');
+    const publicId = match ? match[1].toLowerCase() : null;
+    if (publicId) {
+      router.push(`/midnight-wish/wish/${publicId}`);
+    } else {
+      showError('Invalid link', 'This link doesn\'t look right. Check and paste again.');
+      /* Keep input value so user can correct it */
+    }
   };
 
   const handleDeleteWish = async (wishId) => {
@@ -446,17 +558,36 @@ export default function MidnightWishPage() {
     }
   };
 
-  const resetFlow = () => {
+  const handleRemoveWishItem = async (wishId, itemId) => {
+    const key = `${wishId}-${itemId}`;
+    setRemovingWishItemKey(key);
+    try {
+      await deleteWishItem(wishId, itemId);
+      const res = await getMyWishes();
+      setMyWishes(res.wishes || []);
+      showSuccess('Item removed', '');
+    } catch (e) {
+      showError('Could not remove item', e.message || 'Please try again.');
+    } finally {
+      setRemovingWishItemKey(null);
+    }
+  };
+
+  const resetFlow = (keepDraft = false) => {
     setCreatedWish(null);
     setStep(null);
     setWishType(null);
-    setOccasion('');
-    setMessage('');
-    setDraftItems([]);
-    persistDraft([]);
+    if (!keepDraft) {
+      setOccasion('');
+      setMessage('');
+      setDraftItems([]);
+      persistDraft([]);
+      setMidnightWishDraftMessage('');
+    }
     setShowSearchMore(false);
     setSearchResults([]);
     setSearchQuery('');
+    if (isAuthenticated) fetchMyWishes();
   };
 
   // ——— Guest: emotional hook + login ———
@@ -482,21 +613,21 @@ export default function MidnightWishPage() {
               <div className="absolute left-[11px] top-6 bottom-6 w-0.5 bg-gradient-to-b from-amber-500/40 via-amber-500/30 to-amber-500/40" aria-hidden />
               <li className="relative flex items-center gap-3 text-gray-300 pb-4 last:pb-0">
                 <span className="relative z-10 flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 flex-shrink-0">
+                  <Sparkles className="w-3 h-3" />
+                </span>
+                <span className="text-sm">Choose your occasion</span>
+              </li>
+              <li className="relative flex items-center gap-3 text-gray-300 pb-4 last:pb-0">
+                <span className="relative z-10 flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 flex-shrink-0">
                   <Cake className="w-3 h-3" />
                 </span>
-                <span className="text-sm">Choose your dream cake</span>
+                <span className="text-sm">Pick cakes for your wish</span>
               </li>
               <li className="relative flex items-center gap-3 text-gray-300 pb-4 last:pb-0">
                 <span className="relative z-10 flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 flex-shrink-0">
                   <Link2 className="w-3 h-3" />
                 </span>
-                <span className="text-sm">Share your wish link with Someone</span>
-              </li>
-              <li className="relative flex items-center gap-3 text-gray-300 pb-4 last:pb-0">
-                <span className="relative z-10 flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 flex-shrink-0">
-                  <Gift className="w-3 h-3" />
-                </span>
-                <span className="text-sm">Someone surprises you at midnight 🎉</span>
+                <span className="text-sm">Share your wish link & get surprised 🎉</span>
               </li>
             </ul>
             <p className="text-gray-500 mb-10">
@@ -504,7 +635,7 @@ export default function MidnightWishPage() {
             </p>
             <button
               onClick={() => openAuthModal('/midnight-wish')}
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-[#0d0d12] font-semibold transition-colors"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-[#0d0d12] font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-[#0d0d12] hover:shadow-[0_0_20px_rgba(251,191,36,0.25)]"
             >
               <LogIn className="w-5 h-5" />
               Log in to make my wish
@@ -520,7 +651,7 @@ export default function MidnightWishPage() {
   // ——— Authenticated: emotional landing (no form) ———
   if (isAuthenticated && step === null && !createdWish) {
     return (
-      <div className="min-h-screen bg-[#0d0d12] text-gray-100">
+      <div className={`min-h-screen bg-[#0d0d12] text-gray-100${draftItems.length > 0 ? ' pb-24' : ''}`}>
         <Header />
         <LocationBar />
         <div className="relative overflow-hidden">
@@ -540,21 +671,21 @@ export default function MidnightWishPage() {
               <div className="absolute left-[11px] top-6 bottom-6 w-0.5 bg-gradient-to-b from-amber-500/40 via-amber-500/30 to-amber-500/40" aria-hidden />
               <li className="relative flex items-center gap-3 text-gray-300 pb-4 last:pb-0">
                 <span className="relative z-10 flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 flex-shrink-0">
+                  <Sparkles className="w-3 h-3" />
+                </span>
+                <span className="text-sm">Choose your occasion</span>
+              </li>
+              <li className="relative flex items-center gap-3 text-gray-300 pb-4 last:pb-0">
+                <span className="relative z-10 flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 flex-shrink-0">
                   <Cake className="w-3 h-3" />
                 </span>
-                <span className="text-sm">Choose your dream cake</span>
+                <span className="text-sm">Pick cakes for your wish</span>
               </li>
               <li className="relative flex items-center gap-3 text-gray-300 pb-4 last:pb-0">
                 <span className="relative z-10 flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 flex-shrink-0">
                   <Link2 className="w-3 h-3" />
                 </span>
-                <span className="text-sm">Share your wish link with Someone</span>
-              </li>
-              <li className="relative flex items-center gap-3 text-gray-300 pb-4 last:pb-0">
-                <span className="relative z-10 flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 flex-shrink-0">
-                  <Gift className="w-3 h-3" />
-                </span>
-                <span className="text-sm">Someone surprises you at midnight 🎉</span>
+                <span className="text-sm">Share your wish link & get surprised 🎉</span>
               </li>
             </ul>
             <div className="flex items-center justify-center gap-2 mb-8">
@@ -587,7 +718,7 @@ export default function MidnightWishPage() {
                     if (draft.length > 0) setDraftItems(draft);
                     setStep('cakes');
                   }}
-                  className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-amber-500 hover:bg-amber-400 text-[#0d0d12] font-bold text-lg transition-all hover:scale-[1.02]"
+                  className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-amber-500 hover:bg-amber-400 text-[#0d0d12] font-bold text-lg transition-all hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-[#0d0d12] hover:shadow-[0_0_24px_rgba(251,191,36,0.3)]"
                 >
                   <Gift className="w-6 h-6" />
                   Make My Wish
@@ -600,7 +731,7 @@ export default function MidnightWishPage() {
                   fulfillInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                   setTimeout(() => fulfillInputRef.current?.focus(), 400);
                 }}
-                  className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-amber-500/20 border-2 border-amber-400/60 text-amber-300 hover:bg-amber-500/30 hover:border-amber-400 font-semibold text-lg transition-colors"
+                  className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-amber-500/20 border-2 border-amber-400/60 text-amber-300 hover:bg-amber-500/30 hover:border-amber-400 font-semibold text-lg transition-all focus:outline-none focus:ring-2 focus:ring-amber-400/60 focus:ring-offset-2 focus:ring-offset-[#0d0d12] hover:shadow-[0_0_20px_rgba(251,191,36,0.2)]"
                 >
                   <Heart className="w-6 h-6" />
                   Fulfill Someone&apos;s Wish
@@ -629,25 +760,109 @@ export default function MidnightWishPage() {
               </div>
             </section>
 
-            {myWishes.length > 0 && (
+            {/* My wishes list removed from Home – use your own design elsewhere */}
+            {false && myWishes.length > 0 && draftItems.length === 0 && (
               <div className="mt-12 pt-8 pb-16 border-t border-white/10 text-left max-w-md mx-auto">
                 <p className="text-sm font-medium text-gray-400 mb-3">My wishes</p>
-                <div className="space-y-2">
+                <div className="space-y-4">
                   {myWishes.slice(0, 10).map((w) => {
                     const wishUrl = typeof window !== 'undefined' ? `${window.location.origin}/midnight-wish/wish/${w.public_id}` : '';
                     const shareText = 'Fulfill my Midnight Wish 🎂 – order this cake for me!';
+                    const items = w.items || [];
+                    const groupedByProduct = items.reduce((acc, it) => {
+                      const key = it.product_id;
+                      if (!acc[key]) acc[key] = { product_name: it.product_name, image_url: it.image_url, variations: [] };
+                      if (it.variation) acc[key].variations.push(it.variation);
+                      return acc;
+                    }, {});
+                    const productGroups = Object.entries(groupedByProduct);
                     return (
-                      <div key={w.id} className="flex items-center justify-between p-3 rounded-xl bg-white/5 gap-2">
-                        <span className="text-white text-sm flex-1 min-w-0">{w.item_count} items{w.occasion && ` · ${w.occasion}`}</span>
-                        <div className="flex items-center gap-3 flex-shrink-0">
-                          <a href={`/midnight-wish/wish/${w.public_id}`} target="_blank" rel="noopener noreferrer" className="text-amber-400 text-sm hover:underline font-medium">Open</a>
-                          <button onClick={() => { if (wishUrl) window.open(`https://wa.me/?text=${encodeURIComponent(shareText + ' ' + wishUrl)}`, '_blank'); }} className="p-1.5 rounded-lg hover:bg-green-500/20 text-green-500/90 hover:text-green-400 inline-flex items-center justify-center" aria-label="Share on WhatsApp" title="WhatsApp">
-                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                          </button>
-                          <button onClick={async () => { if (typeof navigator !== 'undefined' && navigator.share && wishUrl) { try { await navigator.share({ title: 'Midnight Wish', text: shareText, url: wishUrl }); showSuccess('Shared!', ''); } catch (e) { if (e?.name !== 'AbortError') { navigator.clipboard?.writeText(wishUrl); showSuccess('Link copied', ''); } } } else if (wishUrl) { navigator.clipboard?.writeText(wishUrl); showSuccess('Copied!', 'Link copied'); } }} className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white" aria-label="Share link" title="Share"><Share2 className="w-4 h-4" /></button>
-                          <button onClick={() => setDeleteConfirmWishId(w.id)} disabled={deletingWishId === w.id} className="p-1.5 rounded-lg hover:bg-red-500/20 text-gray-400 hover:text-red-400 disabled:opacity-50" aria-label="Delete wish" title="Delete wish">
-                            {deletingWishId === w.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                          </button>
+                      <div key={w.id} className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
+                        <div className="p-3">
+                          {items.length > 0 ? (
+                            <>
+                              <div className="flex items-start gap-3">
+                                <div className="flex gap-1.5 flex-shrink-0">
+                                  {items.slice(0, 4).map((it) => {
+                                    const removing = removingWishItemKey === `${w.id}-${it.id}`;
+                                    const showItemRemove = items.length > 1;
+                                    return (
+                                      <div key={it.id} className="relative w-10 h-10 rounded-md overflow-hidden bg-white/10 ring-1 ring-white/10">
+                                        <img src={resolveImageUrl(it.image_url)} alt="" className="w-full h-full object-cover" />
+                                        {showItemRemove && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleRemoveWishItem(w.id, it.id)}
+                                            disabled={removing}
+                                            className="absolute top-0.5 right-0.5 w-5 h-5 flex items-center justify-center rounded-full bg-red-500/90 hover:bg-red-500 text-white shadow transition-colors disabled:opacity-70"
+                                            aria-label={`Remove ${it.product_name}${it.variation ? ` (${it.variation})` : ''} from wish`}
+                                            title="Remove item"
+                                          >
+                                            {removing ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+                                          </button>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  {items.length === 1 ? (
+                                    (() => {
+                                      const it = items[0];
+                                      const weight = it.weight || it.variation || null;
+                                      const servings = weight ? inferServingsFromWeight(weight) : null;
+                                      const parts = [];
+                                      if (typeof it.price === 'number') parts.push({ text: formatPrice(it.price), isPrice: true });
+                                      if (weight) parts.push({ text: weight });
+                                      if (servings) parts.push({ text: servings });
+                                      parts.push({ text: '1 Tier' });
+                                      return (
+                                        <div>
+                                          <p className="text-sm font-medium text-white truncate">{it.product_name}</p>
+                                          <p className="mt-1 text-xs text-gray-400">
+                                            {parts.map((part, i) => (
+                                              <span key={i}>
+                                                {i > 0 && <span className="text-gray-500 mx-1">·</span>}
+                                                {part.isPrice ? <span className="text-amber-400 font-semibold">{part.text}</span> : part.text}
+                                              </span>
+                                            ))}
+                                          </p>
+                                        </div>
+                                      );
+                                    })()
+                                  ) : (
+                                    productGroups.map(([pid, g]) => (
+                                      <div key={pid} className="mb-2 last:mb-0">
+                                        <p className="text-sm font-medium text-white truncate">{g.product_name}</p>
+                                        {g.variations.length > 0 && (
+                                          <div className="flex flex-wrap gap-1 mt-0.5">
+                                            {g.variations.map((v, i) => (
+                                              <span key={i} className="inline-flex px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400/90 text-xs font-medium ring-1 ring-amber-500/20">
+                                                {v}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+                              {w.occasion && <p className="text-gray-500 text-xs mt-1">{w.occasion}</p>}
+                            </>
+                          ) : (
+                            <p className="text-gray-400 text-sm mb-2">{w.item_count} items{w.occasion && ` · ${w.occasion}`}</p>
+                          )}
+                          <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/5">
+                            <button type="button" onClick={() => setOpenWishModal(w)} className="text-amber-400 text-sm hover:underline font-medium">Open</button>
+                            <button onClick={() => { if (wishUrl) window.open(`https://wa.me/?text=${encodeURIComponent(shareText + ' ' + wishUrl)}`, '_blank'); }} className="p-1.5 rounded-lg hover:bg-green-500/20 text-green-500/90 hover:text-green-400 inline-flex items-center justify-center" aria-label="Share on WhatsApp" title="WhatsApp">
+                              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                            </button>
+                            <button onClick={async () => { if (typeof navigator !== 'undefined' && navigator.share && wishUrl) { try { await navigator.share({ title: 'Midnight Wish', text: shareText, url: wishUrl }); showSuccess('Shared!', ''); } catch (e) { if (e?.name !== 'AbortError') { navigator.clipboard?.writeText(wishUrl); showSuccess('Link copied', ''); } } } else if (wishUrl) { navigator.clipboard?.writeText(wishUrl); showSuccess('Copied!', 'Link copied'); } }} className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white" aria-label="Share link" title="Share"><Share2 className="w-4 h-4" /></button>
+                            <button onClick={() => setDeleteConfirmWishId(w.id)} disabled={deletingWishId === w.id} className="p-1.5 rounded-lg hover:bg-red-500/20 text-gray-400 hover:text-red-400 disabled:opacity-50" aria-label="Delete wish" title="Delete wish">
+                              {deletingWishId === w.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -709,9 +924,234 @@ export default function MidnightWishPage() {
               </div>,
               document.body
             )}
+
+            {/* Open Wish popup: view wish + share on same page */}
+            {typeof document !== 'undefined' && openWishModal != null && createPortal(
+              (() => {
+                const w = openWishModal;
+                const wishUrl = typeof window !== 'undefined' ? `${window.location.origin}/midnight-wish/wish/${w.public_id}` : '';
+                const shareText = 'Fulfill my Midnight Wish 🎂 – order this cake for me!';
+                const items = w.items || [];
+                return (
+                  <div
+                    className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70"
+                    onClick={() => setOpenWishModal(null)}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="open-wish-modal-title"
+                  >
+                    <div
+                      className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#1a1a1f] shadow-xl p-5"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex justify-between items-start gap-2 mb-4">
+                        <h2 id="open-wish-modal-title" className="text-lg font-bold text-white">Your wish</h2>
+                        <button type="button" onClick={() => setOpenWishModal(null)} className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white" aria-label="Close">
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                      {w.occasion && <p className="text-amber-400/90 text-sm font-medium mb-1">{w.occasion}</p>}
+                      {w.message && w.message.trim() && <p className="text-gray-300 text-sm mb-3">{w.message.trim()}</p>}
+                      {items.length > 0 && (
+                        <ul className="space-y-1.5 mb-4 text-sm text-gray-300">
+                          {items.map((it) => (
+                            <li key={it.id} className="flex justify-between gap-2">
+                              <span className="truncate">{it.product_name}</span>
+                              {(it.weight || it.variation) && <span className="text-amber-400/90 flex-shrink-0">{it.weight || it.variation}</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <p className="text-gray-400 text-xs mb-2">Share this link</p>
+                      <div className="flex gap-2 mb-3">
+                        <input readOnly value={wishUrl} className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-sm" />
+                        <button
+                          type="button"
+                          onClick={() => { if (wishUrl) { navigator.clipboard?.writeText(wishUrl); showSuccess('Copied!', 'Link copied'); } }}
+                          className="px-4 py-2 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 font-medium hover:bg-amber-500/30 flex-shrink-0"
+                        >
+                          <Copy className="w-4 h-4 inline mr-1" /> Copy
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => { if (wishUrl) window.open(`https://wa.me/?text=${encodeURIComponent(shareText + ' ' + wishUrl)}`, '_blank'); }}
+                          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-green-500/50 text-green-400 hover:bg-green-500/10 font-medium"
+                        >
+                          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                          WhatsApp
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => { if (typeof navigator !== 'undefined' && navigator.share && wishUrl) { try { await navigator.share({ title: 'Midnight Wish', text: shareText, url: wishUrl }); showSuccess('Shared!', ''); } catch (e) { if (e?.name !== 'AbortError') { navigator.clipboard?.writeText(wishUrl); showSuccess('Link copied', ''); } } } else if (wishUrl) { navigator.clipboard?.writeText(wishUrl); showSuccess('Copied!', 'Link copied'); } }}
+                          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-white/20 text-gray-300 hover:bg-white/10 font-medium"
+                        >
+                          <Share2 className="w-5 h-5" /> Share
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })(),
+              document.body
+            )}
+
+            {draftItems.length > 0 && (
+              <>
+                {typeof document !== 'undefined' && removeDraftItemConfirm && createPortal(
+                  <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60" onClick={() => setRemoveDraftItemConfirm(null)} role="dialog" aria-modal="true" aria-labelledby="remove-draft-item-title">
+                    <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#1a1a1f] shadow-xl p-6" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex justify-center mb-4">
+                        <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+                          <Trash2 className="w-6 h-6 text-red-400" />
+                        </div>
+                      </div>
+                      <h3 id="remove-draft-item-title" className="text-lg font-semibold text-white text-center mb-2">Remove from your wish?</h3>
+                      <p className="text-gray-400 text-sm text-center mb-6">This cake will be removed from your wish. You can add it again anytime.</p>
+                      <div className="flex gap-3">
+                        <button type="button" onClick={() => setRemoveDraftItemConfirm(null)} className="flex-1 py-2.5 rounded-xl border border-white/20 text-gray-300 hover:bg-white/10 font-medium">Cancel</button>
+                        <button type="button" onClick={() => { removeFromDraft(removeDraftItemConfirm.productId, removeDraftItemConfirm.variantId); setRemoveDraftItemConfirm(null); }} className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-medium">Remove</button>
+                      </div>
+                    </div>
+                  </div>,
+                  document.body
+                )}
+                <div className="fixed bottom-0 left-0 right-0 z-[100] border-t border-white/10 bg-[#0d0d12]/95 backdrop-blur-sm safe-area-pb w-full">
+                  <div className="w-full px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <p className="text-gray-400 text-sm text-center sm:text-left">
+                      {draftItems.length === 1
+                        ? '1 item is waiting to complete someone\'s wish'
+                        : `${draftItems.length} items are waiting to complete someone's wish`}
+                    </p>
+                    <button
+                      onClick={() => { const draft = getMidnightWishDraft(); if (draft.length > 0) setDraftItems(draft); setStep('cakes'); }}
+                      className="w-full sm:w-auto sm:min-w-[180px] inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-[#0d0d12] font-bold text-[15px] tracking-tight shrink-0"
+                    >
+                      <ShoppingCart className="w-5 h-5" />
+                      Continue to wish
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
-        <MobileFooter />
+        {/* No site footer on Midnight Wish Home – cleaner UX with or without draft */}
+      </div>
+    );
+  }
+
+  // ——— Authenticated Home: "Your wish is ready" (created from Home, skip Step 2) ———
+  if (isAuthenticated && step === null && createdWish) {
+    const firstItem = draftItems?.[0] ?? null;
+    const shareCardImage = firstItem ? resolveImageUrl(firstItem.image_url) : null;
+    const displayMessage = (message && message.trim()) ? message.trim() : 'Someone, fulfill my Midnight Wish 🎂✨';
+    const displayOccasion = (occasion && occasion.trim()) ? occasion.trim() : '';
+
+    return (
+      <div className="min-h-screen bg-[#0d0d12] text-gray-100 pb-24">
+        <Header />
+        <LocationBar />
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10">
+          <button onClick={() => resetFlow(true)} className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors" aria-label="Back">
+            <ChevronLeft className="w-5 h-5" /> Back
+          </button>
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-amber-400 text-sm font-medium">Step 3 of 3 · Final</span>
+            <div className="flex-1 h-1 rounded-full bg-white/10">
+              <div className="h-full w-full rounded-full bg-amber-500/60" />
+            </div>
+          </div>
+          <div className="max-w-lg mx-auto space-y-6">
+            {/* Success header */}
+            <div className="text-center sm:text-left">
+              <div className="inline-flex items-center gap-2 text-amber-400 font-semibold text-sm">
+                <span className="flex items-center justify-center w-8 h-8 rounded-full bg-amber-500/20">
+                  <Check className="w-4 h-4" />
+                </span>
+                Your wish is ready!
+              </div>
+              <p className="text-gray-500 text-xs mt-2">Link copied – paste in WhatsApp, message, or email.</p>
+            </div>
+
+            {/* Wish card */}
+            <div ref={shareCardRef} className="rounded-2xl overflow-hidden border border-white/10 bg-white/[0.02] shadow-xl">
+              <div className="aspect-[4/3] sm:aspect-video bg-white/5 relative">
+                {shareCardImage ? (
+                  <img src={shareCardImage} alt="Your wish" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-amber-500/20 to-indigo-500/20">
+                    <Star className="w-20 h-20 text-amber-400/80" />
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                <div className="absolute bottom-0 left-0 right-0 p-5 text-white">
+                  {displayOccasion && <p className="text-amber-400 font-semibold text-sm mb-1">{displayOccasion}</p>}
+                  <p className="text-lg font-bold leading-snug">{displayMessage}</p>
+                  <p className="text-white/80 text-xs mt-1.5">Share this link. Someone special can fulfill it.</p>
+                  <p className="text-white/50 text-[10px] mt-2 uppercase tracking-wider">Creamingo · Midnight Wish</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Share panel – one card for all actions */}
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 space-y-4">
+              <button
+                type="button"
+                onClick={handleDownloadCard}
+                disabled={downloadingCard}
+                className="w-full h-11 inline-flex items-center justify-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-[#0d0d12] font-semibold text-sm disabled:opacity-50 transition-colors"
+              >
+                {downloadingCard ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                {downloadingCard ? 'Preparing...' : 'Download card'}
+              </button>
+
+              <div className="border-t border-white/10 pt-4 space-y-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Share your wish link</p>
+                <div className="flex gap-2 items-center">
+                  <input readOnly value={getShareUrl()} className="flex-1 min-w-0 h-11 px-3 rounded-xl bg-white/5 border border-white/10 text-white text-xs truncate focus:outline-none" />
+                  <button
+                    onClick={copyShareUrl}
+                    className={`flex-shrink-0 h-11 inline-flex items-center justify-center gap-2 px-4 rounded-xl text-sm font-semibold min-w-[100px] transition-colors ${linkCopyFeedbackUntil > 0 ? 'bg-green-600 text-white ring-2 ring-green-400/50 ring-offset-2 ring-offset-[#0d0d12]' : 'bg-amber-500 hover:bg-amber-400 text-[#0d0d12]'}`}
+                  >
+                    {linkCopyFeedbackUntil > 0 ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    {linkCopyFeedbackUntil > 0 ? 'Copied' : 'Copy link'}
+                  </button>
+                </div>
+                <div className="flex gap-2 items-center">
+                  <input readOnly value={getShortShareUrl()} className="flex-1 min-w-0 h-10 px-3 rounded-xl bg-white/5 border border-white/10 text-gray-400 text-xs font-mono truncate focus:outline-none" />
+                  <button
+                    onClick={copyShortShareUrl}
+                    className={`flex-shrink-0 h-10 inline-flex items-center justify-center gap-1.5 px-3 rounded-xl text-xs font-medium min-w-[72px] transition-colors ${shortLinkCopyFeedbackUntil > 0 ? 'bg-green-600 text-white ring-2 ring-green-400/50 ring-offset-2 ring-offset-[#0d0d12]' : 'border border-white/15 text-gray-400 hover:bg-white/10'}`}
+                  >
+                    {shortLinkCopyFeedbackUntil > 0 ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    {shortLinkCopyFeedbackUntil > 0 ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                {canNativeShare && (
+                  <button onClick={handleNativeShare} className="flex-1 h-10 inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 text-gray-300 hover:bg-white/10 hover:text-white text-sm font-medium transition-colors">
+                    <Share2 className="w-4 h-4" /> Share
+                  </button>
+                )}
+                <button onClick={shareOnWhatsApp} className={`${canNativeShare ? 'flex-1' : 'w-full'} h-10 inline-flex items-center justify-center gap-2 rounded-xl border border-green-500/40 text-green-400 hover:bg-green-500/10 text-sm font-medium transition-colors`}>
+                  Share on WhatsApp
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        {/* Sticky footer: single CTA, no duplicate Copy link */}
+        <div className="fixed bottom-0 left-0 right-0 z-[100] border-t border-white/10 bg-[#0d0d12]/95 backdrop-blur-sm safe-area-pb w-full">
+          <div className="w-full px-4 py-2.5 flex justify-center">
+            <button onClick={resetFlow} className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl border border-white/20 text-gray-300 hover:bg-white/10 hover:text-white text-sm font-medium">
+              Create another wish
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -727,9 +1167,9 @@ export default function MidnightWishPage() {
             <ChevronLeft className="w-5 h-5" /> Back
           </button>
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-amber-400 text-sm font-medium">Step 1 of 2</span>
+            <span className="rounded-full px-3 py-1 text-xs font-medium bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/30">Step 1 of 3</span>
             <div className="flex-1 h-1 rounded-full bg-white/10">
-              <div className="h-full w-1/2 rounded-full bg-amber-500/60" />
+              <div className="h-full w-1/3 rounded-full bg-amber-500/60" />
             </div>
           </div>
           <h2 className="text-2xl font-bold text-white mb-2">Choose your wish type</h2>
@@ -743,7 +1183,7 @@ export default function MidnightWishPage() {
                   setOccasion(t.occasion);
                   setStep('cakes');
                 }}
-                className="p-5 rounded-2xl border-2 border-white/10 bg-white/5 hover:border-amber-500/50 hover:bg-amber-500/10 text-left transition-all group"
+                className="p-5 rounded-2xl border-2 border-white/10 bg-white/5 hover:border-amber-400/50 hover:bg-amber-500/10 hover:scale-[1.02] text-left transition-all duration-200 group"
               >
                 <span className="text-2xl mb-2 block">{t.emoji}</span>
                 <span className="text-white font-semibold text-sm block mb-2">{t.label}</span>
@@ -759,7 +1199,7 @@ export default function MidnightWishPage() {
               setOccasion('');
               setStep('cakes');
             }}
-            className="w-full py-3 rounded-xl border border-white/20 text-gray-400 hover:bg-white/10 hover:text-white font-medium"
+            className="text-gray-500 hover:text-amber-400 text-sm font-medium transition-colors"
           >
             Skip – just pick cakes
           </button>
@@ -771,11 +1211,111 @@ export default function MidnightWishPage() {
 
   // ——— Step 2: Pick cakes (curated first, search more secondary) ———
   if (step === 'cakes') {
+    const firstItem = draftItems?.[0] ?? null;
+    const shareCardImage = firstItem ? resolveImageUrl(firstItem.image_url) : null;
+    const displayMessage = (message && message.trim()) ? message.trim() : 'Someone, fulfill my Midnight Wish 🎂✨';
+    const displayOccasion = (occasion && occasion.trim()) ? occasion.trim() : '';
+
     return (
-      <div className="min-h-screen bg-[#0d0d12] text-gray-100">
+      <div className="min-h-screen bg-[#0d0d12] text-gray-100 pb-24">
         <Header />
         <LocationBar />
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10">
+          {createdWish ? (
+            /* Success state: same page (Step 2), share card + share panel */
+            <>
+<button onClick={() => resetFlow(true)} className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors" aria-label="Back">
+              <ChevronLeft className="w-5 h-5" /> Back
+              </button>
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-amber-400 text-sm font-medium">Step 3 of 3 · Final</span>
+                <div className="flex-1 h-1 rounded-full bg-white/10">
+                  <div className="h-full w-full rounded-full bg-amber-500/60" />
+                </div>
+              </div>
+              <div className="max-w-lg mx-auto space-y-6">
+              {/* Success header */}
+              <div className="text-center sm:text-left">
+                <div className="inline-flex items-center gap-2 text-amber-400 font-semibold text-sm">
+                  <span className="flex items-center justify-center w-8 h-8 rounded-full bg-amber-500/20">
+                    <Check className="w-4 h-4" />
+                  </span>
+                  Your wish is ready!
+                </div>
+                <p className="text-gray-500 text-xs mt-2">Link copied – paste in WhatsApp, message, or email.</p>
+              </div>
+
+              {/* Wish card */}
+              <div ref={shareCardRef} className="rounded-2xl overflow-hidden border border-white/10 bg-white/[0.02] shadow-xl">
+                <div className="aspect-[4/3] sm:aspect-video bg-white/5 relative">
+                  {shareCardImage ? (
+                    <img src={shareCardImage} alt="Your wish" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-amber-500/20 to-indigo-500/20">
+                      <Star className="w-20 h-20 text-amber-400/80" />
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                  <div className="absolute bottom-0 left-0 right-0 p-5 text-white">
+                    {displayOccasion && <p className="text-amber-400 font-semibold text-sm mb-1">{displayOccasion}</p>}
+                    <p className="text-lg font-bold leading-snug">{displayMessage}</p>
+                    <p className="text-white/80 text-xs mt-1.5">Share this link. Someone special can fulfill it.</p>
+                    <p className="text-white/50 text-[10px] mt-2 uppercase tracking-wider">Creamingo · Midnight Wish</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Share panel – one card for all actions */}
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 space-y-4">
+                <button
+                  type="button"
+                  onClick={handleDownloadCard}
+                  disabled={downloadingCard}
+                  className="w-full h-11 inline-flex items-center justify-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-[#0d0d12] font-semibold text-sm disabled:opacity-50 transition-colors"
+                >
+                  {downloadingCard ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  {downloadingCard ? 'Preparing...' : 'Download card'}
+                </button>
+
+                <div className="border-t border-white/10 pt-4 space-y-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Share your wish link</p>
+                  <div className="flex gap-2 items-center">
+                    <input readOnly value={getShareUrl()} className="flex-1 min-w-0 h-11 px-3 rounded-xl bg-white/5 border border-white/10 text-white text-xs truncate focus:outline-none" />
+                    <button
+                      onClick={copyShareUrl}
+                      className={`flex-shrink-0 h-11 inline-flex items-center justify-center gap-2 px-4 rounded-xl text-sm font-semibold min-w-[100px] transition-colors ${linkCopyFeedbackUntil > 0 ? 'bg-green-600 text-white ring-2 ring-green-400/50 ring-offset-2 ring-offset-[#0d0d12]' : 'bg-amber-500 hover:bg-amber-400 text-[#0d0d12]'}`}
+                    >
+                      {linkCopyFeedbackUntil > 0 ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      {linkCopyFeedbackUntil > 0 ? 'Copied' : 'Copy link'}
+                    </button>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <input readOnly value={getShortShareUrl()} className="flex-1 min-w-0 h-10 px-3 rounded-xl bg-white/5 border border-white/10 text-gray-400 text-xs font-mono truncate focus:outline-none" />
+                    <button
+                      onClick={copyShortShareUrl}
+                      className={`flex-shrink-0 h-10 inline-flex items-center justify-center gap-1.5 px-3 rounded-xl text-xs font-medium min-w-[72px] transition-colors ${shortLinkCopyFeedbackUntil > 0 ? 'bg-green-600 text-white ring-2 ring-green-400/50 ring-offset-2 ring-offset-[#0d0d12]' : 'border border-white/15 text-gray-400 hover:bg-white/10'}`}
+                    >
+                      {shortLinkCopyFeedbackUntil > 0 ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      {shortLinkCopyFeedbackUntil > 0 ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  {canNativeShare && (
+                    <button onClick={handleNativeShare} className="flex-1 h-10 inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 text-gray-300 hover:bg-white/10 hover:text-white text-sm font-medium transition-colors">
+                      <Share2 className="w-4 h-4" /> Share
+                    </button>
+                  )}
+                  <button onClick={shareOnWhatsApp} className={`${canNativeShare ? 'flex-1' : 'w-full'} h-10 inline-flex items-center justify-center gap-2 rounded-xl border border-green-500/40 text-green-400 hover:bg-green-500/10 text-sm font-medium transition-colors`}>
+                    Share on WhatsApp
+                  </button>
+                </div>
+              </div>
+            </div>
+            </>
+          ) : (
+            <>
           <button
             onClick={() => { setStep('type'); setDraftItems(getMidnightWishDraft()); }}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/5 text-amber-200/90 hover:bg-amber-500/15 hover:border-amber-500/50 hover:text-amber-100 font-medium text-sm transition-colors mb-6"
@@ -783,9 +1323,9 @@ export default function MidnightWishPage() {
             <ChevronLeft className="w-4 h-4" /> Choose your occasion type
           </button>
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-amber-400 text-sm font-medium">Step 2 of 2</span>
+            <span className="text-amber-400 text-sm font-medium">Step 2 of 3</span>
             <div className="flex-1 h-1 rounded-full bg-white/10">
-              <div className="h-full w-full rounded-full bg-amber-500/60" />
+              <div className="h-full w-2/3 rounded-full bg-amber-500/60" />
             </div>
           </div>
           <h2 className="text-2xl font-bold text-white mb-1">Pick cakes for your wish</h2>
@@ -888,27 +1428,6 @@ export default function MidnightWishPage() {
             )}
           </div>
 
-          {/* Selected */}
-          {draftItems.length > 0 && (
-            <div className="mb-6">
-              <p className="text-sm font-medium text-gray-400 mb-3">Your wish ({draftItems.length})</p>
-              <div className="space-y-2">
-                {draftItems.map((item) => (
-                  <div key={`${item.product_id}-${item.variant_id || 'x'}`} className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
-                    <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
-                      <img src={resolveImageUrl(item.image_url)} alt={item.product_name} className="w-full h-full object-cover" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-medium truncate">{item.product_name}</p>
-                      <p className="text-amber-400 text-xs">₹{Number(item.discounted_price ?? item.base_price ?? 0).toFixed(0)}{item.quantity > 1 ? ` × ${item.quantity}` : ''}</p>
-                    </div>
-                    <button onClick={() => setRemoveDraftItemConfirm({ productId: item.product_id, variantId: item.variant_id, productName: item.product_name })} className="p-2 rounded-lg hover:bg-red-500/20 text-gray-400 hover:text-red-400" aria-label="Remove"><Trash2 className="w-4 h-4" /></button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* Optional message (merged into this step) */}
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-400 mb-2">Add a message (optional)</label>
@@ -957,14 +1476,9 @@ export default function MidnightWishPage() {
             </div>
           </div>
 
-          <button
-            onClick={handleCreateWish}
-            disabled={draftItems.length === 0 || creating}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-[#0d0d12] font-bold mb-16"
-          >
-            {creating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Share2 className="w-5 h-5" />}
-            {creating ? 'Creating...' : 'Create my wish'}
-          </button>
+          {/* Create my wish moved to sticky footer below */}
+            </>
+          )}
 
           {/* Remove-from-wish confirmation modal (Step 2 – Your wish) */}
           {typeof document !== 'undefined' && removeDraftItemConfirm && createPortal(
@@ -1023,9 +1537,10 @@ export default function MidnightWishPage() {
                     const full = addToWishModalFull;
                     const allImages = [full.image_url, ...(full.gallery_images || [])].filter(Boolean).map(resolveImageUrl);
                     const mainImage = allImages[addToWishModalImageIndex] || allImages[0];
-                    const baseWeight = full.base_weight;
+                    const baseWeight = full.base_weight ?? full.variants?.[0]?.weight ?? null;
                     const variants = full.variants || [];
-                    const currentWeight = addToWishModalVariant?.weight || baseWeight;
+                    const currentWeightRaw = addToWishModalVariant?.weight ?? baseWeight;
+                    const currentWeight = currentWeightRaw != null && currentWeightRaw !== '' ? String(currentWeightRaw).trim() : null;
                     const tierOptions = getAvailableTiersForWeight(currentWeight);
                     const selectedTier = addToWishModalTier || tierOptions[0];
                     const servingText = inferServingsFromWeight(currentWeight);
@@ -1059,9 +1574,16 @@ export default function MidnightWishPage() {
                           discounted_price: addToWishModalVariant.discounted_price ?? addToWishModalVariant.price
                         }
                       : null;
-                    const displayPrice = discountedPrice;
+                    const isEditMode = addToWishModalEditIndex !== null;
+                    const draftOptions = { weight: currentWeight ?? undefined, tier: selectedTier ?? undefined };
                     const handleAddToWish = () => {
-                      addToDraft(productForDraft, variantForDraft, 1);
+                      if (isEditMode) {
+                        const currentQty = draftItems[addToWishModalEditIndex]?.quantity ?? 1;
+                        updateDraftAtIndex(addToWishModalEditIndex, productForDraft, variantForDraft, currentQty, draftOptions);
+                        showSuccess('Wish updated', `${full.name} updated in your wish`);
+                      } else {
+                        addToDraft(productForDraft, variantForDraft, 1, draftOptions);
+                      }
                       setAddToWishModalProduct(null);
                     };
                     return (
@@ -1100,8 +1622,10 @@ export default function MidnightWishPage() {
                             {/* Price: clear structure, catchy card */}
                             <div className="rounded-xl border border-amber-500/20 bg-gradient-to-br from-amber-500/10 via-white/5 to-transparent p-3.5">
                               <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
-                                <span className="text-xs font-medium uppercase tracking-wider text-gray-500">Price for</span>
-                                <span className="rounded-md bg-amber-500/20 px-2 py-0.5 text-sm font-bold text-amber-400 ring-1 ring-amber-500/30">{currentWeight}</span>
+                                <span className="text-xs font-medium uppercase tracking-wider text-gray-500">{currentWeight ? 'Price for' : 'Size'}</span>
+                                <span className={`rounded-md px-2 py-0.5 text-sm font-bold ring-1 ${currentWeight ? 'bg-amber-500/20 text-amber-400 ring-amber-500/30' : 'bg-white/10 text-gray-400 ring-white/20'}`}>
+                                  {currentWeight || 'Choose size'}
+                                </span>
                               </div>
                               <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
                                 {hasDiscount ? (
@@ -1120,7 +1644,7 @@ export default function MidnightWishPage() {
                             </div>
 
                             <div>
-                              <p className="text-gray-400 text-sm mb-2">Weight</p>
+                              <p className="text-gray-400 text-sm mb-2">{currentWeight ? 'Weight' : 'Choose size'}</p>
                               <div className="flex flex-wrap gap-2">
                                 {baseWeight && (
                                   <button
@@ -1184,7 +1708,7 @@ export default function MidnightWishPage() {
                               className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-[#0d0d12] font-bold flex items-center justify-center gap-2"
                             >
                               <Heart className="w-5 h-5" />
-                              Add to wish
+                              {isEditMode ? 'Update your wish' : 'Add to wish'}
                             </button>
                           </div>
                         </div>
@@ -1198,134 +1722,136 @@ export default function MidnightWishPage() {
             </div>,
             document.body
           )}
-        </div>
-        <MobileFooter />
-      </div>
-    );
-  }
 
-  // ——— Share card preview (after create) ———
-  if (createdWish) {
-    const firstItem = draftItems?.[0] ?? null;
-    const shareCardImage = firstItem ? resolveImageUrl(firstItem.image_url) : null;
-    const displayMessage = (message && message.trim()) ? message.trim() : 'Someone, fulfill my Midnight Wish 🎂✨';
-    const displayOccasion = (occasion && occasion.trim()) ? occasion.trim() : '';
-
-    return (
-      <div className="min-h-screen bg-[#0d0d12] text-gray-100">
-        <Header />
-        <LocationBar />
-        <div className="max-w-lg mx-auto px-4 sm:px-6 py-12">
-          <div className="flex items-center gap-2 text-amber-400 font-semibold mb-2">
-            <Check className="w-6 h-6" />
-            Your wish is ready!
-          </div>
-          <p className="text-gray-400 text-sm mb-6">Link copied to clipboard – paste it in WhatsApp, message, or email to share.</p>
-
-          {/* Share card preview (captured for Download card) */}
-          <div ref={shareCardRef} className="rounded-2xl overflow-hidden border-2 border-amber-500/30 bg-gradient-to-b from-amber-500/10 to-transparent shadow-xl shadow-amber-500/10">
-            <div className="aspect-[4/3] sm:aspect-video bg-white/5 relative">
-              {shareCardImage ? (
-                <img src={shareCardImage} alt="Your wish" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-amber-500/20 to-indigo-500/20">
-                  <Star className="w-20 h-20 text-amber-400/80" />
+          {/* Step 2: Sticky footer – success: Create another only; draft: wish summary + Create my wish */}
+          <div className="fixed bottom-0 left-0 right-0 z-[100] border-t border-white/10 bg-[#0d0d12]/95 backdrop-blur-sm safe-area-pb w-full">
+            {createdWish ? (
+              <div className="w-full px-4 py-2.5 flex justify-center">
+                <button onClick={resetFlow} className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl border border-white/20 text-gray-300 hover:bg-white/10 hover:text-white text-sm font-medium">
+                  Create another wish
+                </button>
+              </div>
+            ) : draftItems.length > 0 ? (
+              <div className="w-full px-3 pt-2 pb-1.5">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <p className="flex items-center gap-2 text-gray-500 text-[11px] font-semibold uppercase tracking-widest flex-shrink-0">
+                    <ShoppingCart className="w-3.5 h-3.5 flex-shrink-0" />
+                    Your wish ({draftItems.length})
+                  </p>
+                  <div className="flex-1 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => setWishFooterExpanded((v) => !v)}
+                      className="w-9 h-9 rounded-full flex items-center justify-center bg-white/10 text-gray-400 hover:text-amber-400 hover:bg-white/15"
+                      aria-expanded={wishFooterExpanded}
+                      aria-label={wishFooterExpanded ? 'Collapse' : 'Expand'}
+                    >
+                      {wishFooterExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {draftItems.length > 1 && (
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-[10px] text-gray-500 font-medium">{wishScrollIndex + 1} of {draftItems.length}</span>
+                      <div className="flex gap-1">
+                        {draftItems.map((_, i) => (
+                          <span
+                            key={i}
+                            className={`inline-block w-1.5 h-1.5 rounded-full transition-colors ${i === wishScrollIndex ? 'bg-amber-400' : 'bg-white/30'}`}
+                            aria-hidden
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {wishFooterExpanded && (
+                <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
+                  <div
+                    ref={wishScrollRef}
+                    onScroll={() => {
+                      const el = wishScrollRef.current;
+                      if (!el || draftItems.length <= 1) return;
+                      const cardWidthPx = typeof window !== 'undefined' ? window.innerWidth * 0.75 : 280;
+                      const gapPx = 8;
+                      const index = Math.min(Math.round(el.scrollLeft / (cardWidthPx + gapPx)), draftItems.length - 1);
+                      setWishScrollIndex(index);
+                    }}
+                    className="flex gap-2 overflow-x-auto scrollbar-hide snap-x snap-mandatory py-2 px-2"
+                    style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                  >
+                    {draftItems.map((item, index) => {
+                      const weight = item.weight || null;
+                      const servings = weight ? inferServingsFromWeight(weight) : null;
+                      const tier = item.tier || '1 Tier';
+                      const detailParts = [];
+                      detailParts.push(`₹${Number(item.discounted_price ?? item.base_price ?? 0).toFixed(0)}`);
+                      detailParts.push(weight || '—');
+                      detailParts.push(servings || '—');
+                      detailParts.push(tier.includes('Tier') ? tier : `${tier} Tier`);
+                      return (
+                        <div
+                          key={`${item.product_id}-${item.variant_id ?? 'b'}-${index}`}
+                          data-wish-card
+                          className="flex items-start gap-2 flex-shrink-0 w-[75vw] min-w-[75vw] max-w-[75vw] snap-start rounded-lg bg-white/5 border border-white/10 p-2"
+                        >
+                          <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 bg-white/5">
+                            <img src={resolveImageUrl(item.image_url)} alt={item.product_name} className="w-full h-full object-cover" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-end gap-1">
+                              <p className="text-white text-xs font-semibold tracking-tight leading-tight truncate flex-1 min-w-0 text-left">{item.product_name}</p>
+                              <button
+                                type="button"
+                                onClick={() => openAddToWishModalForEdit(index)}
+                                className="p-1 text-gray-400 hover:text-amber-400 flex-shrink-0"
+                                aria-label="Edit"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setRemoveDraftItemConfirm({ productId: item.product_id, variantId: item.variant_id, productName: item.product_name })}
+                                className="p-1 text-gray-400 hover:text-red-400 flex-shrink-0"
+                                aria-label="Remove"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            <p className="text-gray-500 text-[10px] mt-0.5 tracking-tight truncate tabular-nums">{detailParts.join(' · ')}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {message && message.trim() && (
+                    <div className="border-t border-white/10 px-2.5 py-1.5 bg-white/[0.03]">
+                      <p className="text-[10px] text-gray-400 truncate" title={message.trim()}>Message — {message.trim()}</p>
+                    </div>
+                  )}
+                </div>
+                )}
+              </div>
+            ) : null}
+            {!createdWish && (
+            <div className="w-full px-4 py-2.5 flex flex-col sm:flex-row sm:items-center gap-3">
+              {draftItems.length === 0 && (
+                <div className="flex-1 min-w-0 space-y-0.5">
+                  <p className="text-gray-500 text-xs sm:text-sm font-medium tracking-wide">Add at least one cake to continue</p>
+                  <p className="text-gray-600 text-xs">Tap &apos;Add to wish&apos; on any cake above.</p>
                 </div>
               )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-              <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
-                {displayOccasion && <p className="text-amber-400 font-semibold text-sm mb-1">{displayOccasion}</p>}
-                <p className="text-xl font-bold leading-snug">{displayMessage}</p>
-                <p className="text-white/80 text-sm mt-2">Share this link. Someone special can fulfill it.</p>
-                <p className="text-white/60 text-xs mt-3">Creamingo · Midnight Wish</p>
-              </div>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleDownloadCard}
-            disabled={downloadingCard}
-            className="w-full mb-6 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border-2 border-white/20 text-gray-300 hover:bg-white/10 hover:text-white font-semibold disabled:opacity-50"
-          >
-            {downloadingCard ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Download className="w-5 h-5" />
-            )}
-            {downloadingCard ? 'Preparing image...' : 'Download card'}
-          </button>
-
-          <p className="text-gray-400 text-sm mb-3">Share your wish link</p>
-          <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <input
-              readOnly
-              value={getShareUrl()}
-              className="flex-1 px-4 py-3 rounded-xl bg-white/10 border border-white/10 text-white text-sm"
-            />
-            <button
-              onClick={copyShareUrl}
-              className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-semibold min-w-[120px] ${
-                linkCopyFeedbackUntil > 0
-                  ? 'bg-green-600 hover:bg-green-500 text-white'
-                  : 'bg-amber-500 hover:bg-amber-400 text-[#0d0d12]'
-              }`}
-            >
-              {linkCopyFeedbackUntil > 0 ? (
-                <>
-                  <Check className="w-5 h-5" />
-                  Copied!
-                </>
-              ) : (
-                <>
-                  <Copy className="w-5 h-5" />
-                  Copy link
-                </>
-              )}
-            </button>
-          </div>
-
-          <p className="text-gray-500 text-xs mb-2">Short link (easier to type or say aloud)</p>
-          <div className="flex flex-col sm:flex-row gap-2 mb-6">
-            <input
-              readOnly
-              value={getShortShareUrl()}
-              className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-gray-300 text-sm font-mono"
-            />
-            <button
-              onClick={copyShortShareUrl}
-              className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium min-w-[100px] text-sm ${
-                shortLinkCopyFeedbackUntil > 0
-                  ? 'bg-green-600/80 text-white'
-                  : 'border border-white/20 text-gray-300 hover:bg-white/10'
-              }`}
-            >
-              {shortLinkCopyFeedbackUntil > 0 ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-              {shortLinkCopyFeedbackUntil > 0 ? 'Copied!' : 'Copy'}
-            </button>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-2 mb-2">
-            {canNativeShare && (
               <button
-                onClick={handleNativeShare}
-                className="w-full sm:flex-1 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-400 hover:bg-amber-500/30 font-semibold"
+                onClick={handleCreateWish}
+                disabled={draftItems.length === 0 || creating}
+                className="w-full sm:flex-1 sm:max-w-md inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-[#0d0d12] font-bold text-[15px] tracking-tight shrink-0"
               >
-                <Share2 className="w-5 h-5" />
-                Share
+                {creating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Share2 className="w-5 h-5" />}
+                {creating ? 'Creating...' : 'Create my wish'}
               </button>
+            </div>
             )}
-            <button
-              onClick={shareOnWhatsApp}
-              className={`w-full ${canNativeShare ? 'sm:flex-1' : ''} inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border-2 border-green-500/50 text-green-400 hover:bg-green-500/10 font-semibold`}
-            >
-              Share on WhatsApp
-            </button>
           </div>
-          <button onClick={resetFlow} className="mt-6 text-gray-400 hover:text-white text-sm font-medium">
-            Create another wish
-          </button>
         </div>
-        <MobileFooter />
       </div>
     );
   }
