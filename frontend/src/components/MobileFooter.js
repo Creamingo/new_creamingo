@@ -5,16 +5,17 @@ import { useRouter, usePathname } from 'next/navigation'
 import { Home, Wallet, ShoppingCart, Headphones, Heart, MessageSquare, Phone, Ticket, ClipboardList, User, Star, Bell, Gift } from 'lucide-react'
 import { useCart } from '../contexts/CartContext'
 import { useWishlist } from '../contexts/WishlistContext'
-import { useNotifications } from '../contexts/NotificationContext'
+import { useWallet } from '../contexts/WalletContext'
 import { useCustomerAuth } from '../contexts/CustomerAuthContext'
 import { useAuthModal } from '../contexts/AuthModalContext'
 import { useToast } from '../contexts/ToastContext'
 import CartDisplay from './CartDisplay'
 
-const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }) => {
+const MobileFooter = ({ wishlistCount: propWishlistCount = 0 }) => {
   const router = useRouter()
   const pathname = usePathname()
   const [activeTab, setActiveTab] = useState('home')
+  const { balance: walletBalance = 0 } = useWallet()
 
   // Sync active tab with current pathname so redirects (e.g. close login modal → Account) show correct tab
   useEffect(() => {
@@ -31,7 +32,6 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
   const [mounted, setMounted] = useState(false)
   const { getItemCount } = useCart()
   const { wishlistCount: contextWishlistCount, isInitialized: wishlistInitialized } = useWishlist()
-  const { unreadCount: notificationCount, openNotificationCenter } = useNotifications()
   const { isAuthenticated } = useCustomerAuth()
   const { isAuthModalOpen, openAuthModal } = useAuthModal()
   const { showInfo } = useToast()
@@ -67,21 +67,29 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
     return () => clearInterval(interval)
   }, [mounted, cartItemCount, getItemCount])
 
+  // Help section: manage contact number and Raise Ticket target here
+  const HELP_PHONE_NUMBER = '7570030333'
+  const HELP_PHONE_E164 = `+91${HELP_PHONE_NUMBER}` // India
+  const HELP_WHATSAPP_URL = `https://wa.me/91${HELP_PHONE_NUMBER}`
+
   const helpOptions = [
-    { 
-      icon: Phone, 
-      label: 'Call', 
-      action: () => window.open('tel:+91-22-4343-3333', '_blank')
+    {
+      icon: Phone,
+      label: 'Call',
+      action: () => window.open(`tel:${HELP_PHONE_E164}`, '_blank')
     },
-    { 
-      icon: MessageSquare, 
-      label: 'WhatsApp', 
-      action: () => window.open('https://wa.me/919876543210', '_blank')
+    {
+      icon: MessageSquare,
+      label: 'WhatsApp',
+      action: () => window.open(HELP_WHATSAPP_URL, '_blank')
     },
-    { 
-      icon: Ticket, 
-      label: 'Raise Ticket', 
-      action: () => window.open('/support/ticket', '_blank')
+    {
+      icon: Ticket,
+      label: 'Raise Ticket',
+      action: () => {
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('open-creamingo-chat'));
+        setIsHelpExpanded(false);
+      }
     }
   ]
 
@@ -108,7 +116,9 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
       icon: Wallet, 
       label: 'Wallet', 
       href: '/wallet', 
-      badge: notificationCount > 0 ? notificationCount : undefined,
+      badge: mounted && isAuthenticated && walletBalance > 0
+        ? (walletBalance >= 1000 ? `${(walletBalance / 1000).toFixed(1)}k` : walletBalance)
+        : undefined,
       id: 'wallet'
     },
     { icon: User, label: 'Account', href: '/account', id: 'account', desktopOnly: true },
@@ -213,11 +223,18 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
                   <item.icon className={`w-[22px] h-[22px] transition-all duration-300 flex-shrink-0 ${
                     isActive ? 'text-pink-600 dark:text-pink-400' : 'text-gray-600 dark:text-gray-300 group-hover:text-pink-500 dark:group-hover:text-pink-400'
                   }`} />
-                  {item.badge !== undefined && item.badge > 0 && (
-                    <span className={`absolute -top-1.5 -right-1.5 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-inter font-semibold transition-all duration-300 shadow-sm ${
-                      isActive ? 'bg-pink-600' : 'bg-red-500'
-                    }`} suppressHydrationWarning>
-                      {item.badge > 99 ? '99+' : item.badge}
+                  {item.badge !== undefined && item.badge !== '' && (item.badge > 0 || typeof item.badge === 'string') && (
+                    <span
+                      className={`absolute -top-2 -right-2 flex items-center justify-center rounded-full min-w-[1.25rem] h-5 px-1.5 text-[10px] font-semibold tabular-nums text-white tracking-tight ring-2 ring-white dark:ring-gray-800 shadow-md transition-all duration-300 ${
+                        isActive
+                          ? 'bg-pink-600 dark:bg-pink-500'
+                          : 'bg-gradient-to-br from-pink-500 to-rose-500 dark:from-pink-600 dark:to-rose-600'
+                      }`}
+                      suppressHydrationWarning
+                    >
+                      {item.id === 'wallet'
+                        ? item.badge
+                        : (typeof item.badge === 'number' && item.badge > 99 ? '99+' : item.badge)}
                     </span>
                   )}
                 </div>

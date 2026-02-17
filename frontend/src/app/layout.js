@@ -15,6 +15,7 @@ import { NotificationProvider } from '../contexts/NotificationContext'
 import { AuthModalProvider } from '../contexts/AuthModalContext'
 import WalletComponents from '../components/WalletComponents'
 import AuthModalBackdrop from '../components/AuthModalBackdrop'
+import CreamingoChatBot from '../components/CreamingoChatBot'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -50,6 +51,7 @@ export default function RootLayout({ children }) {
                           <WalletComponents />
                           {children}
                           <AuthModalBackdrop />
+                          <CreamingoChatBot />
                         </AuthModalProvider>
                       </CartProvider>
                     </SearchProvider>

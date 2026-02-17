@@ -38,6 +38,9 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const dealRoutes = require('./routes/dealRoutes');
 const midnightWishRoutes = require('./routes/midnightWishRoutes');
 const schemaHealthRoutes = require('./routes/schemaHealthRoutes');
+const chatRoutes = require('./routes/chatRoutes');
+const chatConfigRoutes = require('./routes/chatConfigRoutes');
+const chatAnalyticsRoutes = require('./routes/chatAnalyticsRoutes');
 const { runSchemaHealthCheck } = require('./controllers/schemaHealthController');
 
 // Import middleware
@@ -117,17 +120,6 @@ app.use(cors(corsOptions));
 const authRateLimitWindowMs = Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000;
 const authRateLimitMax = Number(process.env.AUTH_RATE_LIMIT_MAX) || 20;
 const customerAuthRateLimitMax = Number(process.env.CUSTOMER_AUTH_RATE_LIMIT_MAX) || authRateLimitMax;
-
-const authLimiter = rateLimit({
-  windowMs: authRateLimitWindowMs,
-  max: authRateLimitMax,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    message: 'Too many authentication attempts. Please try again later.'
-  }
-});
 
 const customerAuthLimiter = rateLimit({
   windowMs: authRateLimitWindowMs,
@@ -233,7 +225,8 @@ app.get('/api', (req, res) => {
       scratchCards: '/api/scratch-cards',
       referrals: '/api/referrals',
       notifications: '/api/notifications',
-      deals: '/api/deals'
+      deals: '/api/deals',
+      chat: '/api/chat'
     },
     health: '/health',
     timestamp: new Date().toISOString()
@@ -241,7 +234,7 @@ app.get('/api', (req, res) => {
 });
 
 // API routes
-app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/customer-auth', customerAuthLimiter, customerAuthRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
@@ -272,6 +265,9 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/deals', dealRoutes);
 app.use('/api/midnight-wish', midnightWishRoutes);
 app.use('/api/schema-health', schemaHealthRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api/chat/config', chatConfigRoutes);
+app.use('/api/chat/analytics', chatAnalyticsRoutes);
 
 // Run schema diagnostics on startup
 setImmediate(async () => {

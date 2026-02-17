@@ -22,7 +22,9 @@ import {
   Gift,
   User,
   LifeBuoy,
-  LogOut
+  LogOut,
+  MessageCircle,
+  BarChart3
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { useAuth } from '../../contexts/AuthContext';
@@ -60,6 +62,8 @@ const BASE_NAVIGATION: NavItem[] = [
   { name: 'Customers', href: '/customers', icon: Users },
   { name: 'Payments', href: '/payments', icon: CreditCard },
   { name: 'Manage Users', href: '/users', icon: UserCog },
+  { name: 'Chatbot Answers', href: '/chatbot-answers', icon: MessageCircle },
+  { name: 'Chat Analytics', href: '/chat-analytics', icon: BarChart3 },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 

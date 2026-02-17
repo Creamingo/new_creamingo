@@ -27,6 +27,8 @@ import DeliverySlots from './pages/DeliverySlots';
 import { PromoCodes } from './pages/PromoCodes';
 import { OneRupeeDeals } from './pages/OneRupeeDeals';
 import BakeryProduction from './pages/BakeryProduction';
+import { ChatbotAnswers } from './pages/ChatbotAnswers';
+import { ChatAnalytics } from './pages/ChatAnalytics';
 
 function App() {
   return (
@@ -64,6 +66,8 @@ function App() {
             <Route path="delivery-slots" element={<ProtectedRoute requiredPermission="settings.view"><DeliverySlots /></ProtectedRoute>} />
             <Route path="promo-codes" element={<ProtectedRoute requiredPermission="settings.view"><PromoCodes /></ProtectedRoute>} />
             <Route path="one-rupee-deals" element={<ProtectedRoute requiredPermission="settings.view"><OneRupeeDeals /></ProtectedRoute>} />
+            <Route path="chatbot-answers" element={<ProtectedRoute requiredPermission="settings.view"><ChatbotAnswers /></ProtectedRoute>} />
+            <Route path="chat-analytics" element={<ProtectedRoute requiredPermission="settings.view"><ChatAnalytics /></ProtectedRoute>} />
             <Route path="settings" element={<ProtectedRoute requiredPermission="settings.view"><Settings /></ProtectedRoute>} />
           </Route>
           

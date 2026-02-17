@@ -14,7 +14,8 @@ import {
   X,
   Gift,
   ChevronDown,
-  ShieldCheck
+  ShieldCheck,
+  CheckCircle
 } from 'lucide-react';
 import { useCustomerAuth } from '../contexts/CustomerAuthContext';
 import customerAuthApi from '../api/customerAuthApi';
@@ -354,12 +355,22 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
                       <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 z-10" />
                       <input
                         type="tel"
+                        inputMode="numeric"
                         autoComplete="tel"
+                        maxLength={10}
                         value={signupData.phone}
-                        onChange={(e) => setSignupData((prev) => ({ ...prev, phone: e.target.value }))}
-                        className="w-full pl-9 pr-4 py-2.5 text-sm font-poppins border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-poppins placeholder:tracking-wide border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
-                        placeholder="Enter mobile number"
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+                          setSignupData((prev) => ({ ...prev, phone: digits }));
+                        }}
+                        className={`w-full pl-9 py-2.5 text-sm font-poppins border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-poppins placeholder:tracking-wide border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400 transition-all duration-200 ${(signupData.phone || '').length === 10 ? 'pr-11' : 'pr-4'}`}
+                        placeholder="Enter 10-digit mobile number"
                       />
+                      {(signupData.phone || '').length === 10 && (
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center text-emerald-500 dark:text-emerald-400 animate-in fade-in duration-200">
+                          <CheckCircle className="w-5 h-5 drop-shadow-sm" strokeWidth={2.25} />
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
