@@ -87,7 +87,7 @@ const MobileFooter = ({ wishlistCount: propWishlistCount = 0 }) => {
       icon: Ticket,
       label: 'Raise Ticket',
       action: () => {
-        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('open-creamingo-chat'));
+        router.push('/support');
         setIsHelpExpanded(false);
       }
     }

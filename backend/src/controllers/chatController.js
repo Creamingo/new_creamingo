@@ -11,6 +11,14 @@ const { getOrCreateTicketForSession } = require('./ticketsController');
 const CONTACT_NUMBER = '7570030333';
 const CONTACT_LINE = ` You can call or WhatsApp us at **${CONTACT_NUMBER}** anytime.`;
 const FALLBACK_REPLY = 'I can help with delivery, orders, payments, refunds, wallet, and account. Try "How do I track my order?" or "What are delivery charges?" You can also use **Track Order**, **Wallet**, or **Contact** from the app. Need to talk? Call or WhatsApp **7570030333** from the Help menu in the footer.';
+const TICKET_CONFIRMATION_REPLY = "Thanks for sharing. We are raising a support ticket for you. Our team will reply soon or connect with you on call.\n\nYour request has been shared with our support team. They will reply soon or connect with you on call.";
+const TICKET_CONFIRMATION_LINE = 'Your request has been shared with our support team. They will reply soon or connect with you on call.';
+
+function appendTicketConfirmation(reply, ticketNumber) {
+  if (!ticketNumber || !reply) return reply;
+  if (reply.includes(TICKET_CONFIRMATION_LINE)) return reply;
+  return `${reply}\n\n${TICKET_CONFIRMATION_LINE}\n\nTicket #${ticketNumber}`;
+}
 
 function normalize(text) {
   return (text || '')
@@ -197,7 +205,8 @@ exports.chat = async (req, res) => {
 
     let intent = findIntent(message, intents);
     if (intent) {
-      const reply = ensureContactNumber(intent.reply);
+      let reply = ensureContactNumber(intent.reply);
+      reply = appendTicketConfirmation(reply, ticketNumber);
       const link = intent.link || null;
       const quickReplies = intent.quickReplies || null;
       await logMessage(sessionId, 'bot', reply, intent.id, null, false);
@@ -208,7 +217,8 @@ exports.chat = async (req, res) => {
 
     const faqResult = findBestFAQ(message, faqs);
     if (faqResult) {
-      const reply = ensureContactNumber(faqResult.answer);
+      let reply = ensureContactNumber(faqResult.answer);
+      reply = appendTicketConfirmation(reply, ticketNumber);
       await logMessage(sessionId, 'bot', reply, null, faqResult.faq_id, false);
       return res.json(addTicketToPayload({
         success: true,
@@ -217,10 +227,11 @@ exports.chat = async (req, res) => {
       }));
     }
 
-    await logMessage(sessionId, 'bot', FALLBACK_REPLY, null, null, true);
+    const fallbackReply = ticketNumber ? TICKET_CONFIRMATION_REPLY + '\n\nTicket #' + ticketNumber : FALLBACK_REPLY;
+    await logMessage(sessionId, 'bot', fallbackReply, null, null, !ticketNumber);
     return res.json(addTicketToPayload({
       success: true,
-      reply: FALLBACK_REPLY,
+      reply: fallbackReply,
       link: { text: 'FAQ', href: '/faq' }
     }));
   } catch (err) {
