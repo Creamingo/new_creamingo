@@ -6,6 +6,7 @@
 
 const { query, get } = require('../config/db');
 const { getIntents, getFaqs, setIntents, setFaqs, isStale } = require('../utils/chatbotConfigCache');
+const { getOrCreateTicketForSession } = require('./ticketsController');
 
 const CONTACT_NUMBER = '7570030333';
 const CONTACT_LINE = ` You can call or WhatsApp us at **${CONTACT_NUMBER}** anytime.`;
@@ -186,6 +187,14 @@ exports.chat = async (req, res) => {
     await ensureSession(sessionId, customerId);
     await logMessage(sessionId, 'user', message, null, null, false);
 
+    const ticketInfo = await getOrCreateTicketForSession(sessionId, customerId, message.slice(0, 200));
+    const ticketNumber = ticketInfo?.ticket_number || null;
+
+    const addTicketToPayload = (payload) => {
+      if (ticketNumber) payload.ticket_number = ticketNumber;
+      return payload;
+    };
+
     let intent = findIntent(message, intents);
     if (intent) {
       const reply = ensureContactNumber(intent.reply);
@@ -194,26 +203,26 @@ exports.chat = async (req, res) => {
       await logMessage(sessionId, 'bot', reply, intent.id, null, false);
       const payload = { success: true, reply, link };
       if (quickReplies && quickReplies.length) payload.quickReplies = quickReplies;
-      return res.json(payload);
+      return res.json(addTicketToPayload(payload));
     }
 
     const faqResult = findBestFAQ(message, faqs);
     if (faqResult) {
       const reply = ensureContactNumber(faqResult.answer);
       await logMessage(sessionId, 'bot', reply, null, faqResult.faq_id, false);
-      return res.json({
+      return res.json(addTicketToPayload({
         success: true,
         reply,
         link: faqResult.link || { text: 'More in FAQ', href: '/faq' }
-      });
+      }));
     }
 
     await logMessage(sessionId, 'bot', FALLBACK_REPLY, null, null, true);
-    return res.json({
+    return res.json(addTicketToPayload({
       success: true,
       reply: FALLBACK_REPLY,
       link: { text: 'FAQ', href: '/faq' }
-    });
+    }));
   } catch (err) {
     console.error('Chat error:', err);
     return res.status(500).json({

@@ -24,7 +24,8 @@ import {
   LifeBuoy,
   LogOut,
   MessageCircle,
-  BarChart3
+  BarChart3,
+  Ticket
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { useAuth } from '../../contexts/AuthContext';
@@ -64,6 +65,7 @@ const BASE_NAVIGATION: NavItem[] = [
   { name: 'Manage Users', href: '/users', icon: UserCog },
   { name: 'Chatbot Answers', href: '/chatbot-answers', icon: MessageCircle },
   { name: 'Chat Analytics', href: '/chat-analytics', icon: BarChart3 },
+  { name: 'Tickets', href: '/tickets', icon: Ticket },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 

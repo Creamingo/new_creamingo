@@ -41,6 +41,7 @@ const schemaHealthRoutes = require('./routes/schemaHealthRoutes');
 const chatRoutes = require('./routes/chatRoutes');
 const chatConfigRoutes = require('./routes/chatConfigRoutes');
 const chatAnalyticsRoutes = require('./routes/chatAnalyticsRoutes');
+const ticketRoutes = require('./routes/ticketRoutes');
 const { runSchemaHealthCheck } = require('./controllers/schemaHealthController');
 
 // Import middleware
@@ -268,6 +269,7 @@ app.use('/api/schema-health', schemaHealthRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/chat/config', chatConfigRoutes);
 app.use('/api/chat/analytics', chatAnalyticsRoutes);
+app.use('/api/tickets', ticketRoutes);
 
 // Run schema diagnostics on startup
 setImmediate(async () => {

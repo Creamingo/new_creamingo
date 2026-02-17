@@ -32,6 +32,7 @@ export default function CreamingoChatBot() {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [ticketNumber, setTicketNumber] = useState(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -63,7 +64,8 @@ export default function CreamingoChatBot() {
     setLoading(true);
 
     try {
-      const { reply, link, quickReplies } = await chatApi.sendMessage(msg);
+      const { reply, link, quickReplies, ticket_number } = await chatApi.sendMessage(msg);
+      if (ticket_number) setTicketNumber(ticket_number);
       setMessages((prev) => [
         ...prev,
         { id: `b-${Date.now()}`, role: 'bot', text: reply, link: link || null, quickReplies: quickReplies || null }
@@ -103,9 +105,14 @@ export default function CreamingoChatBot() {
       {open && (
         <div className="fixed bottom-36 right-4 z-50 lg:bottom-24 lg:right-6 w-[calc(100vw-2rem)] max-w-md h-[min(28rem,70vh)] rounded-2xl shadow-xl border border-pink-200 dark:border-pink-800 bg-white dark:bg-gray-800 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200">
           <div className="flex items-center justify-between gap-2 px-4 py-3 bg-gradient-to-r from-pink-500 to-rose-500 text-white">
-            <div className="flex items-center gap-2">
-              <MessageCircle className="w-5 h-5 flex-shrink-0" />
-              <span className="font-semibold">Raise Ticket – Creamingo Support</span>
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="w-5 h-5 flex-shrink-0" />
+                <span className="font-semibold truncate">Raise Ticket – Creamingo Support</span>
+              </div>
+              {ticketNumber && (
+                <span className="text-xs text-white/90 font-mono">Ticket #{ticketNumber}</span>
+              )}
             </div>
             <button
               type="button"
