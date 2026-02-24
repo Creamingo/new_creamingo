@@ -112,15 +112,12 @@ export default function AccountMenuSection({
 
   return (
     <div className="space-y-4">
-      {accountMenuGroups.map((group) => {
-        const GroupIcon = getIcon(group.icon);
-        return (
+      {accountMenuGroups.map((group) => (
           <div
             key={group.id}
             className="bg-white dark:bg-gray-800 rounded-2xl shadow-[0_2px_8px_0_rgba(0,0,0,0.08)] dark:shadow-[0_2px_8px_0_rgba(0,0,0,0.3)] border border-gray-200/60 dark:border-gray-700/60 overflow-hidden"
           >
-            <div className="px-4 pt-3 pb-2 border-b border-gray-200/60 dark:border-gray-700/60 flex items-center gap-2">
-              <GroupIcon className="w-5 h-5 text-gray-600 dark:text-gray-400 flex-shrink-0" strokeWidth={2} />
+            <div className="px-4 pt-3 pb-2 border-b border-gray-200/60 dark:border-gray-700/60">
               <h3 className="font-poppins text-base font-semibold text-gray-900 dark:text-white leading-tight tracking-tight">
                 {group.title}
               </h3>
@@ -174,8 +171,7 @@ export default function AccountMenuSection({
               );
             })}
           </div>
-        );
-      })}
+      ))}
     </div>
   );
 }

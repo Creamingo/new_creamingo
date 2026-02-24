@@ -144,27 +144,30 @@ function AccountPageContent() {
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
       <Header />
       
-      {/* Sticky Greeting Line */}
+      {/* Sticky bar: Back to Profile when in a section, else greeting */}
       <div className="sticky top-[3.6rem] lg:top-16 z-40 bg-white dark:bg-gray-800 border-b border-gray-200/60 dark:border-gray-700/60">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          <p className="font-poppins text-base lg:text-lg font-medium text-gray-700 dark:text-gray-200 leading-tight tracking-tight">
-            Hello, {customer?.name || 'User'} 👋
-          </p>
+          {activeSection === 'orders' || activeSection === 'coupons' || activeSection === 'faqs' || activeSection === 'reviews' ? (
+            <button
+              onClick={() => setActiveSection(null)}
+              className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors font-inter text-sm font-medium"
+            >
+              <span className="text-xl">←</span>
+              <span>Back to Profile</span>
+            </button>
+          ) : (
+            <p className="font-poppins text-base lg:text-lg font-medium text-gray-700 dark:text-gray-200 leading-tight tracking-tight">
+              Hello, {customer?.name || 'User'} 👋
+            </p>
+          )}
         </div>
       </div>
 
       {/* Mobile Layout - New Design */}
       <div className="lg:hidden">
         {activeSection === 'orders' || activeSection === 'coupons' || activeSection === 'faqs' || activeSection === 'reviews' ? (
-          // Show section content when active
-          <div className="max-w-7xl mx-auto px-4 pt-5 pb-24">
-            <button
-              onClick={() => setActiveSection(null)}
-              className="mb-4 flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors font-inter text-sm font-medium"
-            >
-              <span className="text-xl">←</span>
-              <span>Back to Profile</span>
-            </button>
+          // Show section content when active (Back to Profile is in sticky bar above)
+          <div className="max-w-7xl mx-auto px-4 pt-4 pb-24">
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-[0_2px_8px_0_rgba(0,0,0,0.08)] dark:shadow-[0_2px_8px_0_rgba(0,0,0,0.3)] border border-gray-200/60 dark:border-gray-700/60 p-5">
               {renderActiveSection()}
             </div>
@@ -202,15 +205,8 @@ function AccountPageContent() {
       {/* Desktop/Laptop Layout - New Design */}
       <div className="hidden lg:block">
         {activeSection === 'orders' || activeSection === 'coupons' || activeSection === 'faqs' || activeSection === 'reviews' ? (
-          // Show section content when active
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-6">
-            <button
-              onClick={() => setActiveSection(null)}
-              className="mb-4 flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors font-inter text-sm font-medium"
-            >
-              <span className="text-xl">←</span>
-              <span>Back to Profile</span>
-            </button>
+          // Show section content when active (Back to Profile is in sticky bar above)
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-6">
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-[0_2px_8px_0_rgba(0,0,0,0.08)] dark:shadow-[0_2px_8px_0_rgba(0,0,0,0.3)] border border-gray-200/60 dark:border-gray-700/60 p-6 lg:p-8">
               {renderActiveSection()}
             </div>
