@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { LogOut, User } from 'lucide-react';
+import { User } from 'lucide-react';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import MobileFooter from '../../components/MobileFooter';
@@ -11,15 +11,11 @@ import { useAuthModal } from '../../contexts/AuthModalContext';
 import UserProfileCard from './components/UserProfileCard';
 import BirthdaySection from './components/BirthdaySection';
 import AppearanceSection from './components/AppearanceSection';
-import OrderHistoryCouponsSection from './components/OrderHistoryCouponsSection';
-import MyActivitiesSection from './components/MyActivitiesSection';
-import OtherInformationSection from './components/OtherInformationSection';
-import AccountNavigationCards from './components/AccountNavigationCards';
+import AccountMenuSection from './components/AccountMenuSection';
 import OrdersSection from './components/sections/OrdersSection';
 import CouponsSection from './components/sections/CouponsSection';
 import FAQsSection from './components/sections/FAQsSection';
 import ReviewsSection from './components/sections/ReviewsSection';
-import ReferAndEarn from '../../components/ReferAndEarn';
 
 function GuestAccountView() {
   const { openAuthModal } = useAuthModal();
@@ -66,26 +62,17 @@ function GuestAccountView() {
         </div>
 
         {/* Appearance – same as logged-in (no auth required) */}
-        <div className="relative">
+        <div id="appearance-section" className="relative">
           <AppearanceSection />
         </div>
 
-        {/* Order History & Coupons – guest placeholder */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-[0_2px_8px_0_rgba(0,0,0,0.08)] dark:shadow-[0_2px_8px_0_rgba(0,0,0,0.3)] border border-gray-200/60 dark:border-gray-700/60 overflow-hidden">
-          <div className="px-4 pt-4 pb-3 border-b border-gray-200/60 dark:border-gray-700/60">
-            <h3 className="font-poppins text-base font-semibold text-gray-900 dark:text-white">Order History & Coupons</h3>
-          </div>
-          <div className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Sign in to view your orders and coupons.</p>
-            <button onClick={() => openAuthModal('/account')} className="text-sm font-medium text-green-600 dark:text-green-400 hover:underline whitespace-nowrap">
-              Sign in
-            </button>
-          </div>
-        </div>
-
-        {/* Refer & Earn – guest CTA */}
+        {/* Account Menu – guest: any click prompts sign in */}
         <div className="relative">
-          <ReferAndEarn compact={true} />
+          <AccountMenuSection
+            isGuest
+            onSignInClick={() => openAuthModal('/account')}
+            onLogout={() => {}}
+          />
         </div>
       </div>
 
@@ -132,6 +119,10 @@ function AccountPageContent() {
   const handleLogout = async () => {
     await logout();
     router.push('/');
+  };
+
+  const handleDeleteAccount = () => {
+    router.push('/privacy');
   };
 
   const renderActiveSection = () => {
@@ -190,30 +181,18 @@ function AccountPageContent() {
             </div>
 
             {/* Appearance Mode Section */}
-            <div className="relative">
+            <div id="appearance-section" className="relative">
               <AppearanceSection />
             </div>
 
-            {/* Order History & Coupons Section */}
+            {/* Account Menu (Orders, Wallet, Coupons, Addresses, Wishlist, Activity, Refer & Earn, Help, Settings) */}
             <div className="relative">
-              <OrderHistoryCouponsSection badgeCounts={badgeCounts} />
-            </div>
-
-            {/* My Activities Section */}
-            <div className="relative">
-              <MyActivitiesSection badgeCounts={badgeCounts} />
-            </div>
-
-            {/* Refer & Earn Section */}
-            <div className="relative">
-              <ReferAndEarn compact={true} />
-            </div>
-
-            {/* Other Information Section */}
-            <div className="relative">
-              <OtherInformationSection 
+              <AccountMenuSection
+                badgeCounts={badgeCounts}
+                onSectionChange={handleSectionChange}
                 onNavigateToFAQs={handleNavigateToFAQs}
                 onLogout={handleLogout}
+                onDeleteAccount={handleDeleteAccount}
               />
             </div>
           </div>
@@ -252,35 +231,23 @@ function AccountPageContent() {
                   <BirthdaySection />
                 </div>
 
-                {/* My Activities Section */}
+                {/* Account Menu (Orders, Wallet, Coupons, Addresses, Wishlist, Activity, Refer & Earn, Help, Settings) */}
                 <div className="relative">
-                  <MyActivitiesSection badgeCounts={badgeCounts} />
-                </div>
-
-                {/* Refer & Earn Section */}
-                <div className="relative">
-                  <ReferAndEarn compact={false} />
+                  <AccountMenuSection
+                    badgeCounts={badgeCounts}
+                    onSectionChange={handleSectionChange}
+                    onNavigateToFAQs={handleNavigateToFAQs}
+                    onLogout={handleLogout}
+                    onDeleteAccount={handleDeleteAccount}
+                  />
                 </div>
               </div>
 
               {/* Right Column - Sidebar Sections */}
               <div className="lg:col-span-1 space-y-6">
                 {/* Appearance Mode Section */}
-                <div className="relative">
+                <div id="appearance-section" className="relative">
                   <AppearanceSection />
-                </div>
-
-                {/* Order History & Coupons Section */}
-                <div className="relative">
-                  <OrderHistoryCouponsSection badgeCounts={badgeCounts} />
-                </div>
-
-                {/* Other Information Section */}
-                <div className="relative">
-                  <OtherInformationSection 
-                    onNavigateToFAQs={handleNavigateToFAQs}
-                    onLogout={handleLogout}
-                  />
                 </div>
               </div>
             </div>
