@@ -419,7 +419,7 @@ const DynamicBannerSlider = () => {
                             onMouseEnter={() => setIsPaused(true)}
                             onMouseLeave={() => setIsPaused(false)}
                           >
-                              <div className="relative overflow-hidden rounded-2xl">
+                              <div className="relative overflow-hidden rounded-2xl w-full aspect-[4/3] max-h-[280px]">
                               {isVideo ? (
                                 <video
                                   src={banner.video_url || mobileImageUrl}
@@ -427,20 +427,20 @@ const DynamicBannerSlider = () => {
                                   loop
                                   muted
                                   playsInline
-                                    className="w-full h-40 object-cover rounded-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 banner-image"
+                                  className="w-full h-full object-cover rounded-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 banner-image"
                                 />
                               ) : (
                                 <img 
                                   src={mobileImageUrl} 
                                   alt={banner.title} 
-                                    className="w-full h-40 object-cover rounded-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 banner-image transition-all duration-300 group-hover:scale-[1.01] group-hover:brightness-[1.02]"
+                                  className="w-full h-full object-contain object-center rounded-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 banner-image transition-all duration-300 group-hover:scale-[1.01] group-hover:brightness-[1.02]"
                                   onError={(e) => {
                                     const target = e.target;
                                     target.style.display = 'none';
                                     const parent = target.parentElement;
                                     if (parent && !parent.querySelector('.error-fallback')) {
                                       const fallback = document.createElement('div');
-                                        fallback.className = 'error-fallback w-full h-40 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 flex items-center justify-center rounded-2xl border border-gray-200 dark:border-gray-700';
+                                      fallback.className = 'error-fallback w-full h-full min-h-[160px] bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 flex items-center justify-center rounded-2xl border border-gray-200 dark:border-gray-700';
                                       fallback.innerHTML = '<span class="text-gray-400 dark:text-gray-500 text-xs">Image unavailable</span>';
                                       parent.appendChild(fallback);
                                     }
