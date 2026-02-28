@@ -456,6 +456,7 @@ export const Banners: React.FC = () => {
   const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
   const [bannerToDelete, setBannerToDelete] = useState<Banner | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [uploadedFilesMobile, setUploadedFilesMobile] = useState<File[]>([]);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
   const [draggedBanner, setDraggedBanner] = useState<number | null>(null);
@@ -548,6 +549,7 @@ export const Banners: React.FC = () => {
     button_text: '',
     button_url: '',
     image_url: '',
+    image_url_mobile: '',
     is_active: true
   });
   
@@ -558,6 +560,7 @@ export const Banners: React.FC = () => {
     button_text: '',
     button_url: '',
     image_url: '',
+    image_url_mobile: '',
     is_active: true
   });
 
@@ -920,6 +923,7 @@ export const Banners: React.FC = () => {
       button_text: template.data.button_text,
       button_url: template.data.button_url,
       image_url: template.preview,
+      image_url_mobile: '',
       is_active: true
     });
     setShowTemplates(false);
@@ -1057,7 +1061,7 @@ export const Banners: React.FC = () => {
       
       let imageUrl = newBanner.image_url || 'https://via.placeholder.com/800x400?text=Banner+Image';
       
-      // Upload image if files are selected
+      // Upload desktop image if files are selected
       if (uploadedFiles.length > 0) {
         try {
           const uploadResponse = await apiClient.uploadFile('/upload/single?type=banners', uploadedFiles[0]);
@@ -1070,6 +1074,18 @@ export const Banners: React.FC = () => {
           console.warn('Image upload error, using placeholder:', uploadError);
         }
       }
+
+      let imageUrlMobile: string | null = newBanner.image_url_mobile?.trim() || null;
+      if (uploadedFilesMobile.length > 0) {
+        try {
+          const uploadResponse = await apiClient.uploadFile('/upload/single?type=banners', uploadedFilesMobile[0]);
+          if (uploadResponse.success && uploadResponse.data) {
+            imageUrlMobile = uploadResponse.data.url;
+          }
+        } catch (uploadError) {
+          console.warn('Mobile image upload error:', uploadError);
+        }
+      }
       
       // Prepare banner data with proper validation
       const bannerData: any = {
@@ -1079,6 +1095,7 @@ export const Banners: React.FC = () => {
         image_url: imageUrl,
         is_active: Boolean(newBanner.is_active)
       };
+      if (imageUrlMobile) bannerData.image_url_mobile = imageUrlMobile;
 
       // Handle button_url - let backend handle validation
       const buttonUrl = newBanner.button_url?.trim();
@@ -1096,9 +1113,10 @@ export const Banners: React.FC = () => {
       }
       
       // Reset form and close modal
-      setNewBanner({ title: '', subtitle: '', button_text: '', button_url: '', image_url: '', is_active: true });
+      setNewBanner({ title: '', subtitle: '', button_text: '', button_url: '', image_url: '', image_url_mobile: '', is_active: true });
       setShowAddModal(false);
       setUploadedFiles([]);
+      setUploadedFilesMobile([]);
       
       // Show success message
       showSuccess('Banner Created', 'Banner created successfully!');
@@ -1133,15 +1151,23 @@ export const Banners: React.FC = () => {
       
       let imageUrl = editBanner.image_url;
       
-      // Upload new image if files are selected
+      // Upload new desktop image if files are selected
       if (uploadedFiles.length > 0) {
         const uploadResponse = await apiClient.uploadFile('/upload/single?type=banners', uploadedFiles[0]);
         if (uploadResponse.success && uploadResponse.data) {
           imageUrl = uploadResponse.data.url;
         }
       }
+
+      let imageUrlMobile: string | null = (editBanner.image_url_mobile && String(editBanner.image_url_mobile).trim()) ? editBanner.image_url_mobile : null;
+      if (uploadedFilesMobile.length > 0) {
+        const uploadResponse = await apiClient.uploadFile('/upload/single?type=banners', uploadedFilesMobile[0]);
+        if (uploadResponse.success && uploadResponse.data) {
+          imageUrlMobile = uploadResponse.data.url;
+        }
+      }
       
-      const bannerData = {
+      const bannerData: any = {
         title: editBanner.title,
         subtitle: editBanner.subtitle,
         button_text: editBanner.button_text,
@@ -1149,6 +1175,7 @@ export const Banners: React.FC = () => {
         image_url: imageUrl,
         is_active: Boolean(editBanner.is_active)
       };
+      bannerData.image_url_mobile = imageUrlMobile;
 
       const response = await bannerService.updateBanner(editingBanner.id, bannerData);
       
@@ -1162,8 +1189,9 @@ export const Banners: React.FC = () => {
       }
       
       setEditingBanner(null);
-      setEditBanner({ title: '', subtitle: '', button_text: '', button_url: '', image_url: '', is_active: true });
+      setEditBanner({ title: '', subtitle: '', button_text: '', button_url: '', image_url: '', image_url_mobile: '', is_active: true });
       setUploadedFiles([]);
+      setUploadedFilesMobile([]);
       
       // Show success message
       showSuccess('Banner Updated', 'Banner updated successfully!');
@@ -1205,8 +1233,10 @@ export const Banners: React.FC = () => {
         button_text: editingBanner.button_text || '',
         button_url: editingBanner.button_url || '',
         image_url: editingBanner.image_url || '',
+        image_url_mobile: editingBanner.image_url_mobile ?? '',
         is_active: Boolean(editingBanner.is_active)
       });
+      setUploadedFilesMobile([]);
     }
   }, [editingBanner]);
 
@@ -1216,6 +1246,14 @@ export const Banners: React.FC = () => {
 
   const handleFileRemove = (file: File) => {
     setUploadedFiles(uploadedFiles.filter(f => f !== file));
+  };
+
+  const handleFileSelectMobile = (files: File[]) => {
+    setUploadedFilesMobile(files);
+  };
+
+  const handleFileRemoveMobile = (file: File) => {
+    setUploadedFilesMobile(uploadedFilesMobile.filter(f => f !== file));
   };
 
   if (loading) {
@@ -1857,7 +1895,7 @@ export const Banners: React.FC = () => {
         isOpen={showAddModal}
         onClose={() => {
           setShowAddModal(false);
-          setNewBanner({ title: '', subtitle: '', button_text: '', button_url: '', image_url: '', is_active: true });
+          setNewBanner({ title: '', subtitle: '', button_text: '', button_url: '', image_url: '', image_url_mobile: '', is_active: true });
           setUploadedFiles([]);
         }}
         title="Add New Banner"
@@ -1921,20 +1959,29 @@ export const Banners: React.FC = () => {
             {/* Middle - Banner Image Section */}
             <div className="space-y-3">
             <FileUpload
-              label="Banner Image"
+              label="Desktop Banner Image"
               accept="image/*"
               maxSize={5}
               onFileSelect={handleFileSelect}
               onFileRemove={handleFileRemove}
               files={uploadedFiles}
-              helperText="Recommended size: 800x400px"
+              helperText="Required. Exact size: 1200×400px (wide, 3:1). Used on laptop/desktop."
+              />
+              <FileUpload
+                label="Mobile Banner Image (optional)"
+                accept="image/*"
+                maxSize={5}
+                onFileSelect={handleFileSelectMobile}
+                onFileRemove={handleFileRemoveMobile}
+                files={uploadedFilesMobile}
+                helperText="Optional. Exact size: 800×600px or 800×800px (1:1). Used on phones/tablets. If not set, desktop image is used."
               />
               
               {/* Image Preview */}
               {uploadedFiles.length > 0 && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Image Preview
+                    Desktop Image Preview
                   </label>
                   <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-gray-50 dark:bg-gray-800/50">
                     <img 
@@ -1944,6 +1991,23 @@ export const Banners: React.FC = () => {
                     />
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                       {uploadedFiles[0].name} ({(uploadedFiles[0].size / 1024 / 1024).toFixed(2)} MB)
+                    </p>
+                  </div>
+                </div>
+              )}
+              {uploadedFilesMobile.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Mobile Image Preview
+                  </label>
+                  <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-gray-50 dark:bg-gray-800/50">
+                    <img 
+                      src={URL.createObjectURL(uploadedFilesMobile[0])} 
+                      alt="Mobile banner preview" 
+                      className="w-full h-40 object-cover rounded border border-gray-200 dark:border-gray-700"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                      {uploadedFilesMobile[0].name} ({(uploadedFilesMobile[0].size / 1024 / 1024).toFixed(2)} MB)
                     </p>
                   </div>
                 </div>
@@ -1984,9 +2048,14 @@ export const Banners: React.FC = () => {
                 previewMode === 'mobile' ? 'max-w-xs mx-auto' : 'w-full'
               }`}>
                 <div className="relative bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900">
-                  {(uploadedFiles.length > 0 ? URL.createObjectURL(uploadedFiles[0]) : newBanner.image_url || '') ? (
+                  {(() => {
+                    const desktopSrc = uploadedFiles.length > 0 ? URL.createObjectURL(uploadedFiles[0]) : newBanner.image_url || '';
+                    const mobileSrc = uploadedFilesMobile.length > 0 ? URL.createObjectURL(uploadedFilesMobile[0]) : (newBanner.image_url_mobile || newBanner.image_url || '');
+                    const previewSrc = previewMode === 'mobile' ? (mobileSrc || desktopSrc) : desktopSrc;
+                    const imgSrc = previewSrc.startsWith('blob:') ? previewSrc : resolveImageUrl(previewSrc);
+                    return previewSrc ? (
                     <img 
-                      src={uploadedFiles.length > 0 ? URL.createObjectURL(uploadedFiles[0]) : resolveImageUrl(newBanner.image_url || '')} 
+                      src={imgSrc} 
                       alt="Banner preview" 
                       className={`w-full object-cover ${previewMode === 'mobile' ? 'h-48' : 'h-64'}`}
                     />
@@ -1994,7 +2063,8 @@ export const Banners: React.FC = () => {
                     <div className={`${previewMode === 'mobile' ? 'h-48' : 'h-64'} flex items-center justify-center bg-gray-200 dark:bg-gray-800`}>
                       <ImageIcon className="h-12 w-12 text-gray-400 dark:text-gray-600" />
         </div>
-                  )}
+                  );
+                  })()}
                   
                   {/* Overlay Content */}
                   {(newBanner.title || newBanner.subtitle || newBanner.button_text) && (
@@ -2027,8 +2097,9 @@ export const Banners: React.FC = () => {
             variant="secondary" 
             onClick={() => {
               setShowAddModal(false);
-              setNewBanner({ title: '', subtitle: '', button_text: '', button_url: '', image_url: '', is_active: true });
+              setNewBanner({ title: '', subtitle: '', button_text: '', button_url: '', image_url: '', image_url_mobile: '', is_active: true });
               setUploadedFiles([]);
+              setUploadedFilesMobile([]);
             }}
           >
             Cancel
@@ -2054,8 +2125,9 @@ export const Banners: React.FC = () => {
         isOpen={!!editingBanner}
         onClose={() => {
           setEditingBanner(null);
-          setEditBanner({ title: '', subtitle: '', button_text: '', button_url: '', image_url: '', is_active: true });
+          setEditBanner({ title: '', subtitle: '', button_text: '', button_url: '', image_url: '', image_url_mobile: '', is_active: true });
           setUploadedFiles([]);
+          setUploadedFilesMobile([]);
         }}
         title="Edit Banner"
         size="full"
@@ -2119,19 +2191,28 @@ export const Banners: React.FC = () => {
               {/* Middle - Banner Image Section */}
               <div className="space-y-3">
                 <FileUpload
-                  label="Banner Image"
+                  label="Desktop Banner Image"
                   accept="image/*"
                   maxSize={5}
                   onFileSelect={handleFileSelect}
                   onFileRemove={handleFileRemove}
                   files={uploadedFiles}
-                  helperText="Recommended size: 800x400px"
+                  helperText="Exact size: 1200×400px (wide, 3:1). Used on laptop/desktop."
+                />
+                <FileUpload
+                  label="Mobile Banner Image (optional)"
+                  accept="image/*"
+                  maxSize={5}
+                  onFileSelect={handleFileSelectMobile}
+                  onFileRemove={handleFileRemoveMobile}
+                  files={uploadedFilesMobile}
+                  helperText="Optional. Exact size: 800×600px or 800×800px (1:1). Used on phones/tablets."
                 />
                 
                 {/* Current Image or New Image Preview */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    {uploadedFiles.length > 0 ? 'New Image Preview' : 'Current Image'}
+                    {uploadedFiles.length > 0 ? 'New Desktop Preview' : 'Current Desktop Image'}
                   </label>
                   <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-gray-50 dark:bg-gray-800/50">
                     {uploadedFiles.length > 0 ? (
@@ -2156,7 +2237,7 @@ export const Banners: React.FC = () => {
                           }}
                         />
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                          Current banner image
+                          Current desktop image
                         </p>
                       </>
                     ) : (
@@ -2166,6 +2247,41 @@ export const Banners: React.FC = () => {
                     )}
                   </div>
                 </div>
+                {(editingBanner?.image_url_mobile || uploadedFilesMobile.length > 0) && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      {uploadedFilesMobile.length > 0 ? 'New Mobile Preview' : 'Current Mobile Image'}
+                    </label>
+                    <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-gray-50 dark:bg-gray-800/50">
+                      {uploadedFilesMobile.length > 0 ? (
+                        <>
+                          <img 
+                            src={URL.createObjectURL(uploadedFilesMobile[0])} 
+                            alt="New mobile banner" 
+                            className="w-full h-40 object-cover rounded border border-gray-200 dark:border-gray-700"
+                          />
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                            {uploadedFilesMobile[0].name} ({(uploadedFilesMobile[0].size / 1024 / 1024).toFixed(2)} MB)
+                          </p>
+                        </>
+                      ) : editingBanner?.image_url_mobile ? (
+                        <>
+                          <img 
+                            src={resolveImageUrl(editingBanner.image_url_mobile)} 
+                            alt="Current mobile banner" 
+                            className="w-full h-40 object-cover rounded border border-gray-200 dark:border-gray-700"
+                            onError={(e) => {
+                              e.currentTarget.src = '/placeholder-image.png';
+                            }}
+                          />
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                            Current mobile image
+                          </p>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Right Side - Live Preview */}
@@ -2202,9 +2318,13 @@ export const Banners: React.FC = () => {
                   previewMode === 'mobile' ? 'max-w-xs mx-auto' : 'w-full'
                 }`}>
                   <div className="relative bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900">
-                    {(uploadedFiles.length > 0 ? URL.createObjectURL(uploadedFiles[0]) : editBanner.image_url || editingBanner?.image_url || '') ? (
+                    {(() => {
+                      const desktopSrc = uploadedFiles.length > 0 ? URL.createObjectURL(uploadedFiles[0]) : (editBanner.image_url || editingBanner?.image_url || '');
+                      const mobileSrc = uploadedFilesMobile.length > 0 ? URL.createObjectURL(uploadedFilesMobile[0]) : (editBanner.image_url_mobile || editingBanner?.image_url_mobile || editBanner.image_url || editingBanner?.image_url || '');
+                      const previewSrc = previewMode === 'mobile' ? mobileSrc : desktopSrc;
+                      return previewSrc ? (
                       <img 
-                        src={uploadedFiles.length > 0 ? URL.createObjectURL(uploadedFiles[0]) : resolveImageUrl(editBanner.image_url || editingBanner?.image_url || '')} 
+                        src={previewSrc.startsWith('blob:') ? previewSrc : resolveImageUrl(previewSrc)} 
                         alt="Banner preview" 
                         className={`w-full object-cover ${previewMode === 'mobile' ? 'h-48' : 'h-64'}`}
                       />
@@ -2212,7 +2332,8 @@ export const Banners: React.FC = () => {
                       <div className={`${previewMode === 'mobile' ? 'h-48' : 'h-64'} flex items-center justify-center bg-gray-200 dark:bg-gray-800`}>
                         <ImageIcon className="h-12 w-12 text-gray-400 dark:text-gray-600" />
           </div>
-        )}
+        );
+                    })()}
                     
                     {/* Overlay Content */}
                     {(editBanner.title || editBanner.subtitle || editBanner.button_text) && (
@@ -2246,8 +2367,9 @@ export const Banners: React.FC = () => {
             variant="secondary" 
             onClick={() => {
               setEditingBanner(null);
-              setEditBanner({ title: '', subtitle: '', button_text: '', button_url: '', image_url: '', is_active: true });
+              setEditBanner({ title: '', subtitle: '', button_text: '', button_url: '', image_url: '', image_url_mobile: '', is_active: true });
               setUploadedFiles([]);
+              setUploadedFilesMobile([]);
             }}
           >
             Cancel
@@ -3054,6 +3176,7 @@ export const Banners: React.FC = () => {
                               button_text: originalBanner.button_text,
                               button_url: originalBanner.button_url,
                               image_url: originalBanner.image_url,
+                              image_url_mobile: originalBanner.image_url_mobile ?? '',
                               is_active: false
                             });
                             setShowAddModal(true);

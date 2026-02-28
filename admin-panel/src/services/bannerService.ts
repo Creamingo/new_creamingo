@@ -19,6 +19,7 @@ export interface CreateBannerData {
   button_text?: string;
   button_url?: string;
   image_url: string;
+  image_url_mobile?: string | null;
   is_active?: boolean;
   order_index?: number;
 }
@@ -29,6 +30,7 @@ export interface UpdateBannerData {
   button_text?: string;
   button_url?: string;
   image_url?: string;
+  image_url_mobile?: string | null;
   is_active?: boolean;
   order_index?: number;
 }

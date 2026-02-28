@@ -102,6 +102,7 @@ const schemas = {
     button_text: Joi.string().min(1).max(50),
     button_url: Joi.string().uri(),
     image_url: imageUrl({ required: true }),
+    image_url_mobile: imageUrl({ allowEmpty: true }),
     is_active: Joi.boolean().default(true),
     order_index: Joi.number().integer().min(0).default(0)
   }),
@@ -112,6 +113,7 @@ const schemas = {
     button_text: Joi.string().min(1).max(50),
     button_url: Joi.string().uri(),
     image_url: imageUrl(),
+    image_url_mobile: imageUrl({ allowEmpty: true }),
     is_active: Joi.boolean(),
     order_index: Joi.number().integer().min(0)
   }),

@@ -403,12 +403,13 @@ const DynamicBannerSlider = () => {
 
               </div>
 
-              {/* Mobile Slider - Hidden on desktop */}
+              {/* Mobile Slider - Hidden on desktop; uses mobile image when available */}
               <div className="lg:hidden relative" style={{ position: 'relative', zIndex: 1, overflow: 'visible' }}>
                 <div className="slider-container bg-transparent relative" style={{ backgroundColor: 'transparent', position: 'relative', zIndex: 1 }}>
                   <Slider {...mobileSettings}>
                     {banners.map((banner, index) => {
                       const isVideo = isVideoBanner(banner);
+                      const mobileImageUrl = banner.image_url_mobile || banner.image_url;
                       
                       return (
                         <div key={banner.id} className="px-2">
@@ -421,7 +422,7 @@ const DynamicBannerSlider = () => {
                               <div className="relative overflow-hidden rounded-2xl">
                               {isVideo ? (
                                 <video
-                                  src={banner.video_url || banner.image_url}
+                                  src={banner.video_url || mobileImageUrl}
                                   autoPlay
                                   loop
                                   muted
@@ -430,7 +431,7 @@ const DynamicBannerSlider = () => {
                                 />
                               ) : (
                                 <img 
-                                  src={banner.image_url} 
+                                  src={mobileImageUrl} 
                                   alt={banner.title} 
                                     className="w-full h-40 object-cover rounded-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 banner-image transition-all duration-300 group-hover:scale-[1.01] group-hover:brightness-[1.02]"
                                   onError={(e) => {

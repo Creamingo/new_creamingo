@@ -199,6 +199,7 @@ export interface Banner {
   button_text: string;
   button_url: string;
   image_url: string;
+  image_url_mobile?: string | null;
   is_active: boolean;
   order_index: number;
   created_at: string;
