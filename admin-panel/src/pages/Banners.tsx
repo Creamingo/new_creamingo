@@ -70,6 +70,14 @@ const getStatusBadge = (status: string) => {
   );
 };
 
+const getImageDimensions = (src: string): Promise<{ w: number; h: number }> =>
+  new Promise((resolve, reject) => {
+    const img = document.createElement('img');
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = src;
+  });
+
 // Sortable Grid Card Component
 interface SortableGridCardProps {
   banner: Banner;
@@ -459,6 +467,8 @@ export const Banners: React.FC = () => {
   const [uploadedFilesMobile, setUploadedFilesMobile] = useState<File[]>([]);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
+  const [editDesktopDims, setEditDesktopDims] = useState<{ w: number; h: number } | null>(null);
+  const [editMobileDims, setEditMobileDims] = useState<{ w: number; h: number } | null>(null);
   const [draggedBanner, setDraggedBanner] = useState<number | null>(null);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showSortDropdown, setShowSortDropdown] = useState(false);
@@ -630,6 +640,62 @@ export const Banners: React.FC = () => {
     loadAnalytics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [banners.length]); // Only run when banners count changes, not on every bannerAnalytics update
+
+  // Load uploaded/current image dimensions for Edit Banner modal
+  useEffect(() => {
+    if (!editingBanner) {
+      setEditDesktopDims(null);
+      setEditMobileDims(null);
+      return;
+    }
+    let desktopUrl: string | null = null;
+    let mobileUrl: string | null = null;
+
+    if (uploadedFiles.length > 0 && uploadedFiles[0].type.startsWith('image/')) {
+      desktopUrl = URL.createObjectURL(uploadedFiles[0]);
+    } else if (editingBanner.image_url) {
+      desktopUrl = resolveImageUrl(editingBanner.image_url) || null;
+    }
+    if (uploadedFilesMobile.length > 0 && uploadedFilesMobile[0].type.startsWith('image/')) {
+      mobileUrl = URL.createObjectURL(uploadedFilesMobile[0]);
+    } else if (editingBanner.image_url_mobile) {
+      mobileUrl = resolveImageUrl(editingBanner.image_url_mobile) || null;
+    } else if (editingBanner.image_url) {
+      mobileUrl = resolveImageUrl(editingBanner.image_url) || null;
+    }
+
+    if (desktopUrl) {
+      const desktopIsBlob = desktopUrl.startsWith('blob:');
+      const desktopUrlToRevoke = desktopUrl;
+      getImageDimensions(desktopUrl)
+        .then((d) => {
+          setEditDesktopDims(d);
+          if (desktopIsBlob) URL.revokeObjectURL(desktopUrlToRevoke);
+        })
+        .catch(() => {
+          setEditDesktopDims(null);
+          if (desktopIsBlob) URL.revokeObjectURL(desktopUrlToRevoke);
+        });
+    } else {
+      setEditDesktopDims(null);
+    }
+
+    if (mobileUrl) {
+      const mobileIsBlob = mobileUrl.startsWith('blob:');
+      const mobileUrlToRevoke = mobileUrl;
+      getImageDimensions(mobileUrl)
+        .then((d) => {
+          setEditMobileDims(d);
+          if (mobileIsBlob) URL.revokeObjectURL(mobileUrlToRevoke);
+        })
+        .catch(() => {
+          setEditMobileDims(null);
+          if (mobileIsBlob) URL.revokeObjectURL(mobileUrlToRevoke);
+        });
+    } else {
+      setEditMobileDims(null);
+    }
+  }, [editingBanner, uploadedFiles, uploadedFilesMobile]);
 
   // Check scheduled banners and auto-activate/deactivate
   useEffect(() => {
@@ -2120,7 +2186,7 @@ export const Banners: React.FC = () => {
         </ModalFooter>
       </Modal>
 
-      {/* Edit Banner Modal */}
+      {/* Edit Banner Modal - Compact & Trendy with dual Live Preview */}
       <Modal
         isOpen={!!editingBanner}
         onClose={() => {
@@ -2128,237 +2194,195 @@ export const Banners: React.FC = () => {
           setEditBanner({ title: '', subtitle: '', button_text: '', button_url: '', image_url: '', image_url_mobile: '', is_active: true });
           setUploadedFiles([]);
           setUploadedFilesMobile([]);
+          setEditDesktopDims(null);
+          setEditMobileDims(null);
         }}
         title="Edit Banner"
         size="full"
       >
         {editingBanner && (
-          <div className="w-[90vw] max-w-none mx-auto">
-            <div className="space-y-4 pb-8">
-            {/* Three Column Layout: Input Fields Left, Image Middle, Preview Right */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 relative">
-              {/* Divider Lines */}
-              <div className="hidden lg:block absolute left-1/3 top-0 bottom-0 w-px bg-gray-200 dark:bg-gray-700 transform -translate-x-1/2"></div>
-              <div className="hidden lg:block absolute left-2/3 top-0 bottom-0 w-px bg-gray-200 dark:bg-gray-700 transform -translate-x-1/2"></div>
-              
-              {/* Left Side - Input Fields */}
-              <div className="space-y-3">
-                <Input 
-                  label="Title *" 
-                  placeholder="Enter banner title"
-                  value={editBanner.title}
-                  onChange={(e) => handleEditInputChange('title', e.target.value)}
-                  required
-                />
-                
-                <Input 
-                  label="Subtitle" 
-                  placeholder="Enter banner subtitle" 
-                  value={editBanner.subtitle}
-                  onChange={(e) => handleEditInputChange('subtitle', e.target.value)}
-                />
-                
-                <Input 
-                  label="Button Text" 
-                  placeholder="e.g., Order Now" 
-                  value={editBanner.button_text}
-                  onChange={(e) => handleEditInputChange('button_text', e.target.value)}
-                />
-                
-                <Input 
-                  label="Button Link" 
-                  placeholder="e.g., /products" 
-                  value={editBanner.button_url}
-                  onChange={(e) => handleEditInputChange('button_url', e.target.value)}
-            />
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Status
-              </label>
-              <select 
-                className="w-full rounded-2xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-3 text-sm focus:border-primary-500 dark:focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:focus:ring-primary-400/20"
-                value={editBanner.is_active ? 'active' : 'inactive'}
-                    onChange={(e) => handleEditInputChange('is_active', e.target.value === 'active')}
-              >
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
-            </div>
-                
-              </div>
-              
-              {/* Middle - Banner Image Section */}
-              <div className="space-y-3">
-                <FileUpload
-                  label="Desktop Banner Image"
-                  accept="image/*"
-                  maxSize={5}
-                  onFileSelect={handleFileSelect}
-                  onFileRemove={handleFileRemove}
-                  files={uploadedFiles}
-                  helperText="Exact size: 1200×400px (wide, 3:1). Used on laptop/desktop."
-                />
-                <FileUpload
-                  label="Mobile Banner Image (optional)"
-                  accept="image/*"
-                  maxSize={5}
-                  onFileSelect={handleFileSelectMobile}
-                  onFileRemove={handleFileRemoveMobile}
-                  files={uploadedFilesMobile}
-                  helperText="Optional. Exact size: 800×600px or 800×800px (1:1). Used on phones/tablets."
-                />
-                
-                {/* Current Image or New Image Preview */}
+          <div className="w-full max-w-6xl mx-auto">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 xl:gap-10 pb-4">
+              {/* Left: Form in two clear sections */}
+              <div className="space-y-6">
+                {/* Section 1: Banner details */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    {uploadedFiles.length > 0 ? 'New Desktop Preview' : 'Current Desktop Image'}
-                  </label>
-                  <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-gray-50 dark:bg-gray-800/50">
-                    {uploadedFiles.length > 0 ? (
-                      <>
-                        <img 
-                          src={URL.createObjectURL(uploadedFiles[0])} 
-                          alt="New banner preview" 
-                          className="w-full h-40 object-cover rounded border border-gray-200 dark:border-gray-700"
-                        />
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                          {uploadedFiles[0].name} ({(uploadedFiles[0].size / 1024 / 1024).toFixed(2)} MB)
-                        </p>
-                      </>
-                    ) : editingBanner?.image_url ? (
-                      <>
-                        <img 
-                          src={resolveImageUrl(editingBanner.image_url)} 
-                          alt="Current banner" 
-                          className="w-full h-40 object-cover rounded border border-gray-200 dark:border-gray-700"
-                          onError={(e) => {
-                            e.currentTarget.src = '/placeholder-image.png';
-                          }}
-                        />
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                          Current desktop image
-                        </p>
-                      </>
-                    ) : (
-                      <div className="h-40 bg-gray-200 dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 flex items-center justify-center">
-                        <span className="text-gray-500 dark:text-gray-400">No image selected</span>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                    <span className="w-1 h-4 rounded-full bg-primary-500" />
+                    Banner details
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input
+                        label="Title"
+                        placeholder="e.g. Summer Sale"
+                        value={editBanner.title}
+                        onChange={(e) => handleEditInputChange('title', e.target.value)}
+                        required
+                      />
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Status</label>
+                        <select
+                          className="w-full rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2.5 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+                          value={editBanner.is_active ? 'active' : 'inactive'}
+                          onChange={(e) => handleEditInputChange('is_active', e.target.value === 'active')}
+                        >
+                          <option value="active">Active</option>
+                          <option value="inactive">Inactive</option>
+                        </select>
                       </div>
-                    )}
+                    </div>
+                    <Input
+                      label="Subtitle"
+                      placeholder="Short line under the title"
+                      value={editBanner.subtitle}
+                      onChange={(e) => handleEditInputChange('subtitle', e.target.value)}
+                    />
+                    <Input
+                      label="Button text"
+                      placeholder="e.g. Shop now"
+                      value={editBanner.button_text}
+                      onChange={(e) => handleEditInputChange('button_text', e.target.value)}
+                    />
+                    <Input
+                      label="Button link"
+                      placeholder="https://... or /page-path"
+                      value={editBanner.button_url}
+                      onChange={(e) => handleEditInputChange('button_url', e.target.value)}
+                    />
                   </div>
                 </div>
-                {(editingBanner?.image_url_mobile || uploadedFilesMobile.length > 0) && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      {uploadedFilesMobile.length > 0 ? 'New Mobile Preview' : 'Current Mobile Image'}
-                    </label>
-                    <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-gray-50 dark:bg-gray-800/50">
-                      {uploadedFilesMobile.length > 0 ? (
-                        <>
-                          <img 
-                            src={URL.createObjectURL(uploadedFilesMobile[0])} 
-                            alt="New mobile banner" 
-                            className="w-full h-40 object-cover rounded border border-gray-200 dark:border-gray-700"
-                          />
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                            {uploadedFilesMobile[0].name} ({(uploadedFilesMobile[0].size / 1024 / 1024).toFixed(2)} MB)
-                          </p>
-                        </>
-                      ) : editingBanner?.image_url_mobile ? (
-                        <>
-                          <img 
-                            src={resolveImageUrl(editingBanner.image_url_mobile)} 
-                            alt="Current mobile banner" 
-                            className="w-full h-40 object-cover rounded border border-gray-200 dark:border-gray-700"
-                            onError={(e) => {
-                              e.currentTarget.src = '/placeholder-image.png';
-                            }}
-                          />
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                            Current mobile image
-                          </p>
-                        </>
-                      ) : null}
+
+                {/* Section 2: Images */}
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                    <span className="w-1 h-4 rounded-full bg-primary-500" />
+                    Images
+                  </h3>
+                  <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 p-4 space-y-4">
+                    <div>
+                      <FileUpload
+                        label="Desktop image"
+                        accept="image/*"
+                        maxSize={5}
+                        onFileSelect={handleFileSelect}
+                        onFileRemove={handleFileRemove}
+                        files={uploadedFiles}
+                        helperText="Recommended 1200×400 px (3:1). Max 5 MB."
+                      />
+                      {editDesktopDims && (
+                        <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                          Current: <span className="font-medium text-primary-600 dark:text-primary-400">{editDesktopDims.w} × {editDesktopDims.h} px</span>
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <FileUpload
+                        label="Mobile image (optional)"
+                        accept="image/*"
+                        maxSize={5}
+                        onFileSelect={handleFileSelectMobile}
+                        onFileRemove={handleFileRemoveMobile}
+                        files={uploadedFilesMobile}
+                        helperText="Recommended 800×600 px. If empty, desktop image is used on mobile."
+                      />
+                      {editMobileDims && (
+                        <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                          Current: <span className="font-medium text-primary-600 dark:text-primary-400">{editMobileDims.w} × {editMobileDims.h} px</span>
+                        </p>
+                      )}
                     </div>
                   </div>
-                )}
+                </div>
               </div>
 
-              {/* Right Side - Live Preview */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    Live Preview
-                  </label>
-                  <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
-                    <button
-                      onClick={() => setPreviewMode('desktop')}
-                      className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                        previewMode === 'desktop'
-                          ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
-                          : 'text-gray-600 dark:text-gray-400'
-                      }`}
-                    >
-                      <Monitor className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      onClick={() => setPreviewMode('mobile')}
-                      className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                        previewMode === 'mobile'
-                          ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
-                          : 'text-gray-600 dark:text-gray-400'
-                      }`}
-                    >
-                      <Smartphone className="h-3.5 w-3.5" />
-                    </button>
-            </div>
-            </div>
-                
-                <div className={`border-2 border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-gray-50 dark:bg-gray-900/50 ${
-                  previewMode === 'mobile' ? 'max-w-xs mx-auto' : 'w-full'
-                }`}>
-                  <div className="relative bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900">
-                    {(() => {
-                      const desktopSrc = uploadedFiles.length > 0 ? URL.createObjectURL(uploadedFiles[0]) : (editBanner.image_url || editingBanner?.image_url || '');
-                      const mobileSrc = uploadedFilesMobile.length > 0 ? URL.createObjectURL(uploadedFilesMobile[0]) : (editBanner.image_url_mobile || editingBanner?.image_url_mobile || editBanner.image_url || editingBanner?.image_url || '');
-                      const previewSrc = previewMode === 'mobile' ? mobileSrc : desktopSrc;
-                      return previewSrc ? (
-                      <img 
-                        src={previewSrc.startsWith('blob:') ? previewSrc : resolveImageUrl(previewSrc)} 
-                        alt="Banner preview" 
-                        className={`w-full object-cover ${previewMode === 'mobile' ? 'h-48' : 'h-64'}`}
-                      />
-                    ) : (
-                      <div className={`${previewMode === 'mobile' ? 'h-48' : 'h-64'} flex items-center justify-center bg-gray-200 dark:bg-gray-800`}>
-                        <ImageIcon className="h-12 w-12 text-gray-400 dark:text-gray-600" />
-          </div>
-        );
-                    })()}
-                    
-                    {/* Overlay Content */}
-                    {(editBanner.title || editBanner.subtitle || editBanner.button_text) && (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-gradient-to-t from-black/60 via-black/20 to-transparent">
-                        {editBanner.title && (
-                          <h3 className="text-white text-xl sm:text-2xl font-bold mb-2 text-center drop-shadow-lg">
-                            {editBanner.title}
-                          </h3>
-                        )}
-                        {editBanner.subtitle && (
-                          <p className="text-white text-sm sm:text-base mb-4 text-center drop-shadow-md max-w-md">
-                            {editBanner.subtitle}
-                          </p>
-                        )}
-                        {editBanner.button_text && (
-                          <button className="px-6 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-semibold rounded-lg shadow-lg transition-colors">
-                            {editBanner.button_text}
-                          </button>
-                        )}
+              {/* Right: Live Preview */}
+              <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/50 shadow-md overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                    <Layers className="h-4 w-4 text-primary-500" />
+                    Live preview
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">How this banner will look on desktop and mobile.</p>
+                </div>
+                <div className="p-4 space-y-5">
+                  {/* Desktop preview */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Monitor className="h-4 w-4 text-gray-500 dark:text-gray-400" aria-hidden />
+                      <span className="text-xs font-medium text-gray-600 dark:text-gray-300">Desktop</span>
+                    </div>
+                    <div className="rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-800">
+                      <div className="relative aspect-[3/1] min-h-[90px]">
+                        {(() => {
+                          const desktopSrc = uploadedFiles.length > 0 ? URL.createObjectURL(uploadedFiles[0]) : (editBanner.image_url || editingBanner?.image_url || '');
+                          return desktopSrc ? (
+                            <>
+                              <img
+                                src={desktopSrc.startsWith('blob:') ? desktopSrc : resolveImageUrl(desktopSrc)}
+                                alt=""
+                                className="w-full h-full object-cover"
+                              />
+                              {(editBanner.title || editBanner.subtitle || editBanner.button_text) && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center p-3 bg-gradient-to-t from-black/60 via-transparent to-transparent">
+                                  {editBanner.title && <span className="text-white text-sm font-bold drop-shadow-lg">{editBanner.title}</span>}
+                                  {editBanner.subtitle && <span className="text-white/90 text-xs drop-shadow line-clamp-1 max-w-full">{editBanner.subtitle}</span>}
+                                  {editBanner.button_text && (
+                                    <span className="mt-1.5 px-3 py-1.5 bg-primary-500 text-white text-xs font-semibold rounded-lg">{editBanner.button_text}</span>
+                                  )}
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+                              <ImageIcon className="h-8 w-8" />
+                              <span className="text-xs">Add desktop image to see preview</span>
+                            </div>
+                          );
+                        })()}
                       </div>
-                    )}
+                    </div>
+                  </div>
+
+                  {/* Mobile preview */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Smartphone className="h-4 w-4 text-gray-500 dark:text-gray-400" aria-hidden />
+                      <span className="text-xs font-medium text-gray-600 dark:text-gray-300">Mobile</span>
+                    </div>
+                    <div className="max-w-[200px] mx-auto rounded-[1.75rem] overflow-hidden border-[5px] border-gray-300 dark:border-gray-600 bg-gray-800 shadow-lg">
+                      <div className="relative w-full aspect-[9/19] bg-black overflow-hidden">
+                        {(() => {
+                          const mobileSrc = uploadedFilesMobile.length > 0 ? URL.createObjectURL(uploadedFilesMobile[0]) : (editBanner.image_url_mobile || editingBanner?.image_url_mobile || editBanner.image_url || editingBanner?.image_url || '');
+                          return mobileSrc ? (
+                            <>
+                              <img
+                                src={mobileSrc.startsWith('blob:') ? mobileSrc : resolveImageUrl(mobileSrc)}
+                                alt=""
+                                className="absolute inset-0 w-full h-full object-cover object-top"
+                              />
+                              {(editBanner.title || editBanner.subtitle || editBanner.button_text) && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-end p-2.5 pb-5 bg-gradient-to-t from-black/70 via-transparent to-transparent">
+                                  {editBanner.title && <span className="text-white text-[10px] font-bold drop-shadow-lg text-center truncate max-w-full">{editBanner.title}</span>}
+                                  {editBanner.subtitle && <span className="text-white/90 text-[9px] drop-shadow text-center line-clamp-2 max-w-full mt-0.5">{editBanner.subtitle}</span>}
+                                  {editBanner.button_text && (
+                                    <span className="mt-1 px-2 py-0.5 bg-primary-500 text-white text-[9px] font-semibold rounded">{editBanner.button_text}</span>
+                                  )}
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-gray-800 text-gray-500 p-3">
+                              <ImageIcon className="h-6 w-6" />
+                              <span className="text-[10px] text-center">Add image to see preview</span>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
             </div>
           </div>
         )}

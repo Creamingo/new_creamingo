@@ -522,6 +522,7 @@ const schemas = {
     button_text: Joi.string().max(50).allow(''),
     button_url: Joi.string().allow(''),
     image_url: imageUrl({ required: true }),
+    image_url_mobile: imageUrl({ allowEmpty: true }),
     is_active: Joi.boolean(),
     order_index: Joi.number().integer().min(0)
   }),
@@ -532,6 +533,7 @@ const schemas = {
     button_text: Joi.string().max(50).allow(''),
     button_url: Joi.string().allow(''),
     image_url: imageUrl(),
+    image_url_mobile: imageUrl({ allowEmpty: true }),
     is_active: Joi.boolean(),
     order_index: Joi.number().integer().min(0)
   })
@@ -543,6 +545,7 @@ const validateUpdateFeaturedCategory = validate(schemas.updateFeaturedCategory);
 const validateFeaturedProduct = validate(schemas.createFeaturedProduct);
 const validateUpdateFeaturedProduct = validate(schemas.updateFeaturedProduct);
 const validateBanner = validate(schemas.createBanner);
+const validateUpdateBanner = validate(schemas.updateBanner);
 
 module.exports = {
   validate,
@@ -551,5 +554,6 @@ module.exports = {
   validateUpdateFeaturedCategory,
   validateFeaturedProduct,
   validateUpdateFeaturedProduct,
-  validateBanner
+  validateBanner,
+  validateUpdateBanner
 };
