@@ -198,11 +198,13 @@ server {
     location /admin {
         alias /var/www/creamingo/admin-panel/build;
         try_files $uri $uri/ /admin/index.html;
+        add_header X-Robots-Tag "noindex, nofollow" always;
         
         # Handle static assets
         location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
             expires 1y;
             add_header Cache-Control "public, immutable";
+            add_header X-Robots-Tag "noindex, nofollow" always;
         }
     }
 }
@@ -268,6 +270,7 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_cache_bypass $http_upgrade;
+        add_header X-Robots-Tag "noindex, nofollow" always;
     }
 }
 
@@ -372,6 +375,9 @@ vercel --prod
 ```apache
 # public_html/.htaccess
 RewriteEngine On
+<IfModule mod_headers.c>
+Header set X-Robots-Tag "noindex, nofollow" "expr=%{REQUEST_URI} =~ m#^/admin/#"
+</IfModule>
 
 # Admin panel routing
 RewriteCond %{REQUEST_FILENAME} !-f

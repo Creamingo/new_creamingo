@@ -112,10 +112,10 @@ const CartDeals = () => {
       const progressPercent = Math.min(100, (cartTotal / deals.next_deal.threshold) * 100);
 
       return (
-        <div className="bg-gradient-to-br from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20 rounded-lg sm:rounded-xl border border-pink-200 dark:border-pink-700 p-4 sm:p-6">
+        <div className="bg-gray-50 dark:bg-gray-800/80 rounded-lg sm:rounded-xl border border-gray-200 dark:border-gray-600 p-4 sm:p-6">
           <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-            <div className="p-1.5 sm:p-2 bg-pink-100 dark:bg-pink-900/30 rounded-lg">
-              <Gift className="w-4 h-4 sm:w-5 sm:h-5 text-pink-600 dark:text-pink-400" />
+            <div className="p-1.5 sm:p-2 bg-gray-200/80 dark:bg-gray-700 rounded-lg">
+              <Gift className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 dark:text-gray-400" />
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">
@@ -130,13 +130,13 @@ const CartDeals = () => {
           <div className="space-y-2 sm:space-y-2">
             <div className="flex items-center justify-between text-xs sm:text-sm">
               <span className="text-gray-700 dark:text-gray-300">Progress to next deal</span>
-              <span className="font-semibold text-pink-700 dark:text-pink-400">
+              <span className="font-semibold text-gray-800 dark:text-gray-200">
                 {formatPrice(cartTotal)} / {formatPrice(deals.next_deal.threshold)}
               </span>
             </div>
             <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 sm:h-2.5">
               <div
-                className="bg-gradient-to-r from-pink-500 to-rose-500 h-2 sm:h-2.5 rounded-full transition-all duration-300"
+                className="bg-gray-400 dark:bg-gray-500 h-2 sm:h-2.5 rounded-full transition-all duration-300"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
@@ -152,114 +152,108 @@ const CartDeals = () => {
 
   return (
     <div className="space-y-3 sm:space-y-4">
-      {/* Unlocked Deals */}
+      {/* Unlocked Deals - Same card design as Upcoming Deals, with green accents for unlocked */}
       {unlockedDeals.length > 0 && (
-        <div className="bg-gradient-to-br from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20 rounded-lg sm:rounded-xl border border-pink-200 dark:border-pink-700 p-4 sm:p-6">
-          {/* Deal Unlocked Banner */}
-          <div className="flex items-center gap-2 mb-4 sm:mb-5">
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-              <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
-              <span className="text-sm font-semibold text-green-700 dark:text-green-400">
-                Deal unlocked!
-              </span>
-            </div>
+        <div className="bg-white dark:bg-gray-800 rounded-lg sm:rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-6 shadow-sm dark:shadow-xl dark:shadow-black/30">
+          <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+            <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 dark:text-green-400" />
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
+              Deal unlocked!
+            </h3>
+            <span className="inline-flex items-center gap-1 rounded-full bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-[10px] font-semibold px-2 py-0.5 border border-green-200 dark:border-green-800">
+              <CheckCircle className="w-3 h-3" />
+              Unlocked
+            </span>
           </div>
 
-          {/* Mobile: Horizontal scrollable row, Desktop: Grid */}
-          <div 
-            className="flex md:grid md:grid-cols-2 gap-3 sm:gap-4 overflow-x-auto md:overflow-x-visible pb-2 md:pb-0 -mx-1 md:mx-0 px-1 md:px-0"
-            style={{
-              scrollbarWidth: 'thin',
-              scrollbarColor: 'rgba(155, 155, 155, 0.5) transparent'
-            }}
-          >
+          <div className="space-y-2.5 sm:space-y-3">
             {unlockedDeals.map((deal) => {
               const alreadyInCart = isDealInCart(deal.product_id);
               const isAdding = addingDealId === deal.deal_id;
               const isRemoving = removingDealId === deal.deal_id;
 
               return (
-                <div
-                  key={deal.deal_id}
-                  className="bg-white dark:bg-gray-800 rounded-lg border border-pink-200 dark:border-pink-700 p-3.5 sm:p-4 hover:shadow-md transition-shadow flex-shrink-0 w-[280px] sm:w-[300px] md:w-auto md:flex-shrink flex flex-col"
-                >
-                  {/* Product Title - Full width, single line */}
-                  <h4 className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 sm:mb-3.5 truncate">
-                    {deal.product.name}
-                  </h4>
-                  
-                  {/* Image and Price/Weight/Button Section */}
-                  <div className="flex items-start gap-3 sm:gap-3.5">
-                    {/* Product Image - Left side */}
-                    {deal.product.image_url && (
-                      <img
-                        src={resolveImageUrl(deal.product.image_url)}
-                        alt={deal.product.name}
-                        className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg object-cover flex-shrink-0"
-                      />
-                    )}
-                    
-                    {/* Price, Weight and Button - Right side */}
-                    <div className="flex-1 min-w-0 flex flex-col justify-between h-16 sm:h-20">
-                      {/* Price and Weight in a row */}
-                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                        <span className="text-xs sm:text-sm text-gray-400 dark:text-gray-500 line-through">
-                          {formatPrice(deal.product.original_price || deal.product.base_price)}
-                        </span>
-                        <span className="text-lg sm:text-xl font-bold text-green-600 dark:text-green-400">
-                          {formatPrice(deal.deal_price)}
-                        </span>
+                <div key={deal.deal_id} className="rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                  {/* Top bar - same style as Upcoming Deals but green for unlocked */}
+                  <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-3 py-2 text-xs sm:text-sm font-semibold flex items-center gap-2">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    <span>Deal unlocked – grab now</span>
+                  </div>
+
+                  {/* Deal card - same layout as Upcoming Deals */}
+                  <div className="p-3 sm:p-4 bg-gray-50 dark:bg-gray-700/50">
+                    <div className="flex items-start gap-2.5 sm:gap-3 mb-2 sm:mb-2.5">
+                      {deal.product.image_url && (
+                        <img
+                          src={resolveImageUrl(deal.product.image_url)}
+                          alt={deal.product.name}
+                          className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg object-cover flex-shrink-0"
+                        />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100 line-clamp-2">
+                          {deal.product.name}
+                        </p>
                         {deal.product.base_weight && (
-                          <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-medium">
-                            • {deal.product.base_weight}
-                          </span>
+                          <p className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                            {deal.product.base_weight}
+                          </p>
                         )}
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <span className="px-2 py-0.5 rounded-md bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 text-xs sm:text-sm font-bold">
+                            in {formatPrice(deal.deal_price)}
+                          </span>
+                          {deal.original_price && deal.original_price > deal.deal_price && (
+                            <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                              current price {formatPrice(deal.original_price)}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      
-                      {/* Button - Just below Prices and Weight */}
-                      <div className="mt-auto">
-                        {alreadyInCart ? (
-                          <div className="flex gap-2 sm:gap-2">
-                            <button
-                              disabled
-                              className="py-2 sm:py-2.5 px-3 sm:px-4 rounded-lg text-xs sm:text-sm font-medium bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 cursor-not-allowed flex items-center justify-center gap-1.5 sm:gap-2"
-                            >
-                              <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                              <span>Added</span>
-                            </button>
-                            <button
-                              onClick={() => handleRemoveDeal(deal)}
-                              disabled={isRemoving || loading}
-                              className="py-2 sm:py-2.5 px-3 sm:px-4 rounded-lg text-xs sm:text-sm font-medium bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-red-300 dark:hover:border-red-700 hover:text-red-600 dark:hover:text-red-400 transition-colors flex items-center justify-center gap-1.5 sm:gap-2 disabled:opacity-50"
-                              title="Remove from cart"
-                            >
-                              {isRemoving ? (
-                                <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                              ) : (
-                                <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                              )}
-                            </button>
-                          </div>
-                        ) : (
+                    </div>
+
+                    <div className="flex items-center gap-2 mt-1">
+                      {alreadyInCart ? (
+                        <>
                           <button
-                            onClick={() => handleAddDeal(deal)}
-                            disabled={isAdding || loading}
-                            className="w-full py-2 sm:py-2.5 px-3 sm:px-4 rounded-lg text-xs sm:text-sm font-medium transition-colors flex items-center justify-center gap-1.5 sm:gap-2 bg-white dark:bg-gray-800 border border-pink-500 dark:border-pink-500 text-pink-600 dark:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-900/20 disabled:opacity-50"
+                            disabled
+                            className="flex-1 py-2 sm:py-2.5 px-3 rounded-lg text-xs sm:text-sm font-medium bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 cursor-not-allowed flex items-center justify-center gap-1.5"
                           >
-                            {isAdding ? (
-                              <>
-                                <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" />
-                                <span>Adding...</span>
-                              </>
+                            <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                            <span>Added</span>
+                          </button>
+                          <button
+                            onClick={() => handleRemoveDeal(deal)}
+                            disabled={isRemoving || loading}
+                            className="py-2 sm:py-2.5 px-3 rounded-lg text-xs sm:text-sm font-medium bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-red-300 dark:hover:border-red-700 hover:text-red-600 dark:hover:text-red-400 transition-colors flex items-center justify-center disabled:opacity-50"
+                            title="Remove from cart"
+                          >
+                            {isRemoving ? (
+                              <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
                             ) : (
-                              <>
-                            <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                            <span>Grab for Just {formatPrice(deal.deal_price)}</span>
-                              </>
+                              <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                             )}
                           </button>
-                        )}
-                      </div>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => handleAddDeal(deal)}
+                          disabled={isAdding || loading}
+                          className="w-full py-2 sm:py-2.5 px-3 rounded-lg text-xs sm:text-sm font-semibold transition-colors flex items-center justify-center gap-2 border-2 border-gray-400 dark:border-gray-500 text-gray-700 dark:text-gray-300 bg-transparent hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-500 dark:hover:border-gray-400 disabled:opacity-50"
+                        >
+                          {isAdding ? (
+                            <>
+                              <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin" />
+                              <span>Adding...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                              <span>Grab for Just {formatPrice(deal.deal_price)}</span>
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -277,7 +271,7 @@ const CartDeals = () => {
             <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
               Upcoming Deals
             </h3>
-            <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 dark:bg-pink-900/30 text-pink-700 dark:text-pink-300 text-[10px] font-semibold px-2 py-0.5 border border-pink-200 dark:border-pink-800">
+            <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-[10px] font-semibold px-2 py-0.5 border border-gray-200 dark:border-gray-600">
               <Gift className="w-3 h-3" />
               Deal
             </span>
@@ -287,41 +281,54 @@ const CartDeals = () => {
             {lockedDeals.map((deal) => {
               const amountNeeded = Math.ceil(deal.threshold - cartTotal);
               const progressPercent = Math.min(100, (cartTotal / deal.threshold) * 100);
+              const currentPrice = deal.original_price;
 
               return (
-                <div
-                  key={deal.deal_id}
-                  className="p-3 sm:p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600"
-                >
-                  <div className="flex items-start gap-2.5 sm:gap-3 mb-2 sm:mb-2.5">
-                    {deal.product.image_url && (
-                      <img
-                        src={resolveImageUrl(deal.product.image_url)}
-                        alt={deal.product.name}
-                        className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg object-cover flex-shrink-0"
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100">
-                        Add ₹{amountNeeded} more to unlock:
-                      </p>
-                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 line-clamp-1">
-                          {deal.product.name} for {formatPrice(deal.deal_price)}
+                <div key={deal.deal_id} className="rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                  {/* Top deal info bar - very light */}
+                  <div className="bg-gray-100 dark:bg-gray-700/80 text-gray-700 dark:text-gray-300 px-3 py-2 text-xs sm:text-sm font-semibold flex items-center gap-2 border-b border-gray-200 dark:border-gray-600">
+                    <Gift className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
+                    <span>Shop for ₹{amountNeeded} more to unlock this deal</span>
+                  </div>
+
+                  {/* Deal card */}
+                  <div className="p-3 sm:p-4 bg-gray-50 dark:bg-gray-700/50">
+                    <div className="flex items-start gap-2.5 sm:gap-3 mb-2 sm:mb-2.5">
+                      {deal.product.image_url && (
+                        <img
+                          src={resolveImageUrl(deal.product.image_url)}
+                          alt={deal.product.name}
+                          className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg object-cover flex-shrink-0"
+                        />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100 line-clamp-2">
+                          {deal.product.name}
                         </p>
                         {deal.product.base_weight && (
-                          <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-medium">
-                            • {deal.product.base_weight}
-                          </span>
+                          <p className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                            {deal.product.base_weight}
+                          </p>
                         )}
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <span className="px-2 py-0.5 rounded-md bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 text-xs sm:text-sm font-bold">
+                            in {formatPrice(deal.deal_price)}
+                          </span>
+                          {currentPrice && currentPrice > deal.deal_price && (
+                            <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                              current price {formatPrice(currentPrice)}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1.5 sm:h-2">
-                    <div
-                      className="bg-gradient-to-r from-pink-500 to-rose-500 dark:from-pink-600 dark:to-rose-600 h-1.5 sm:h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${progressPercent}%` }}
-                    />
+
+                    <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1.5 sm:h-2">
+                      <div
+                        className="bg-gray-400 dark:bg-gray-500 h-1.5 sm:h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${progressPercent}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
               );

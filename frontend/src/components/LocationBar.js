@@ -142,14 +142,14 @@ const LocationBar = ({ isSticky = true }) => {
       {/* Location Bar - Sticky or scrollable based on prop (mobile only) */}
       <div className={`lg:hidden ${isSticky ? 'sticky top-[3.6rem] z-40' : 'relative z-30'} bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm transition-all duration-300 ease-in-out`}>
         <div 
-          className="flex items-center justify-between px-4 py-1.5 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-200 gap-1"
+          className="flex items-center justify-between px-3 py-1 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-200 gap-1"
           onClick={() => setIsExpanded(true)}
         >
           <div className="flex items-center space-x-2 min-w-0 flex-1">
-            <div className="w-5 h-5 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg flex items-center justify-center flex-shrink-0">
-              <Navigation className="w-3 h-3 text-gray-600 dark:text-gray-300" />
+            <div className="w-4 h-4 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md flex items-center justify-center flex-shrink-0">
+              <Navigation className="w-2.5 h-2.5 text-gray-600 dark:text-gray-300" />
             </div>
-            <div className="flex flex-col min-w-0 flex-1 max-w-[calc(100vw-6rem)]">
+            <div className="flex flex-col min-w-0 flex-1 max-w-[calc(100vw-6rem)] leading-tight">
               {isDeliveryAvailable() ? (
                 <>
                   <span className="font-inter text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">

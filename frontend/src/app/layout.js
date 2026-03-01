@@ -12,7 +12,10 @@ import { SearchProvider } from '../contexts/SearchContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
 import { WalletProvider } from '../contexts/WalletContext'
 import { NotificationProvider } from '../contexts/NotificationContext'
+import { AuthModalProvider } from '../contexts/AuthModalContext'
 import WalletComponents from '../components/WalletComponents'
+import AuthModalBackdrop from '../components/AuthModalBackdrop'
+import CreamingoChatBot from '../components/CreamingoChatBot'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -20,14 +23,13 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <head>
-        {/* Simple: Just disable browser's automatic scroll restoration */}
+        {/* Enable browser scroll restoration so back button returns to previous scroll position */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
-                // Only disable browser's automatic scroll restoration
                 if ('scrollRestoration' in history) {
-                  history.scrollRestoration = 'manual';
+                  history.scrollRestoration = 'auto';
                 }
               })();
             `,
@@ -45,8 +47,12 @@ export default function RootLayout({ children }) {
                   <WishlistProvider>
                     <SearchProvider>
                       <CartProvider>
-                        <WalletComponents />
-                        {children}
+                        <AuthModalProvider>
+                          <WalletComponents />
+                          {children}
+                          <AuthModalBackdrop />
+                          <CreamingoChatBot />
+                        </AuthModalProvider>
                       </CartProvider>
                     </SearchProvider>
                   </WishlistProvider>

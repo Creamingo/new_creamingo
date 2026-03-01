@@ -26,6 +26,7 @@ export interface User {
 export interface LoginResponse {
   user: User;
   token: string;
+  refresh_token?: string;
 }
 
 export interface AuthService {
@@ -42,12 +43,15 @@ class AuthServiceImpl implements AuthService {
    */
   async login(credentials: LoginCredentials): Promise<LoginResponse> {
     try {
-      const response = await apiClient.post<{ user: User; token: string }>('/auth/login', credentials, false);
+      const response = await apiClient.post<{ user: User; token: string; refresh_token?: string }>('/auth/login', credentials, false);
       
       if (response.success && response.data) {
         // Store token and user data
         apiClient.setToken(response.data.token);
         localStorage.setItem('user_data', JSON.stringify(response.data.user));
+        if (response.data.refresh_token) {
+          localStorage.setItem('refresh_token', response.data.refresh_token);
+        }
         
         if (credentials.rememberMe) {
           localStorage.setItem('remember_me', 'true');
@@ -71,7 +75,8 @@ class AuthServiceImpl implements AuthService {
   async logout(): Promise<void> {
     try {
       // Call logout endpoint
-      await apiClient.post('/auth/logout');
+      const refreshToken = localStorage.getItem('refresh_token');
+      await apiClient.post('/auth/logout', { refreshToken });
     } catch (error) {
       console.error('Logout error:', error);
       // Continue with local cleanup even if API call fails
@@ -80,6 +85,7 @@ class AuthServiceImpl implements AuthService {
       apiClient.clearToken();
       localStorage.removeItem('user_data');
       localStorage.removeItem('remember_me');
+      localStorage.removeItem('refresh_token');
     }
   }
 
@@ -171,6 +177,7 @@ class AuthServiceImpl implements AuthService {
     apiClient.clearToken();
     localStorage.removeItem('user_data');
     localStorage.removeItem('remember_me');
+    localStorage.removeItem('refresh_token');
   }
 }
 

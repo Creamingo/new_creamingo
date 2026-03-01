@@ -173,10 +173,16 @@ export const PinCodeProvider = ({ children }) => {
     return null;
   };
 
+  // Format locality string with exactly one space after each comma for display
+  const formatLocalityWithSpaces = (locality) => {
+    if (typeof locality !== 'string') return locality;
+    return locality.replace(/\s*,\s*/g, ', ');
+  };
+
   // Get delivery locality
   const getDeliveryLocality = () => {
     if (deliveryInfo && deliveryInfo.locality) {
-      return deliveryInfo.locality;
+      return formatLocalityWithSpaces(deliveryInfo.locality);
     }
     return null;
   };
@@ -192,7 +198,7 @@ export const PinCodeProvider = ({ children }) => {
   // Get temporary delivery locality
   const getTempDeliveryLocality = () => {
     if (tempDeliveryInfo && tempDeliveryInfo.locality) {
-      return tempDeliveryInfo.locality;
+      return formatLocalityWithSpaces(tempDeliveryInfo.locality);
     }
     return null;
   };

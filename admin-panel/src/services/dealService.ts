@@ -4,6 +4,7 @@ export interface Deal {
   id: number;
   deal_title: string;
   product_id: number;
+  variant_id?: number | null;
   threshold_amount: number;
   deal_price: number;
   max_quantity_per_order: number;
@@ -17,6 +18,8 @@ export interface Deal {
     name: string;
     image_url: string;
     base_price: number;
+    base_weight?: string;
+    variant_weight?: string | null;
     is_active: boolean;
   } | null;
 }
@@ -24,6 +27,7 @@ export interface Deal {
 export interface CreateDealData {
   deal_title: string;
   product_id: number;
+  variant_id?: number | null;
   threshold_amount: number;
   deal_price?: number;
   max_quantity_per_order?: number;
@@ -35,6 +39,7 @@ export interface CreateDealData {
 export interface UpdateDealData {
   deal_title?: string;
   product_id?: number;
+  variant_id?: number | null;
   threshold_amount?: number;
   deal_price?: number;
   max_quantity_per_order?: number;

@@ -23,10 +23,14 @@ import {
 } from 'lucide-react';
 import referralApi from '../api/referralApi';
 import { useToast } from '../contexts/ToastContext';
+import { useCustomerAuth } from '../contexts/CustomerAuthContext';
+import { useAuthModal } from '../contexts/AuthModalContext';
 import { formatPrice } from '../utils/priceFormatter';
 
 const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
   const { showSuccess, showError } = useToast();
+  const { isAuthenticated, isLoading: isAuthLoading } = useCustomerAuth();
+  const { openAuthModal } = useAuthModal();
   const [referralData, setReferralData] = useState(null);
   const [milestoneData, setMilestoneData] = useState(null);
   const [tierData, setTierData] = useState(null);
@@ -39,13 +43,18 @@ const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
   const [activeSection, setActiveSection] = useState('overview'); // overview, tier, leaderboard, analytics
 
   useEffect(() => {
+    if (isAuthLoading) return; // wait until auth state is resolved
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
     fetchReferralInfo();
     fetchMilestoneProgress();
     fetchTierProgress();
     fetchLeaderboard();
     fetchUserRank();
     fetchAnalytics();
-  }, []);
+  }, [isAuthenticated, isAuthLoading]);
 
   const fetchReferralInfo = async () => {
     try {
@@ -257,15 +266,31 @@ const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
       <div className="bg-gradient-to-br from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20 rounded-xl p-6 border border-pink-200 dark:border-pink-800">
         <div className="text-center py-8">
           <Gift className="w-12 h-12 text-pink-400 mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
-            Unable to load referral information. Please try refreshing the page.
-          </p>
-          <button
-            onClick={fetchReferralInfo}
-            className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg font-medium transition-colors"
-          >
-            Retry
-          </button>
+          {!isAuthenticated ? (
+            <>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Sign in to view your referral program and earn rewards.
+              </p>
+              <button
+                onClick={() => openAuthModal?.()}
+                className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Sign in
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Unable to load referral information. Please try refreshing the page.
+              </p>
+              <button
+                onClick={fetchReferralInfo}
+                className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Retry
+              </button>
+            </>
+          )}
         </div>
       </div>
     );

@@ -10,9 +10,8 @@ export default function ProtectedRoute({ children }) {
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      // Store the current URL to redirect back after login
-      const currentPath = window.location.pathname + window.location.search;
-      router.push(`/login?redirect=${encodeURIComponent(currentPath)}`);
+      // Redirect to homepage (no longer use the legacy login page after logout or direct access)
+      router.push('/');
     }
   }, [isAuthenticated, isLoading, router]);
 

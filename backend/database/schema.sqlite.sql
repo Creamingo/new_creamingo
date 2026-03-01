@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS banners (
     button_text VARCHAR(50),
     button_url TEXT,
     image_url TEXT NOT NULL,
+    image_url_mobile TEXT,
     is_active BOOLEAN DEFAULT 1,
     order_index INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

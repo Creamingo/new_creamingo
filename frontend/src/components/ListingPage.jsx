@@ -69,6 +69,7 @@ const ListingPage = () => {
     const slugToNameMap = {
       'cakes-by-flavor': 'Pick a Cake by Flavor',
       'cakes-for-occasion': 'Cakes for Any Occasion',
+      'cakes-for-any-occasion': 'Cakes for Any Occasion',
       'kids-cake-collection': 'Kid\'s Cake Collection',
       'crowd-favorite-cakes': 'Crowd-Favorite Cakes',
       'love-relationship-cakes': 'Love and Relationship Cakes',
@@ -1141,7 +1142,6 @@ const ListingPage = () => {
                       return (
                         <button
                           key={subcategory.id}
-                            ref={(el) => (subcategoryButtonsRef.current[index] = el)}
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();

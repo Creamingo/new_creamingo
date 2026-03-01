@@ -1,7 +1,10 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import Toast from '../components/Toast';
+
+const TOAST_ROOT_ID = 'creamingo-toast-root';
 
 export const ToastContext = createContext();
 
@@ -15,6 +18,42 @@ export const useToast = () => {
 
 export const ToastProvider = ({ children }) => {
   const [toasts, setToasts] = useState([]);
+  const [mounted, setMounted] = useState(false);
+  const toastRootRef = useRef(null);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    let root = document.getElementById(TOAST_ROOT_ID);
+    if (!root) {
+      root = document.createElement('div');
+      root.id = TOAST_ROOT_ID;
+      root.setAttribute('aria-live', 'polite');
+      root.setAttribute('aria-label', 'Notifications');
+      root.style.cssText = [
+        'position:fixed',
+        'top:1rem',
+        'right:1rem',
+        'z-index:2147483647',
+        'display:flex',
+        'flex-direction:column',
+        'align-items:flex-end',
+        'pointer-events:none',
+        'padding:0',
+        'margin:0',
+        'max-width:100vw',
+        'box-sizing:border-box'
+      ].join(';');
+      document.body.appendChild(root);
+      toastRootRef.current = root;
+    }
+    setMounted(true);
+    return () => {
+      if (toastRootRef.current?.parentNode) {
+        toastRootRef.current.parentNode.removeChild(toastRootRef.current);
+      }
+      toastRootRef.current = null;
+    };
+  }, []);
 
   const addToast = useCallback((toast) => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -66,6 +105,19 @@ export const ToastProvider = ({ children }) => {
     });
   }, [addToast]);
 
+  const toastContainer = mounted && toastRootRef.current ? (
+    <>
+      {toasts.map(toast => (
+        <div key={toast.id} style={{ pointerEvents: 'auto' }}>
+          <Toast
+            {...toast}
+            onClose={removeToast}
+          />
+        </div>
+      ))}
+    </>
+  ) : null;
+
   return (
     <ToastContext.Provider value={{
       showSuccess,
@@ -74,17 +126,7 @@ export const ToastProvider = ({ children }) => {
       showInfo
     }}>
       {children}
-      {/* Toast Container */}
-      <div className="fixed top-4 right-4 z-50 flex flex-col items-end pointer-events-none">
-        {toasts.map(toast => (
-          <div key={toast.id} className="pointer-events-auto">
-            <Toast
-              {...toast}
-              onClose={removeToast}
-            />
-          </div>
-        ))}
-      </div>
+      {mounted && toastRootRef.current && createPortal(toastContainer, toastRootRef.current)}
     </ToastContext.Provider>
   );
 };

@@ -179,11 +179,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Check for existing session on mount
   useEffect(() => {
     const checkAuth = async () => {
-      const hasHydratedSession = !!(localStorage.getItem('auth_token') && authService.getStoredUser());
-      if (!hasHydratedSession) {
-        dispatch({ type: 'SET_LOADING', payload: true });
-      }
-      
+      dispatch({ type: 'SET_LOADING', payload: true });
+
       try {
         // Check if user is authenticated
         if (authService.isAuthenticated()) {
@@ -203,31 +200,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           
           dispatch({ type: 'LOGIN_SUCCESS', payload: user });
         } else {
-          // Auto-login with sample credentials for development
-          try {
-            console.log('Attempting auto-login...');
-            const loginResponse = await authService.login({
-              email: 'admin@creamingo.com',
-              password: 'Creamingo@2427'
-            });
-            
-            console.log('Auto-login successful:', loginResponse);
-            
-            const user: User = {
-              id: loginResponse.user.id.toString(),
-              name: loginResponse.user.name,
-              email: loginResponse.user.email,
-              role: loginResponse.user.role,
-              avatar: loginResponse.user.avatar,
-              is_active: loginResponse.user.is_active,
-              lastLogin: loginResponse.user.last_login || new Date().toISOString()
-            };
-            
-            dispatch({ type: 'LOGIN_SUCCESS', payload: user });
-          } catch (loginError) {
-            console.error('Auto-login failed:', loginError);
-            dispatch({ type: 'SET_LOADING', payload: false });
-          }
+          dispatch({ type: 'SET_LOADING', payload: false });
         }
       } catch (error) {
         console.error('Auth check error:', error);

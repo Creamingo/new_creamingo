@@ -59,7 +59,7 @@ import { Modal, ModalFooter } from '../components/ui/Modal';
 import { TableColumn } from '../types';
 import dealService, { Deal, CreateDealData, UpdateDealData } from '../services/dealService';
 import productService from '../services/productService';
-import { Product } from '../types';
+import { Product, ProductVariant } from '../types';
 import { useToastContext } from '../contexts/ToastContext';
 import orderService from '../services/orderService';
 import { DateRangePicker } from '../components/ui/DateRangePicker';
@@ -139,6 +139,11 @@ const DealCard: React.FC<{
               <div className="text-xs text-gray-500 dark:text-gray-400">
                 Regular: ₹{deal.product?.base_price || '0'}
               </div>
+              {(deal.product?.variant_weight || deal.product?.base_weight) && (
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  Weight: {deal.product?.variant_weight || deal.product?.base_weight}
+                </div>
+              )}
             </div>
           </div>
 
@@ -213,6 +218,8 @@ export const OneRupeeDeals: React.FC = () => {
   const { showSuccess, showError } = useToastContext();
   const [deals, setDeals] = useState<Deal[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [productVariants, setProductVariants] = useState<ProductVariant[]>([]);
+  const [variantsLoading, setVariantsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -415,6 +422,7 @@ export const OneRupeeDeals: React.FC = () => {
   const [formData, setFormData] = useState<CreateDealData>({
     deal_title: '',
     product_id: 0,
+    variant_id: null,
     threshold_amount: 0,
     deal_price: 1.00,
     max_quantity_per_order: 1,
@@ -1112,11 +1120,33 @@ export const OneRupeeDeals: React.FC = () => {
     };
   }, [showProductDropdown]);
 
+  useEffect(() => {
+    const loadVariants = async () => {
+      if (!formData.product_id) {
+        setProductVariants([]);
+        return;
+      }
+      setVariantsLoading(true);
+      try {
+        const response = await productService.getProductVariants(formData.product_id);
+        setProductVariants(response.variants || []);
+      } catch (error) {
+        console.error('Error fetching product variants:', error);
+        setProductVariants([]);
+      } finally {
+        setVariantsLoading(false);
+      }
+    };
+
+    loadVariants();
+  }, [formData.product_id]);
+
   // Reset form
   const resetForm = () => {
     setFormData({
       deal_title: '',
       product_id: 0,
+      variant_id: null,
       threshold_amount: 0,
       deal_price: 1.00,
       max_quantity_per_order: 1,
@@ -1125,6 +1155,7 @@ export const OneRupeeDeals: React.FC = () => {
       description: ''
     });
     setProductSearchTerm('');
+    setProductVariants([]);
     setEditingId(null);
   };
 
@@ -1139,6 +1170,7 @@ export const OneRupeeDeals: React.FC = () => {
     setFormData({
       deal_title: deal.deal_title,
       product_id: deal.product_id,
+      variant_id: deal.variant_id ?? null,
       threshold_amount: deal.threshold_amount,
       deal_price: deal.deal_price,
       max_quantity_per_order: deal.max_quantity_per_order,
@@ -1214,6 +1246,7 @@ export const OneRupeeDeals: React.FC = () => {
       const updateData: UpdateDealData = {
         deal_title: formData.deal_title,
         product_id: formData.product_id,
+        variant_id: formData.variant_id ?? null,
         threshold_amount: formData.threshold_amount,
         deal_price: formData.deal_price,
         max_quantity_per_order: formData.max_quantity_per_order,
@@ -1304,7 +1337,7 @@ export const OneRupeeDeals: React.FC = () => {
 
   // Select product
   const selectProduct = (product: Product) => {
-    setFormData({ ...formData, product_id: product.id as number });
+    setFormData({ ...formData, product_id: product.id as number, variant_id: null });
     setProductSearchTerm(product.name);
     setShowProductDropdown(false);
   };
@@ -2861,6 +2894,31 @@ export const OneRupeeDeals: React.FC = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Deal Weight (Variant)
+            </label>
+            <select
+              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-pink-500"
+              value={formData.variant_id ?? ''}
+              onChange={(e) => setFormData({ ...formData, variant_id: e.target.value ? Number(e.target.value) : null })}
+              disabled={!formData.product_id || variantsLoading}
+            >
+              <option value="">Use base weight (show current price)</option>
+              {variantsLoading ? (
+                <option value="" disabled>
+                  Loading variants...
+                </option>
+              ) : (
+                productVariants.map((variant) => (
+                  <option key={variant.id} value={variant.id}>
+                    {variant.weight} • ₹{variant.discounted_price || variant.price}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Cart Amount Cutoff (₹) *
             </label>
             <Input
@@ -3035,6 +3093,31 @@ export const OneRupeeDeals: React.FC = () => {
                 </div>
               )}
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Deal Weight (Variant)
+            </label>
+            <select
+              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-pink-500"
+              value={formData.variant_id ?? ''}
+              onChange={(e) => setFormData({ ...formData, variant_id: e.target.value ? Number(e.target.value) : null })}
+              disabled={!formData.product_id || variantsLoading}
+            >
+              <option value="">Use base weight (show current price)</option>
+              {variantsLoading ? (
+                <option value="" disabled>
+                  Loading variants...
+                </option>
+              ) : (
+                productVariants.map((variant) => (
+                  <option key={variant.id} value={variant.id}>
+                    {variant.weight} • ₹{variant.discounted_price || variant.price}
+                  </option>
+                ))
+              )}
+            </select>
           </div>
 
           <div>

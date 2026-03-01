@@ -36,7 +36,12 @@ const scratchCardRoutes = require('./routes/scratchCardRoutes');
 const referralRoutes = require('./routes/referralRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const dealRoutes = require('./routes/dealRoutes');
+const midnightWishRoutes = require('./routes/midnightWishRoutes');
 const schemaHealthRoutes = require('./routes/schemaHealthRoutes');
+const chatRoutes = require('./routes/chatRoutes');
+const chatConfigRoutes = require('./routes/chatConfigRoutes');
+const chatAnalyticsRoutes = require('./routes/chatAnalyticsRoutes');
+const ticketRoutes = require('./routes/ticketRoutes');
 const { runSchemaHealthCheck } = require('./controllers/schemaHealthController');
 
 // Import middleware
@@ -113,40 +118,20 @@ if (allowAllOrigins && process.env.NODE_ENV === 'production') {
 
 app.use(cors(corsOptions));
 
-// Rate limiting - more lenient for development
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // limit each IP to 1000 requests per windowMs (increased for development)
-  message: {
-    success: false,
-    message: 'Too many requests from this IP, please try again later.'
-  },
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-});
+const authRateLimitWindowMs = Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000;
+const authRateLimitMax = Number(process.env.AUTH_RATE_LIMIT_MAX) || 20;
+const customerAuthRateLimitMax = Number(process.env.CUSTOMER_AUTH_RATE_LIMIT_MAX) || authRateLimitMax;
 
-// Apply rate limiting to all API routes except auth
-app.use('/api/', (req, res, next) => {
-  // Skip rate limiting for auth routes (they have their own limiter)
-  if (req.path.startsWith('/auth') || req.path.startsWith('/customer-auth')) {
-    return next();
-  }
-  return limiter(req, res, next);
-});
-
-// More lenient rate limiting for auth routes
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50, // limit each IP to 50 auth requests per windowMs
-  message: {
-    success: false,
-    message: 'Too many authentication attempts from this IP, please try again later.'
-  },
+const customerAuthLimiter = rateLimit({
+  windowMs: authRateLimitWindowMs,
+  max: customerAuthRateLimitMax,
   standardHeaders: true,
   legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many authentication attempts. Please try again later.'
+  }
 });
-app.use('/api/auth', authLimiter);
-app.use('/api/customer-auth', authLimiter);
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -241,7 +226,8 @@ app.get('/api', (req, res) => {
       scratchCards: '/api/scratch-cards',
       referrals: '/api/referrals',
       notifications: '/api/notifications',
-      deals: '/api/deals'
+      deals: '/api/deals',
+      chat: '/api/chat'
     },
     health: '/health',
     timestamp: new Date().toISOString()
@@ -250,7 +236,7 @@ app.get('/api', (req, res) => {
 
 // API routes
 app.use('/api/auth', authRoutes);
-app.use('/api/customer-auth', customerAuthRoutes);
+app.use('/api/customer-auth', customerAuthLimiter, customerAuthRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/subcategories', subcategoryRoutes);
@@ -278,7 +264,12 @@ app.use('/api/scratch-cards', scratchCardRoutes);
 app.use('/api/referrals', referralRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/deals', dealRoutes);
+app.use('/api/midnight-wish', midnightWishRoutes);
 app.use('/api/schema-health', schemaHealthRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api/chat/config', chatConfigRoutes);
+app.use('/api/chat/analytics', chatAnalyticsRoutes);
+app.use('/api/tickets', ticketRoutes);
 
 // Run schema diagnostics on startup
 setImmediate(async () => {

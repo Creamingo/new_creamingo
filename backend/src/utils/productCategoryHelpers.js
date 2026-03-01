@@ -68,6 +68,30 @@ const assignProductToSubcategories = async (productId, subcategoryIds, primarySu
 };
 
 /**
+ * Assign product to multiple flavor subcategories
+ * @param {number} productId - Product ID
+ * @param {Array} flavorIds - Array of flavor subcategory IDs
+ * @param {number} primaryFlavorId - Primary flavor ID (optional)
+ */
+const assignProductToFlavors = async (productId, flavorIds, primaryFlavorId = null) => {
+  if (!flavorIds || flavorIds.length === 0) return;
+
+  // Clear existing flavor assignments
+  await query('DELETE FROM product_flavors WHERE product_id = ?', [productId]);
+
+  // Insert new flavor assignments
+  for (let i = 0; i < flavorIds.length; i++) {
+    const flavorId = flavorIds[i];
+    const isPrimary = primaryFlavorId ? flavorId === primaryFlavorId : (i === 0);
+
+    await query(`
+      INSERT INTO product_flavors (product_id, subcategory_id, is_primary, display_order, created_at, updated_at)
+      VALUES (?, ?, ?, ?, NOW(), NOW())
+    `, [productId, flavorId, isPrimary, i + 1]);
+  }
+};
+
+/**
  * Get product with all its categories and subcategories
  * @param {number} productId - Product ID
  * @returns {Object} Product with categories and subcategories arrays
@@ -150,6 +174,22 @@ const getProductWithCategories = async (productId, baseUrl = '') => {
     ORDER BY psc.display_order ASC, psc.is_primary DESC
   `, [productId]);
 
+  // Get flavors
+  const flavorsResult = await query(`
+    SELECT
+      sc.id,
+      sc.name,
+      sc.description,
+      sc.image_url,
+      sc.category_id,
+      pf.is_primary,
+      pf.display_order
+    FROM product_flavors pf
+    JOIN subcategories sc ON pf.subcategory_id = sc.id
+    WHERE pf.product_id = ?
+    ORDER BY pf.display_order ASC, pf.is_primary DESC
+  `, [productId]);
+
   // Get variants
   const variantsResult = await query(`
     SELECT 
@@ -195,6 +235,7 @@ const getProductWithCategories = async (productId, baseUrl = '') => {
     image_url: mapImageUrl(baseUrl, product.image_url),
     categories: (categoriesResult.rows || []).map((category) => mapCategory(baseUrl, category)),
     subcategories: (subcategoriesResult.rows || []).map((subcategory) => mapSubcategory(baseUrl, subcategory)),
+    flavors: (flavorsResult.rows || []).map((flavor) => mapSubcategory(baseUrl, flavor)),
     variants: variantsResult.rows || [],
     gallery_images: (galleryResult.rows.map(row => row.image_url) || []).map((url) => mapImageUrl(baseUrl, url))
   };
@@ -285,6 +326,23 @@ const getProductsWithCategories = async (productIds, baseUrl = '') => {
     ORDER BY psc.product_id, psc.display_order ASC, psc.is_primary DESC
   `, productIds);
 
+  // Get all flavors for these products
+  const flavorsResult = await query(`
+    SELECT
+      pf.product_id,
+      sc.id,
+      sc.name,
+      sc.description,
+      sc.image_url,
+      sc.category_id,
+      pf.is_primary,
+      pf.display_order
+    FROM product_flavors pf
+    JOIN subcategories sc ON pf.subcategory_id = sc.id
+    WHERE pf.product_id IN (${placeholders})
+    ORDER BY pf.product_id, pf.display_order ASC, pf.is_primary DESC
+  `, productIds);
+
   // Get all variants for these products
   const variantsResult = await query(`
     SELECT 
@@ -333,6 +391,15 @@ const getProductsWithCategories = async (productIds, baseUrl = '') => {
     subcategoriesByProduct[subcat.product_id].push(subcat);
   });
 
+  // Group flavors by product_id
+  const flavorsByProduct = {};
+  flavorsResult.rows.forEach(flavor => {
+    if (!flavorsByProduct[flavor.product_id]) {
+      flavorsByProduct[flavor.product_id] = [];
+    }
+    flavorsByProduct[flavor.product_id].push(flavor);
+  });
+
   // Group variants by product_id
   const variantsByProduct = {};
   variantsResult.rows.forEach(variant => {
@@ -373,6 +440,7 @@ const getProductsWithCategories = async (productIds, baseUrl = '') => {
       image_url: mapImageUrl(baseUrl, product.image_url),
       categories: (categoriesByProduct[product.id] || []).map((category) => mapCategory(baseUrl, category)),
       subcategories: (subcategoriesByProduct[product.id] || []).map((subcategory) => mapSubcategory(baseUrl, subcategory)),
+      flavors: (flavorsByProduct[product.id] || []).map((flavor) => mapSubcategory(baseUrl, flavor)),
       variants: variants,
       gallery_images: (galleryByProduct[product.id] || []).map((url) => mapImageUrl(baseUrl, url))
     };
@@ -426,6 +494,7 @@ const setPrimarySubcategory = async (productId, subcategoryId) => {
 module.exports = {
   assignProductToCategories,
   assignProductToSubcategories,
+  assignProductToFlavors,
   getProductWithCategories,
   getProductsWithCategories,
   removeProductFromCategory,

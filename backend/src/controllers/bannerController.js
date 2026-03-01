@@ -1,9 +1,26 @@
 const { query } = require('../config/db');
 const { mapUploadFields, normalizeUploadUrl } = require('../utils/urlHelpers');
 
-const mapBanner = (req, banner) => (
-  mapUploadFields(req, banner, ['image_url'])
-);
+const BANNER_SELECT_FULL = `
+  id, title, subtitle, button_text, button_url, image_url, image_url_mobile,
+  is_active, order_index, created_at, updated_at
+`;
+const BANNER_SELECT_LEGACY = `
+  id, title, subtitle, button_text, button_url, image_url,
+  is_active, order_index, created_at, updated_at
+`;
+
+const mapBanner = (req, banner, hasMobileColumn = true) => {
+  const fields = hasMobileColumn ? ['image_url', 'image_url_mobile'] : ['image_url'];
+  const mapped = mapUploadFields(req, banner, fields);
+  if (!hasMobileColumn) mapped.image_url_mobile = null;
+  return mapped;
+};
+
+const isUnknownColumnError = (err) => {
+  const msg = (err && err.message) ? String(err.message) : '';
+  return msg.includes('Unknown column') && msg.includes('image_url_mobile');
+};
 
 // Get all banners
 const getBanners = async (req, res) => {
@@ -18,28 +35,27 @@ const getBanners = async (req, res) => {
       queryParams.push(is_active === 'true' ? 1 : 0);
     }
 
-    const bannersQuery = `
-      SELECT 
-        id,
-        title,
-        subtitle,
-        button_text,
-        button_url,
-        image_url,
-        is_active,
-        order_index,
-        created_at,
-        updated_at
-      FROM banners
-      ${whereClause}
-      ORDER BY order_index ASC, created_at DESC
-    `;
+    let result;
+    try {
+      result = await query(
+        `SELECT ${BANNER_SELECT_FULL} FROM banners ${whereClause} ORDER BY order_index ASC, created_at DESC`,
+        queryParams
+      );
+    } catch (queryErr) {
+      if (isUnknownColumnError(queryErr)) {
+        result = await query(
+          `SELECT ${BANNER_SELECT_LEGACY} FROM banners ${whereClause} ORDER BY order_index ASC, created_at DESC`,
+          queryParams
+        );
+      } else {
+        throw queryErr;
+      }
+    }
 
-    const result = await query(bannersQuery, queryParams);
-
+    const hasMobileColumn = result.rows.length > 0 && Object.prototype.hasOwnProperty.call(result.rows[0], 'image_url_mobile');
     res.json({
       success: true,
-      data: { banners: result.rows.map((banner) => mapBanner(req, banner)) }
+      data: { banners: result.rows.map((banner) => mapBanner(req, banner, hasMobileColumn)) }
     });
   } catch (error) {
     console.error('Get banners error:', error);
@@ -55,21 +71,22 @@ const getBanner = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const result = await query(`
-      SELECT 
-        id,
-        title,
-        subtitle,
-        button_text,
-        button_url,
-        image_url,
-        is_active,
-        order_index,
-        created_at,
-        updated_at
-      FROM banners
-      WHERE id = ?
-    `, [id]);
+    let result;
+    try {
+      result = await query(
+        `SELECT ${BANNER_SELECT_FULL} FROM banners WHERE id = ?`,
+        [id]
+      );
+    } catch (queryErr) {
+      if (isUnknownColumnError(queryErr)) {
+        result = await query(
+          `SELECT ${BANNER_SELECT_LEGACY} FROM banners WHERE id = ?`,
+          [id]
+        );
+      } else {
+        throw queryErr;
+      }
+    }
 
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -78,9 +95,11 @@ const getBanner = async (req, res) => {
       });
     }
 
+    const row = result.rows[0];
+    const hasMobileColumn = row.hasOwnProperty('image_url_mobile');
     res.json({
       success: true,
-      data: { banner: mapBanner(req, result.rows[0]) }
+      data: { banner: mapBanner(req, row, hasMobileColumn) }
     });
   } catch (error) {
     console.error('Get banner error:', error);
@@ -100,10 +119,14 @@ const createBanner = async (req, res) => {
       button_text, 
       button_url, 
       image_url, 
+      image_url_mobile, 
       is_active = true, 
       order_index = 0 
     } = req.body;
     const normalizedImageUrl = normalizeUploadUrl(image_url);
+    const normalizedMobileUrl = (image_url_mobile && String(image_url_mobile).trim())
+      ? normalizeUploadUrl(image_url_mobile)
+      : null;
 
     // Validate required fields
     if (!title || !image_url) {
@@ -113,31 +136,39 @@ const createBanner = async (req, res) => {
       });
     }
 
-    const result = await query(`
-      INSERT INTO banners (title, subtitle, button_text, button_url, image_url, is_active, order_index, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-    `, [title, subtitle, button_text, button_url, normalizedImageUrl, is_active ? 1 : 0, order_index]);
+    let result;
+    try {
+      result = await query(`
+        INSERT INTO banners (title, subtitle, button_text, button_url, image_url, image_url_mobile, is_active, order_index, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+      `, [title, subtitle, button_text, button_url, normalizedImageUrl, normalizedMobileUrl, is_active ? 1 : 0, order_index]);
+    } catch (insertErr) {
+      if (isUnknownColumnError(insertErr)) {
+        result = await query(`
+          INSERT INTO banners (title, subtitle, button_text, button_url, image_url, is_active, order_index, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+        `, [title, subtitle, button_text, button_url, normalizedImageUrl, is_active ? 1 : 0, order_index]);
+      } else {
+        throw insertErr;
+      }
+    }
 
     const bannerId = result.lastID;
 
-    // Fetch the created banner
-    const bannerResult = await query(`
-      SELECT 
-        id,
-        title,
-        subtitle,
-        button_text,
-        button_url,
-        image_url,
-        is_active,
-        order_index,
-        created_at,
-        updated_at
-      FROM banners
-      WHERE id = ?
-    `, [bannerId]);
+    // Fetch the created banner (with fallback if image_url_mobile column missing)
+    let bannerResult;
+    try {
+      bannerResult = await query(`SELECT ${BANNER_SELECT_FULL} FROM banners WHERE id = ?`, [bannerId]);
+    } catch (fetchErr) {
+      if (isUnknownColumnError(fetchErr)) {
+        bannerResult = await query(`SELECT ${BANNER_SELECT_LEGACY} FROM banners WHERE id = ?`, [bannerId]);
+      } else {
+        throw fetchErr;
+      }
+    }
 
-    const banner = mapBanner(req, bannerResult.rows[0]);
+    const hasMobileColumn = Object.prototype.hasOwnProperty.call(bannerResult.rows[0], 'image_url_mobile');
+    const banner = mapBanner(req, bannerResult.rows[0], hasMobileColumn);
 
     res.status(201).json({
       success: true,
@@ -160,6 +191,11 @@ const updateBanner = async (req, res) => {
     const updateData = { ...req.body };
     if (updateData.image_url) {
       updateData.image_url = normalizeUploadUrl(updateData.image_url);
+    }
+    if (updateData.image_url_mobile !== undefined) {
+      updateData.image_url_mobile = (updateData.image_url_mobile && String(updateData.image_url_mobile).trim())
+        ? normalizeUploadUrl(updateData.image_url_mobile)
+        : null;
     }
 
     // Check if banner exists
@@ -201,32 +237,39 @@ const updateBanner = async (req, res) => {
     updates.push('updated_at = NOW()');
     values.push(id);
 
-    const queryText = `
-      UPDATE banners 
-      SET ${updates.join(', ')} 
-      WHERE id = ?
-    `;
+    const queryText = `UPDATE banners SET ${updates.join(', ')} WHERE id = ?`;
 
-    await query(queryText, values);
+    try {
+      await query(queryText, values);
+    } catch (updateErr) {
+      if (isUnknownColumnError(updateErr) && updateData.image_url_mobile !== undefined) {
+        const idx = updates.indexOf('image_url_mobile = ?');
+        if (idx !== -1) {
+          updates.splice(idx, 1);
+          values.splice(idx, 1);
+          await query(`UPDATE banners SET ${updates.join(', ')} WHERE id = ?`, values);
+        } else {
+          throw updateErr;
+        }
+      } else {
+        throw updateErr;
+      }
+    }
 
-    // Fetch the updated banner
-    const bannerResult = await query(`
-      SELECT 
-        id,
-        title,
-        subtitle,
-        button_text,
-        button_url,
-        image_url,
-        is_active,
-        order_index,
-        created_at,
-        updated_at
-      FROM banners
-      WHERE id = ?
-    `, [id]);
+    // Fetch the updated banner (with fallback if image_url_mobile column missing)
+    let bannerResult;
+    try {
+      bannerResult = await query(`SELECT ${BANNER_SELECT_FULL} FROM banners WHERE id = ?`, [id]);
+    } catch (fetchErr) {
+      if (isUnknownColumnError(fetchErr)) {
+        bannerResult = await query(`SELECT ${BANNER_SELECT_LEGACY} FROM banners WHERE id = ?`, [id]);
+      } else {
+        throw fetchErr;
+      }
+    }
 
-    const banner = mapBanner(req, bannerResult.rows[0]);
+    const hasMobileColumn = Object.prototype.hasOwnProperty.call(bannerResult.rows[0], 'image_url_mobile');
+    const banner = mapBanner(req, bannerResult.rows[0], hasMobileColumn);
 
     res.json({
       success: true,
@@ -301,24 +344,20 @@ const toggleBannerStatus = async (req, res) => {
       [newStatus, id]
     );
 
-    // Fetch the updated banner
-    const bannerResult = await query(`
-      SELECT 
-        id,
-        title,
-        subtitle,
-        button_text,
-        button_url,
-        image_url,
-        is_active,
-        order_index,
-        created_at,
-        updated_at
-      FROM banners
-      WHERE id = ?
-    `, [id]);
+    // Fetch the updated banner (with fallback if image_url_mobile column missing)
+    let bannerResult;
+    try {
+      bannerResult = await query(`SELECT ${BANNER_SELECT_FULL} FROM banners WHERE id = ?`, [id]);
+    } catch (fetchErr) {
+      if (isUnknownColumnError(fetchErr)) {
+        bannerResult = await query(`SELECT ${BANNER_SELECT_LEGACY} FROM banners WHERE id = ?`, [id]);
+      } else {
+        throw fetchErr;
+      }
+    }
 
-    const banner = mapBanner(req, bannerResult.rows[0]);
+    const hasMobileColumn = Object.prototype.hasOwnProperty.call(bannerResult.rows[0], 'image_url_mobile');
+    const banner = mapBanner(req, bannerResult.rows[0], hasMobileColumn);
 
     res.json({
       success: true,

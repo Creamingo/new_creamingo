@@ -38,7 +38,7 @@ class UploadService {
     formData.append('image', file);
 
     const typeQuery = type ? `?type=${encodeURIComponent(type)}` : '';
-    const response = await apiClient.uploadFile(`/upload/single${typeQuery}`, file);
+    const response = await apiClient.uploadFormData(`/upload/single${typeQuery}`, formData);
     return response as UploadResponse;
   }
 
@@ -52,21 +52,8 @@ class UploadService {
     });
 
     const typeQuery = type ? `?type=${encodeURIComponent(type)}` : '';
-    const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/upload/multiple${typeQuery}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-      },
-      body: formData,
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || `HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    return data;
+    const response = await apiClient.uploadFormData(`/upload/multiple${typeQuery}`, formData);
+    return response as MultipleUploadResponse;
   }
 
   /**

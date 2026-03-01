@@ -114,6 +114,14 @@ const register = async (req, res) => {
       }
     }
 
+    let welcomeBonus = { credited: false, amount: 0, newBalance: null };
+    try {
+      const { creditWelcomeBonusForCustomer } = require('./walletController');
+      welcomeBonus = await creditWelcomeBonusForCustomer(newCustomerId);
+    } catch (bonusError) {
+      console.error('Welcome bonus credit error during registration:', bonusError);
+    }
+
     // Get the inserted customer
     const insertedCustomer = await query(
       'SELECT id, name, email, phone, address, created_at, is_active, referral_code FROM customers WHERE id = ?',
@@ -140,7 +148,12 @@ const register = async (req, res) => {
           created_at: customer.created_at
         },
         token,
-        referralCreated
+        referralCreated,
+        welcomeBonus: {
+          credited: welcomeBonus.credited,
+          amount: welcomeBonus.amount,
+          newBalance: welcomeBonus.newBalance
+        }
       }
     });
   } catch (error) {

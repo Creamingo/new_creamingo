@@ -184,8 +184,8 @@ const CrowdFavoriteCakes = () => {
                 >
                   {/* Mobile Layout - All images on left, content on right */}
                   <div className="flex lg:hidden">
-                    {/* Image Section - 40% width */}
-                    <div className="w-2/5 relative overflow-hidden aspect-[4/3] rounded-l-2xl border-r border-[#6c3e27]/10 dark:border-amber-700/20">
+                    {/* Image Section - 40% width, 1:1 aspect ratio for 600×600 subcategory images */}
+                    <div className="w-2/5 relative overflow-hidden aspect-square rounded-l-2xl border-r border-[#6c3e27]/10 dark:border-amber-700/20 flex-shrink-0">
                       <img
                         src={category.image}
                         alt={category.name}

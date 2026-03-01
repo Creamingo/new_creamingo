@@ -30,6 +30,7 @@ export interface Product {
   // New multi-category fields
   categories?: ProductCategory[];
   subcategories?: ProductSubcategory[];
+  flavors?: ProductSubcategory[];
   primary_category_id?: number;
   primary_subcategory_id?: number;
   // Flavor selection fields
@@ -112,8 +113,6 @@ export interface Category {
   name: string;
   description?: string;
   image_url: string;
-  icon?: string | null;
-  icon_image_url?: string | null;
   display_name?: string | null; // Added display name field
   image?: string; // For backward compatibility
   is_active: boolean;
@@ -200,6 +199,7 @@ export interface Banner {
   button_text: string;
   button_url: string;
   image_url: string;
+  image_url_mobile?: string | null;
   is_active: boolean;
   order_index: number;
   created_at: string;

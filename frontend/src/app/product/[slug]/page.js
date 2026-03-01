@@ -22,6 +22,8 @@ import ScrollToTop from './components/ScrollToTop';
 import { generateDynamicTitle } from '../../../utils/dynamicTitle';
 import { useCart } from '../../../contexts/CartContext';
 import { useWishlist } from '../../../contexts/WishlistContext';
+import { useCustomerAuth } from '../../../contexts/CustomerAuthContext';
+import { useAuthModal } from '../../../contexts/AuthModalContext';
 
 export default function ProductPage() {
   const params = useParams();
@@ -30,6 +32,8 @@ export default function ProductPage() {
   const { slug } = params;
   const { addToCart, getItemCount } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
+  const { isAuthenticated } = useCustomerAuth();
+  const { openAuthModal } = useAuthModal();
   
   const [product, setProduct] = useState(null);
   const [relatedProducts, setRelatedProducts] = useState([]);
@@ -298,7 +302,15 @@ export default function ProductPage() {
               product={product}
               selectedVariant={selectedVariant}
               isFavorite={product ? isInWishlist(product.id) : false}
-              onFavoriteToggle={() => product && toggleWishlist(product.id)}
+              onFavoriteToggle={() => {
+                if (!product) return;
+                if (!isAuthenticated) {
+                  if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('pending_wishlist_add', String(product.id));
+                  openAuthModal();
+                  return;
+                }
+                toggleWishlist(product.id);
+              }}
               onQuickShare={() => handleShare('copy')}
             />
           </div>

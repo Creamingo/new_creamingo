@@ -15,7 +15,6 @@ const MakeItAComboModal = ({
   baseProductPrice = 0, 
   quantity = 1, 
   initialComboSelections = [],
-  selectedDeliverySlot = null,
   onAddToCart = null,
   cakeMessage = '',
   currentPinCode = null,
@@ -183,14 +182,6 @@ const MakeItAComboModal = ({
   };
 
   const handleAddToCombo = async (addOnProduct) => {
-    // Check if user is authenticated
-    const token = localStorage.getItem('customer_token');
-    if (!token) {
-      setError('Please log in to add items to your combo');
-      setTimeout(() => setError(null), 5000);
-      return;
-    }
-
     setActionLoading(addOnProduct.id);
     setError(null);
     try {
@@ -421,13 +412,13 @@ const MakeItAComboModal = ({
 
   // Check if Add to Cart button should be enabled
   const canAddToCart = () => {
-    return selectedDeliverySlot && currentPinCode && isDeliveryAvailable && onAddToCart;
+    return currentPinCode && isDeliveryAvailable && onAddToCart;
   };
 
   // Handle Add to Cart from modal
   const handleAddToCartFromModal = async () => {
     if (!canAddToCart()) {
-      setError('Please select a delivery time slot and pincode to add to cart');
+      setError('Please enter pincode to add to cart');
       setTimeout(() => setError(null), 5000);
       return;
     }
@@ -475,7 +466,6 @@ const MakeItAComboModal = ({
       // Call add to cart with all required data (this will redirect to cart page on success)
       if (onAddToCart) {
         await onAddToCart({
-          deliverySlot: selectedDeliverySlot,
           cakeMessage: cakeMessage,
           combos: formattedCombos,
           totalPrice: getGrandTotal()
@@ -599,7 +589,7 @@ const MakeItAComboModal = ({
         }}
       >
         {/* Header */}
-        <div className="bg-gradient-to-r from-amber-50 via-amber-50/95 to-amber-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-800 border-b border-amber-200/60 dark:border-gray-700 shadow-sm relative overflow-hidden">
+        <div className="bg-gradient-to-r from-amber-50 via-amber-50/95 to-amber-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-800 border-b border-amber-200/60 dark:border-gray-700 shadow-sm relative overflow-visible">
           {/* Drag Indicator - Mobile Only */}
           <div className="lg:hidden absolute top-1.5 left-1/2 -translate-x-1/2 w-10 h-0.5 bg-gray-300 dark:bg-gray-600 rounded-full"></div>
           
@@ -609,7 +599,7 @@ const MakeItAComboModal = ({
           </div>
           
           {/* Header Content */}
-          <div className="relative px-3 pt-2 pb-1.5 lg:py-2">
+          <div className="relative px-3 pt-2 pb-1.5 lg:py-2 lg:pr-6">
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-start gap-2 flex-1 min-w-0">
                 <div className="w-7 h-7 bg-gradient-to-br from-rose-400 to-pink-500 dark:from-rose-500 dark:to-pink-600 rounded-lg flex items-center justify-center shadow-md ring-1 ring-rose-200/50 dark:ring-rose-800/30 flex-shrink-0 mt-0.5">
@@ -618,11 +608,14 @@ const MakeItAComboModal = ({
                 <div className="flex-1 min-w-0">
                   <h2 className="text-sm sm:text-base font-semibold tracking-wide text-gray-900 dark:text-gray-100 leading-tight mb-0.5">Make it a Combo</h2>
                   <p className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 leading-tight">Enhance your order with curated add‑ons</p>
+                  <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 leading-tight mt-0.5">
+                    You’ll be asked to log in at checkout to complete the order.
+                  </p>
                 </div>
               </div>
               <button
                 onClick={onClose}
-                className="p-1.5 sm:p-2 bg-red-500 dark:bg-red-600 hover:bg-red-600 dark:hover:bg-red-700 rounded-lg transition-all duration-200 text-white shadow-md hover:shadow-lg hover:scale-110 active:scale-95 flex-shrink-0 mt-0.5 ring-2 ring-red-400/50 dark:ring-red-500/50 hover:ring-red-500 dark:hover:ring-red-400"
+                className="p-1.5 sm:p-2 lg:p-2.5 bg-red-500 dark:bg-red-600 hover:bg-red-600 dark:hover:bg-red-700 rounded-lg transition-all duration-200 text-white shadow-md hover:shadow-lg hover:scale-110 active:scale-95 flex-shrink-0 shrink-0 mt-0.5 ring-2 ring-red-400/50 dark:ring-red-500/50 hover:ring-red-500 dark:hover:ring-red-400"
                 aria-label="Close modal"
               >
                 <X className="w-3.5 h-3.5 sm:w-5 sm:h-5" strokeWidth={2.5} />
@@ -663,12 +656,15 @@ const MakeItAComboModal = ({
                     : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
                 }`}
               >
-                Your Combo
-                {comboSelections.length > 0 && (
-                  <span className="ml-1 px-1.5 py-0.5 text-[9px] font-bold bg-red-500 dark:bg-red-600 text-white rounded-full">
-                    {comboSelections.length}
-                  </span>
-                )}
+                <span className="inline-flex items-center justify-center gap-1.5">
+                  <ShoppingBag className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={2} />
+                  Add-ons Cart
+                  {comboSelections.length > 0 && (
+                    <span className="ml-0.5 px-1.5 py-0.5 text-[9px] font-bold bg-red-500 dark:bg-red-600 text-white rounded-full">
+                      {comboSelections.length}
+                    </span>
+                  )}
+                </span>
               </button>
             </div>
           </div>
@@ -844,7 +840,7 @@ const MakeItAComboModal = ({
             </div>
           </div>
 
-          {/* Mobile Combo View - Only visible on mobile when "Your Combo" tab is active */}
+          {/* Mobile Combo View - Only visible on mobile when "Add-ons Cart" tab is active */}
           <div className={`lg:hidden flex-1 overflow-y-auto p-3 ${mobileActiveTab !== 'combo' ? 'hidden' : ''}`}>
             <div className="mb-3">
               <div className="flex items-center justify-between mb-3">
@@ -852,7 +848,7 @@ const MakeItAComboModal = ({
                   <div className="w-6 h-6 bg-gradient-to-br from-rose-100 to-pink-100 dark:from-rose-900/30 dark:to-pink-900/30 rounded-md flex items-center justify-center">
                     <ShoppingBag className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
                   </div>
-                  Your Combo
+                  Add-ons Cart
                 </h3>
                 {comboSelections.length > 0 && (
                   <button
@@ -872,8 +868,8 @@ const MakeItAComboModal = ({
                 <div className="w-16 h-16 mx-auto mb-3 bg-gradient-to-br from-rose-100 to-pink-100 dark:from-rose-900/30 dark:to-pink-900/30 rounded-full flex items-center justify-center animate-bounce-subtle">
                   <ShoppingBag className="w-8 h-8 text-rose-400 dark:text-rose-500" />
                 </div>
-                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1.5">Your combo is empty</p>
-                <p className="text-xs text-gray-600 dark:text-gray-400 leading-snug max-w-xs mx-auto mb-3">Browse the categories and add products to create your perfect combo</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1.5">Your add-ons cart is empty</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 leading-snug max-w-xs mx-auto mb-3">Browse the categories and add products to build your combo</p>
                 <button
                   onClick={() => setMobileActiveTab('browse')}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-rose-500 to-pink-500 dark:from-rose-600 dark:to-pink-600 text-white rounded-md hover:from-rose-600 hover:to-pink-600 dark:hover:from-rose-700 dark:hover:to-pink-700 transition-all duration-200 shadow-md hover:shadow-lg hover:scale-105 active:scale-95 text-xs font-medium"
@@ -961,7 +957,7 @@ const MakeItAComboModal = ({
                   <div className="w-6 h-6 bg-gradient-to-br from-rose-100 to-pink-100 dark:from-rose-900/30 dark:to-pink-900/30 rounded-md flex items-center justify-center">
                     <ShoppingBag className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
                   </div>
-                  Your Combo
+                  Add-ons Cart
                 </h3>
                 {comboSelections.length > 0 && (
                   <button
@@ -980,8 +976,8 @@ const MakeItAComboModal = ({
                   <div className="w-16 h-16 mx-auto mb-3 bg-gradient-to-br from-rose-100 to-pink-100 dark:from-rose-900/30 dark:to-pink-900/30 rounded-full flex items-center justify-center animate-bounce-subtle">
                     <ShoppingBag className="w-8 h-8 text-rose-400 dark:text-rose-500" />
                   </div>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1.5">Your combo is empty</p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 leading-snug max-w-xs mx-auto mb-3">Browse the categories and add products to create your perfect combo</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1.5">Your add-ons cart is empty</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 leading-snug max-w-xs mx-auto mb-3">Browse the categories and add products to build your combo</p>
                   <button
                     onClick={() => {
                       // Scroll to first category tab
@@ -1136,7 +1132,7 @@ const MakeItAComboModal = ({
               
               {/* Action Buttons */}
               {canAddToCart() && comboSelections.length > 0 ? (
-                // Show two buttons when slot is selected and combos exist
+                // Show two buttons when delivery is available and combos exist
                 <div className="flex gap-2.5">
                   {/* Save & Return Button - Modern Outline Style with Enhanced Border */}
                   <button
@@ -1194,7 +1190,7 @@ const MakeItAComboModal = ({
                   {getContinueButtonText()}
                 </button>
               ) : (
-                // Show single Save & Return button when combos exist but no slot
+                // Show single Save & Return button when delivery is unavailable
                 <button
                   onClick={async () => {
                     setSaveLoading(true);
@@ -1279,7 +1275,7 @@ const MakeItAComboModal = ({
             
             {/* Action Buttons */}
             {canAddToCart() && comboSelections.length > 0 ? (
-              // Show two buttons when slot is selected and combos exist
+              // Show two buttons when delivery is available and combos exist
               <div className="flex gap-2">
                 {/* Save & Return Button - Modern Outline Style with Enhanced Border */}
                 <button
@@ -1337,7 +1333,7 @@ const MakeItAComboModal = ({
                 {getContinueButtonText()}
               </button>
             ) : (
-              // Show single Save & Return button when combos exist but no slot
+              // Show single Save & Return button when delivery is unavailable
               <button
                 onClick={async () => {
                   setSaveLoading(true);
