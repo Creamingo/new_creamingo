@@ -199,7 +199,8 @@
   opacity: 1;
 }
 
-/* Dots directly under banner – minimal gap */
+/* Progress Fill Dot Navigator */
+.banner-slider-section .banner-dots-progress,
 .banner-slider-section .slick-dots {
   position: relative;
   bottom: auto;
@@ -207,38 +208,102 @@
   right: 0;
   display: flex !important;
   justify-content: center;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   margin: 10px 0 0 0;
   padding: 0;
+  list-style: none;
 }
 
 .banner-slider-section .slick-dots li {
   margin: 0;
 }
 
-.banner-slider-section .slick-dots li button:before {
+.banner-slider-section .banner-dot-trigger {
   font-size: 0;
-  width: 6px;
-  height: 6px;
-  background: #d1d5db;
-  opacity: 1;
-  border-radius: 999px;
-  content: "";
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  background: transparent;
   display: block;
+  line-height: 0;
 }
 
-.banner-slider-section .slick-dots li.slick-active button:before {
-  width: 18px;
+.banner-slider-section .banner-dot-trigger::before {
+  display: none !important;
+}
+
+/* Inactive: small rounded dot */
+.banner-slider-section .banner-dot-circle {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #d1d5db;
+  transition: background 0.2s ease;
+}
+
+.banner-slider-section .banner-dot-trigger:hover .banner-dot-circle,
+.dark .banner-slider-section .banner-dot-circle {
   background: #9ca3af;
 }
 
-.dark .banner-slider-section .slick-dots li button:before {
+.dark .banner-slider-section .banner-dot-circle {
   background: #4b5563;
 }
 
-.dark .banner-slider-section .slick-dots li.slick-active button:before {
-  background: #9ca3af;
+.dark .banner-slider-section .banner-dot-trigger:hover .banner-dot-circle {
+  background: #6b7280;
+}
+
+/* Active: wide pill with progress fill */
+.banner-slider-section .banner-dot-pill {
+  display: block;
+  width: 24px;
+  height: 6px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  overflow: hidden;
+  position: relative;
+}
+
+.dark .banner-slider-section .banner-dot-pill {
+  background: #374151;
+}
+
+.banner-slider-section .banner-dot-progress-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ec4899 0%, #f97316 100%);
+  animation-name: banner-dot-fill;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+  transform-origin: left;
+}
+
+.banner-slider-section .banner-dot-progress-fill.is-paused {
+  animation-play-state: paused;
+}
+
+@keyframes banner-dot-fill {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+/* Override default slick dot ::before so our custom dots show correctly */
+.banner-slider-section .slick-dots.banner-dots-progress li button:before {
+  display: none !important;
+  content: none !important;
 }
 
 /* No hover effects on banner image – display as-is */

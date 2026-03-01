@@ -339,7 +339,7 @@ export default function TopProducts() {
                 onClick={() => handleProductClick(product)}
               >
                   {/* Modern Card with Enhanced Design */}
-                  <div className="tp-card bg-white dark:bg-gray-800 rounded-2xl shadow-[0_10px_26px_rgba(0,0,0,0.12)] dark:shadow-xl dark:shadow-black/30 border border-white/60 dark:border-gray-700 overflow-hidden h-full flex flex-col">
+                  <div className="tp-card bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden h-full flex flex-col">
                     {/* Product Image Container - Larger on Mobile */}
                     <div className="relative w-full h-48 overflow-hidden bg-gray-50 dark:bg-gray-800">
                     <img
@@ -491,7 +491,7 @@ export default function TopProducts() {
                 }}
                 onClick={() => handleProductClick(product)}
               >
-                <div className="tp-card bg-white dark:bg-gray-800 rounded-2xl shadow-[0_10px_26px_rgba(0,0,0,0.12)] dark:shadow-xl dark:shadow-black/30 border border-white/60 dark:border-gray-700 overflow-hidden transition-all duration-300 hover:shadow-[0_16px_36px_rgba(0,0,0,0.18)] dark:hover:shadow-black/40 relative">
+                <div className="tp-card bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden transition-all duration-300 relative">
                   {/* Product Image Container */}
                   <div className="relative w-full aspect-square overflow-hidden bg-gray-50 dark:bg-gray-800 z-10">
                     <img
@@ -661,13 +661,12 @@ export default function TopProducts() {
           animation: pulse-slow 2s ease-in-out infinite;
         }
         .tp-card {
-          transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+          transition: transform 0.3s ease, border-color 0.3s ease;
           position: relative;
         }
         .tp-card:hover {
           transform: translateY(-4px);
           border-color: rgba(255, 63, 108, 0.5);
-          box-shadow: 0 14px 30px rgba(255, 63, 108, 0.2);
         }
         .tp-card:active {
           transform: scale(0.98);

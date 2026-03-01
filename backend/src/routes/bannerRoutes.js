@@ -38,11 +38,11 @@ router.get('/:id', getBanner);
 // POST /api/banners - Create new banner
 router.post('/', validateBanner, createBanner);
 
+// PUT /api/banners/order/update - Update banner order (bulk) – must be before /:id so "order" is not captured as id
+router.put('/order/update', updateBannerOrder);
+
 // PUT /api/banners/:id - Update banner
 router.put('/:id', validateUpdateBanner, updateBanner);
-
-// PUT /api/banners/order/update - Update banner order (bulk)
-router.put('/order/update', updateBannerOrder);
 
 // DELETE /api/banners/:id - Delete banner
 router.delete('/:id', deleteBanner);

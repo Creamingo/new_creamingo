@@ -15,12 +15,15 @@ import { resolveImageUrl } from '../utils/imageUrl';
  * Matching ratio → image fits exactly. Non-matching → image letterboxes inside same box; box size unchanged.
  */
 
+const AUTOPLAY_SPEED_MS = 4500;
+
 const DynamicBannerSlider = () => {
   const [banners, setBanners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [mounted, setMounted] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [desktopSliderRef, setDesktopSliderRef] = useState(null);
   const [mobileSliderRef, setMobileSliderRef] = useState(null);
 
@@ -53,6 +56,45 @@ const DynamicBannerSlider = () => {
     fetchBanners();
   }, [mounted]);
 
+  const goToSlide = (sliderRef, index) => {
+    if (sliderRef?.current) sliderRef.current.slickGoTo(index);
+  };
+
+  const renderProgressDots = (sliderRef) => () => {
+    const count = banners.length;
+    if (count <= 1) return null;
+    return (
+      <ul className="slick-dots banner-dots-progress" role="tablist">
+        {banners.map((_, index) => {
+          const isActive = index === currentSlide;
+          return (
+            <li key={index} role="tab" aria-selected={isActive} className={isActive ? 'slick-active' : ''}>
+              <button
+                type="button"
+                role="tab"
+                aria-label={`Go to slide ${index + 1}`}
+                onClick={() => goToSlide(sliderRef, index)}
+                className="banner-dot-trigger"
+              >
+                {isActive ? (
+                  <span className="banner-dot-pill">
+                    <span
+                      key={currentSlide}
+                      className={`banner-dot-progress-fill ${isPaused ? 'is-paused' : ''}`}
+                      style={{ animationDuration: `${AUTOPLAY_SPEED_MS}ms` }}
+                    />
+                  </span>
+                ) : (
+                  <span className="banner-dot-circle" />
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  };
+
   const settings = {
     className: "center",
     centerMode: false,
@@ -61,9 +103,10 @@ const DynamicBannerSlider = () => {
     slidesToShow: 1,
     speed: 500,
     dots: true,
+    appendDots: renderProgressDots(desktopSliderRef),
     arrows: false,
     autoplay: banners.length > 1,
-    autoplaySpeed: 4500,
+    autoplaySpeed: AUTOPLAY_SPEED_MS,
     pauseOnHover: true,
     fade: true,
     beforeChange: (_oldIndex, newIndex) => setCurrentSlide(newIndex),
@@ -78,12 +121,13 @@ const DynamicBannerSlider = () => {
 
   const mobileSettings = {
     dots: true,
+    appendDots: renderProgressDots(mobileSliderRef),
     infinite: banners.length > 1,
     speed: 500,
     slidesToShow: 1,
     slidesToScroll: 1,
     autoplay: banners.length > 1,
-    autoplaySpeed: 4500,
+    autoplaySpeed: AUTOPLAY_SPEED_MS,
     pauseOnHover: true,
     arrows: false,
     fade: true,
@@ -134,7 +178,11 @@ const DynamicBannerSlider = () => {
   if (!mounted) return null;
 
   const renderBannerSection = () => (
-    <section className="pt-1 pb-3 lg:pt-8 lg:pb-10 bg-white dark:bg-gray-900 banner-slider-section">
+    <section
+      className={`pt-6 pb-3 lg:pt-8 lg:pb-10 bg-white dark:bg-gray-900 banner-slider-section ${isPaused ? 'is-paused' : ''}`}
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+    >
       <div className="w-full px-3 sm:px-4 lg:px-8">
         <div className="max-w-7xl mx-auto">
           {loading ? (

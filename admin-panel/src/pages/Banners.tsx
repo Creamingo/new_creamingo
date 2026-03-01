@@ -753,44 +753,48 @@ export const Banners: React.FC = () => {
     setDraggedBanner(event.active.id);
   };
 
+  // Reorder array: move item from fromIndex to toIndex
+  const reorderArray = <T,>(arr: T[], fromIndex: number, toIndex: number): T[] => {
+    const copy = [...arr];
+    const [item] = copy.splice(fromIndex, 1);
+    copy.splice(toIndex, 0, item);
+    return copy;
+  };
+
   // Handle drag end for reordering
   const handleDragEnd = async (event: DragEndEvent) => {
     setDraggedBanner(null);
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const oldIndex = filteredBanners.findIndex(banner => banner.id === active.id);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const newIndex = filteredBanners.findIndex(banner => banner.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return;
 
-      // Update the full banners array maintaining order
-      const newBanners = [...banners];
-      const movedBanner = newBanners.find(b => b.id === active.id);
-      if (movedBanner) {
-        const targetBanner = newBanners.find(b => b.id === over.id);
-        if (targetBanner) {
-          const oldOrder = movedBanner.order_index;
-          movedBanner.order_index = targetBanner.order_index;
-          targetBanner.order_index = oldOrder;
-        }
-      }
-      
+      // Actually reorder the displayed list (move item from oldIndex to newIndex)
+      const reorderedDisplay = reorderArray(filteredBanners, oldIndex, newIndex);
+
+      // Build payload: assign order_index 1, 2, 3, ... to reordered list; other banners (when filtered) get following indices
+      const reorderedIds = new Set(reorderedDisplay.map(b => b.id));
+      const others = banners.filter(b => !reorderedIds.has(b.id)).sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+      const payload: Array<{ id: number; order_index: number }> = [
+        ...reorderedDisplay.map((b, i) => ({ id: b.id, order_index: i + 1 })),
+        ...others.map((b, i) => ({ id: b.id, order_index: reorderedDisplay.length + i + 1 }))
+      ];
+
+      // Update local state: merge new order_index into banners and sort
+      const orderByPayload = Object.fromEntries(payload.map(p => [p.id, p.order_index]));
+      const newBanners = banners
+        .map(b => ({ ...b, order_index: orderByPayload[b.id] ?? b.order_index }))
+        .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
       setBanners(newBanners);
 
       try {
-        // Update order_index for all banners
-        const updatedBanners = newBanners.map((banner, index) => ({
-          id: banner.id,
-          order_index: index + 1
-        }));
-
-        await bannerService.updateBannerOrder(updatedBanners);
+        await bannerService.updateBannerOrder(payload);
         showSuccess('Banner Order Updated', 'Banners have been reordered successfully!');
       } catch (err) {
         console.error('Error updating banner order:', err);
         showError('Update Failed', 'Failed to update banner order. Please try again.');
-        // Revert local state on error
         loadData();
       }
     }
