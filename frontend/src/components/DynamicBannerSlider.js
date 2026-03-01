@@ -7,6 +7,7 @@ import "slick-carousel/slick/slick-theme.css";
 import "./DynamicBannerSlider.css";
 import bannersAPI from '../api/banners';
 import logger from '../utils/logger';
+import { resolveImageUrl } from '../utils/imageUrl';
 
 /**
  * Fixed slider box container – size is from aspect-ratio only, not from the image.
@@ -133,8 +134,8 @@ const DynamicBannerSlider = () => {
   if (!mounted) return null;
 
   const renderBannerSection = () => (
-    <section className="py-4 lg:pt-8 lg:pb-10 bg-white dark:bg-gray-900 banner-slider-section">
-      <div className="w-full px-4 sm:px-6 lg:px-8">
+    <section className="pt-1 pb-3 lg:pt-8 lg:pb-10 bg-white dark:bg-gray-900 banner-slider-section">
+      <div className="w-full px-3 sm:px-4 lg:px-8">
         <div className="max-w-7xl mx-auto">
           {loading ? (
             <>
@@ -174,7 +175,7 @@ const DynamicBannerSlider = () => {
                           >
                             {isVideo ? (
                               <video
-                                src={banner.video_url || banner.image_url}
+                                src={banner.video_url || resolveImageUrl(banner.image_url)}
                                 autoPlay
                                 loop
                                 muted
@@ -183,7 +184,7 @@ const DynamicBannerSlider = () => {
                               />
                             ) : (
                               <img
-                                src={banner.image_url}
+                                src={resolveImageUrl(banner.image_url)}
                                 alt={banner.title || 'Banner'}
                                 className="banner-image absolute inset-0 w-full h-full object-contain object-center block"
                                 onError={(e) => {
@@ -207,17 +208,17 @@ const DynamicBannerSlider = () => {
                 </div>
               </div>
 
-              {/* Mobile: full-width box; fixed aspect-ratio 5:3, object-fit contain */}
-              <div className="lg:hidden banner-mobile-outer w-full pb-8">
+              {/* Mobile: contained card with gutters; fixed aspect-ratio 5:3, object-fit contain */}
+              <div className="lg:hidden banner-mobile-outer w-full pb-4">
                 <div className="slider-container slider-container--mobile w-full">
                   <Slider {...mobileSettings}>
                     {banners.map((banner) => {
                       const isVideo = isVideoBanner(banner);
-                      const mobileImageUrl = banner.image_url_mobile || banner.image_url;
+                      const mobileImageUrl = resolveImageUrl(banner.image_url_mobile || banner.image_url);
                       return (
                         <div key={banner.id} className="banner-slide-wrapper">
                           <div
-                            className="banner-slide banner-slide--mobile banner-mobile relative w-full aspect-[5/3] overflow-hidden bg-white dark:bg-gray-800"
+                            className="banner-slide banner-slide--mobile banner-mobile relative w-full aspect-[5/3] overflow-hidden rounded-2xl bg-white dark:bg-gray-800 shadow-md"
                             onClick={() => handleBannerClick(banner)}
                             role={banner.button_url ? 'button' : undefined}
                             tabIndex={banner.button_url ? 0 : undefined}

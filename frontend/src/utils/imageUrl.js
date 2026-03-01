@@ -5,7 +5,16 @@ const ASSET_BASE_URL = process.env.NEXT_PUBLIC_ASSET_BASE_URL || BACKEND_BASE_UR
 export const resolveImageUrl = (value) => {
   if (!value) return value;
 
-  if (/^https?:\/\//i.test(value) || value.startsWith('data:')) {
+  if (value.startsWith('data:')) {
+    return value;
+  }
+
+  // Full URL pointing at our asset paths: always use backend base so images load correctly (e.g. when API returns wrong host from rewrites)
+  if (/^https?:\/\//i.test(value)) {
+    const galleryMatch = value.match(/(\/gallery\/[^?#]*)/i);
+    const uploadsMatch = value.match(/(\/uploads\/[^?#]*)/i);
+    const path = galleryMatch?.[1] || uploadsMatch?.[1];
+    if (path) return `${ASSET_BASE_URL}${path}`;
     return value;
   }
 
