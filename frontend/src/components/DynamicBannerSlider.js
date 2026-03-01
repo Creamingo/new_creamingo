@@ -8,6 +8,12 @@ import "./DynamicBannerSlider.css";
 import bannersAPI from '../api/banners';
 import logger from '../utils/logger';
 
+/**
+ * Fixed slider box container – size is from aspect-ratio only, not from the image.
+ * Desktop: 32:10 (upload 1280×400). Mobile: 5:3 (upload 600×360).
+ * Matching ratio → image fits exactly. Non-matching → image letterboxes inside same box; box size unchanged.
+ */
+
 const DynamicBannerSlider = () => {
   const [banners, setBanners] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -151,16 +157,16 @@ const DynamicBannerSlider = () => {
             </div>
           ) : (
             <>
-              {/* Desktop: image only, full fit, no crop */}
-              <div className="hidden lg:block">
-                <div className="slider-container">
+              {/* Desktop: fixed aspect-ratio 32:10, object-fit contain – no cropping */}
+              <div className="hidden lg:block w-full">
+                <div className="slider-container w-full">
                   <Slider {...settings}>
                     {banners.map((banner) => {
                       const isVideo = isVideoBanner(banner);
                       return (
-                        <div key={banner.id} className="px-2">
+                        <div key={banner.id} className="banner-slide-wrapper">
                           <div
-                            className="banner-slide flex items-center justify-center min-h-[240px] max-h-[400px] bg-gray-50 dark:bg-gray-800/30 rounded-lg overflow-hidden"
+                            className="banner-slide banner-slide--desktop banner-desktop relative w-full aspect-[32/10] overflow-hidden rounded-lg bg-white dark:bg-gray-800"
                             onClick={() => handleBannerClick(banner)}
                             role={banner.button_url ? 'button' : undefined}
                             tabIndex={banner.button_url ? 0 : undefined}
@@ -173,20 +179,20 @@ const DynamicBannerSlider = () => {
                                 loop
                                 muted
                                 playsInline
-                                className="max-w-full max-h-[400px] w-auto h-auto object-contain"
+                                className="absolute inset-0 w-full h-full object-contain object-center"
                               />
                             ) : (
                               <img
                                 src={banner.image_url}
                                 alt={banner.title || 'Banner'}
-                                className="max-w-full max-h-[400px] w-auto h-auto object-contain"
+                                className="banner-image absolute inset-0 w-full h-full object-contain object-center block"
                                 onError={(e) => {
                                   const target = e.target;
                                   target.style.display = 'none';
                                   const parent = target.parentElement;
                                   if (parent && !parent.querySelector('.error-fallback')) {
                                     const fallback = document.createElement('div');
-                                    fallback.className = 'error-fallback flex items-center justify-center w-full min-h-[200px] text-gray-400 dark:text-gray-500 text-sm';
+                                    fallback.className = 'error-fallback absolute inset-0 flex items-center justify-center text-gray-400 dark:text-gray-500 text-sm bg-gray-100 dark:bg-gray-800';
                                     fallback.textContent = 'Image unavailable';
                                     parent.appendChild(fallback);
                                   }
@@ -201,17 +207,17 @@ const DynamicBannerSlider = () => {
                 </div>
               </div>
 
-              {/* Mobile: image only, full fit, no crop */}
-              <div className="lg:hidden">
-                <div className="slider-container">
+              {/* Mobile: full-width box; fixed aspect-ratio 5:3, object-fit contain */}
+              <div className="lg:hidden banner-mobile-outer w-full pb-8">
+                <div className="slider-container slider-container--mobile w-full">
                   <Slider {...mobileSettings}>
                     {banners.map((banner) => {
                       const isVideo = isVideoBanner(banner);
                       const mobileImageUrl = banner.image_url_mobile || banner.image_url;
                       return (
-                        <div key={banner.id} className="px-2">
+                        <div key={banner.id} className="banner-slide-wrapper">
                           <div
-                            className="banner-slide flex items-center justify-center min-h-[160px] max-h-[280px] bg-gray-50 dark:bg-gray-800/30 rounded-lg overflow-hidden"
+                            className="banner-slide banner-slide--mobile banner-mobile relative w-full aspect-[5/3] overflow-hidden bg-white dark:bg-gray-800"
                             onClick={() => handleBannerClick(banner)}
                             role={banner.button_url ? 'button' : undefined}
                             tabIndex={banner.button_url ? 0 : undefined}
@@ -224,20 +230,20 @@ const DynamicBannerSlider = () => {
                                 loop
                                 muted
                                 playsInline
-                                className="max-w-full max-h-[280px] w-auto h-auto object-contain"
+                                className="absolute inset-0 w-full h-full object-contain object-center"
                               />
                             ) : (
                               <img
                                 src={mobileImageUrl}
                                 alt={banner.title || 'Banner'}
-                                className="max-w-full max-h-[280px] w-auto h-auto object-contain"
+                                className="banner-image absolute inset-0 w-full h-full object-contain object-center block"
                                 onError={(e) => {
                                   const target = e.target;
                                   target.style.display = 'none';
                                   const parent = target.parentElement;
                                   if (parent && !parent.querySelector('.error-fallback')) {
                                     const fallback = document.createElement('div');
-                                    fallback.className = 'error-fallback flex items-center justify-center w-full min-h-[120px] text-gray-400 dark:text-gray-500 text-xs';
+                                    fallback.className = 'error-fallback absolute inset-0 flex items-center justify-center text-gray-400 dark:text-gray-500 text-xs bg-gray-100 dark:bg-gray-800';
                                     fallback.textContent = 'Image unavailable';
                                     parent.appendChild(fallback);
                                   }

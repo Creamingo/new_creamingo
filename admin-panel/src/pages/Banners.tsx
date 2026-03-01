@@ -2031,7 +2031,7 @@ export const Banners: React.FC = () => {
               onFileSelect={handleFileSelect}
               onFileRemove={handleFileRemove}
               files={uploadedFiles}
-              helperText="Required. Exact size: 1200×400px (wide, 3:1). Used on laptop/desktop."
+              helperText="Required. Recommended: 1280×400 px (aspect 32:10). Used on laptop/desktop. Max 5 MB."
               />
               <FileUpload
                 label="Mobile Banner Image (optional)"
@@ -2040,7 +2040,7 @@ export const Banners: React.FC = () => {
                 onFileSelect={handleFileSelectMobile}
                 onFileRemove={handleFileRemoveMobile}
                 files={uploadedFilesMobile}
-                helperText="Optional. Exact size: 800×600px or 800×800px (1:1). Used on phones/tablets. If not set, desktop image is used."
+                helperText="Optional. Recommended: 600×360 px (aspect 5:3). Used on phones/tablets. If not set, desktop image is used. Max 5 MB."
               />
               
               {/* Image Preview */}
@@ -2268,7 +2268,7 @@ export const Banners: React.FC = () => {
                         onFileSelect={handleFileSelect}
                         onFileRemove={handleFileRemove}
                         files={uploadedFiles}
-                        helperText="Recommended 1200×400 px (3:1). Max 5 MB."
+                        helperText="Recommended: 1280×400 px (aspect 32:10). Max 5 MB."
                       />
                       {editDesktopDims && (
                         <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
@@ -2284,7 +2284,7 @@ export const Banners: React.FC = () => {
                         onFileSelect={handleFileSelectMobile}
                         onFileRemove={handleFileRemoveMobile}
                         files={uploadedFilesMobile}
-                        helperText="Recommended 800×600 px. If empty, desktop image is used on mobile."
+                        helperText="Recommended: 600×360 px (aspect 5:3). If empty, desktop image is used on mobile. Max 5 MB."
                       />
                       {editMobileDims && (
                         <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
