@@ -29,6 +29,8 @@ export interface CreateProductData {
   subcategory_ids?: number[];
   primary_category_id?: number;
   primary_subcategory_id?: number;
+  available_flavor_ids?: number[];
+  primary_flavor_id?: number;
   base_price: number;
   base_weight: string;
   discount_percent?: number;
@@ -56,6 +58,8 @@ export interface UpdateProductData {
   subcategory_ids?: number[];
   primary_category_id?: number;
   primary_subcategory_id?: number;
+  available_flavor_ids?: number[];
+  primary_flavor_id?: number;
   base_price?: number;
   base_weight?: string;
   discount_percent?: number;

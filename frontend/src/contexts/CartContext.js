@@ -745,8 +745,8 @@ export const CartProvider = ({ children }) => {
     };
   }, [removeExpiredSlots, cartItems.length, isInitialized]);
 
-  // Add item to cart
-  const addToCart = (item, quantity = 1, variant = null, flavor = null, tier = null, dealPrice = null, dealId = null, dealThreshold = null) => {
+  // Add item to cart. Pass suppressToast = true for bulk operations (e.g. reorder) to avoid per-item toasts.
+  const addToCart = (item, quantity = 1, variant = null, flavor = null, tier = null, dealPrice = null, dealId = null, dealThreshold = null, suppressToast = false) => {
     setIsLoading(true);
     setError(null);
     
@@ -795,14 +795,16 @@ export const CartProvider = ({ children }) => {
           cartItem.is_deal_item && cartItem.deal_id === dealItemId
         );
         if (existingDealItem) {
-          const toast = getToast();
-          if (toast) {
-            setTimeout(() => {
-              toast.showWarning(
-                'Deal Already Added',
-                'This deal item is already in your cart.'
-              );
-            }, 0);
+          if (!suppressToast) {
+            const toast = getToast();
+            if (toast) {
+              setTimeout(() => {
+                toast.showWarning(
+                  'Deal Already Added',
+                  'This deal item is already in your cart.'
+                );
+              }, 0);
+            }
           }
           return { success: false, error: 'Deal already in cart', isDuplicate: true };
         }
@@ -825,32 +827,34 @@ export const CartProvider = ({ children }) => {
           // Reset after animation duration (2 seconds)
           setTimeout(() => setDuplicateDetected(false), 2000);
           
-          const toast = getToast();
-          if (toast) {
-            // Create "View Cart" button for the toast
-            const viewCartButton = (
-              <button
-                onClick={() => {
-                  // Close toast before navigating
-                  if (typeof window !== 'undefined') {
-                    window.location.href = '/cart';
-                  }
-                }}
-                className="mt-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-semibold rounded-md transition-colors duration-200 shadow-sm hover:shadow-md active:scale-95"
-              >
-                View Cart
-              </button>
-            );
-            
-            setTimeout(() => {
-              // Pass 0 duration to keep toast visible until dismissed or button clicked
-              toast.showWarning(
-                'Item Already in Cart',
-                'This product is already in your cart with the same delivery slot. Select a different delivery slot to add it as a separate item, or view your cart.',
-                0,
-                viewCartButton
+          if (!suppressToast) {
+            const toast = getToast();
+            if (toast) {
+              // Create "View Cart" button for the toast
+              const viewCartButton = (
+                <button
+                  onClick={() => {
+                    // Close toast before navigating
+                    if (typeof window !== 'undefined') {
+                      window.location.href = '/cart';
+                    }
+                  }}
+                  className="mt-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-semibold rounded-md transition-colors duration-200 shadow-sm hover:shadow-md active:scale-95"
+                >
+                  View Cart
+                </button>
               );
-            }, 0);
+              
+              setTimeout(() => {
+                // Pass 0 duration to keep toast visible until dismissed or button clicked
+                toast.showWarning(
+                  'Item Already in Cart',
+                  'This product is already in your cart with the same delivery slot. Select a different delivery slot to add it as a separate item, or view your cart.',
+                  0,
+                  viewCartButton
+                );
+              }, 0);
+            }
           }
           return { success: false, error: 'Item already in cart', isDuplicate: true };
         }
@@ -867,7 +871,7 @@ export const CartProvider = ({ children }) => {
           }, existingItem)
         );
         
-        if (sameItemDifferentSlot) {
+        if (sameItemDifferentSlot && !suppressToast) {
           const toast = getToast();
           if (toast) {
             setTimeout(() => {
@@ -926,24 +930,28 @@ export const CartProvider = ({ children }) => {
 
       setCartItems(prev => [...prev, cartItem]);
       
-      const toast = getToast();
-      if (toast) {
-        setTimeout(() => {
-          toast.showSuccess(
-            'Added to Cart',
-            `${product.name} has been added to your cart${isDealItem ? ' for ₹' + dealItemPrice : ''}.`
-          );
-        }, 0);
+      if (!suppressToast) {
+        const toast = getToast();
+        if (toast) {
+          setTimeout(() => {
+            toast.showSuccess(
+              'Added to Cart',
+              `${product.name} has been added to your cart${isDealItem ? ' for ₹' + dealItemPrice : ''}.`
+            );
+          }, 0);
+        }
       }
       
       return { success: true, item: cartItem };
     } catch (err) {
       setError(err.message);
-      const toast = getToast();
-      if (toast) {
-        setTimeout(() => {
-          toast.showError('Error', err.message || 'Failed to add item to cart');
-        }, 0);
+      if (!suppressToast) {
+        const toast = getToast();
+        if (toast) {
+          setTimeout(() => {
+            toast.showError('Error', err.message || 'Failed to add item to cart');
+          }, 0);
+        }
       }
       return { success: false, error: err.message };
     } finally {

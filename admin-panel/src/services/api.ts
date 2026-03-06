@@ -4,6 +4,8 @@
  */
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+// Log once to verify which API base URL is used in this build.
+console.info('[api] Using API base URL:', API_BASE_URL);
 
 interface ApiResponse<T = any> {
   success: boolean;
@@ -23,6 +25,7 @@ interface RequestOptions {
   headers?: Record<string, string>;
   body?: any;
   requireAuth?: boolean;
+  _retry?: boolean;
 }
 
 class ApiClient {
@@ -72,6 +75,34 @@ class ApiClient {
     return headers;
   }
 
+  private async refreshAccessToken(): Promise<boolean> {
+    const refreshToken = localStorage.getItem('refresh_token');
+    if (!refreshToken) {
+      return false;
+    }
+
+    try {
+      const response = await fetch(`${this.baseURL}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken })
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.success || !data?.data?.token) {
+        return false;
+      }
+
+      this.setToken(data.data.token);
+      if (data.data.refresh_token) {
+        localStorage.setItem('refresh_token', data.data.refresh_token);
+      }
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
   /**
    * Make HTTP request
    */
@@ -83,7 +114,8 @@ class ApiClient {
       method = 'GET',
       headers = {},
       body,
-      requireAuth = true
+      requireAuth = true,
+      _retry = false
     } = options;
 
     // Check if authentication is required
@@ -104,11 +136,19 @@ class ApiClient {
         body: body ? JSON.stringify(body) : undefined,
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       // Handle authentication errors
       if (response.status === 401) {
+        if (requireAuth && !_retry) {
+          const refreshed = await this.refreshAccessToken();
+          if (refreshed) {
+            return this.request<T>(endpoint, { ...options, _retry: true });
+          }
+        }
+
         this.clearToken();
+        localStorage.removeItem('refresh_token');
         // Use the specific error message from the backend instead of generic message
         throw new Error(data.message || 'Authentication failed');
       }
@@ -209,6 +249,17 @@ class ApiClient {
     const formData = new FormData();
     formData.append('image', file);
 
+    return this.uploadFormData(endpoint, formData, requireAuth);
+  }
+
+  /**
+   * Upload FormData with auth + refresh support
+   */
+  async uploadFormData(endpoint: string, formData: FormData, requireAuth: boolean = true, _retry: boolean = false): Promise<ApiResponse> {
+    if (requireAuth && !this.token) {
+      throw new Error('Authentication required');
+    }
+
     const headers: Record<string, string> = {};
     if (this.token) {
       headers['Authorization'] = `Bearer ${this.token}`;
@@ -223,11 +274,19 @@ class ApiClient {
         body: formData,
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (response.status === 401) {
+        if (requireAuth && !_retry) {
+          const refreshed = await this.refreshAccessToken();
+          if (refreshed) {
+            return this.uploadFormData(endpoint, formData, requireAuth, true);
+          }
+        }
+
         this.clearToken();
-        throw new Error('Authentication failed');
+        localStorage.removeItem('refresh_token');
+        throw new Error(data.message || 'Authentication failed');
       }
 
       if (!response.ok) {

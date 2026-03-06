@@ -26,7 +26,7 @@ export default function MyActivitiesSection({ badgeCounts = {} }) {
       bgColor: 'bg-red-50',
       borderColor: 'border-red-300',
       hoverBg: 'hover:bg-red-100',
-      href: '/support/ticket',
+      href: '/support',
       badge: null,
       isHighlighted: true
     },

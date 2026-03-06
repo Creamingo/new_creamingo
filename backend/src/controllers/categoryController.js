@@ -8,7 +8,7 @@ const mapSubcategory = (req, subcategory) => (
 const mapCategory = (req, category) => {
   if (!category) return category;
 
-  const mapped = mapUploadFields(req, category, ['image_url', 'icon_image_url']);
+  const mapped = mapUploadFields(req, category, ['image_url']);
 
   if (mapped.subcategories) {
     let subcategories = mapped.subcategories;
@@ -64,8 +64,6 @@ const getCategories = async (req, res) => {
         c.name,
         c.description,
         c.image_url,
-        c.icon,
-        c.icon_image_url,
         c.display_name,
         c.is_active,
         c.order_index,
@@ -161,15 +159,14 @@ const getCategory = async (req, res) => {
 // Create category
 const createCategory = async (req, res) => {
   try {
-    const { name, description, image_url, icon, icon_image_url, display_name, is_active = true, order_index = 0 } = req.body;
+    const { name, description, image_url, display_name, is_active = true, order_index = 0 } = req.body;
     const normalizedImageUrl = normalizeUploadUrl(image_url);
-    const normalizedIconImageUrl = normalizeUploadUrl(icon_image_url);
     
 
     const result = await query(`
-      INSERT INTO categories (name, description, image_url, icon, icon_image_url, display_name, is_active, order_index, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-    `, [name, description, normalizedImageUrl, icon, normalizedIconImageUrl, display_name, is_active, order_index]);
+      INSERT INTO categories (name, description, image_url, display_name, is_active, order_index, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
+    `, [name, description, normalizedImageUrl, display_name, is_active, order_index]);
 
     const categoryId = result.lastID;
 
@@ -202,9 +199,8 @@ const updateCategory = async (req, res) => {
     if (updateData.image_url) {
       updateData.image_url = normalizeUploadUrl(updateData.image_url);
     }
-    if (updateData.icon_image_url) {
-      updateData.icon_image_url = normalizeUploadUrl(updateData.icon_image_url);
-    }
+    delete updateData.icon;
+    delete updateData.icon_image_url;
     
 
     // Check if category exists
@@ -406,9 +402,10 @@ const getOccasionCategories = async (req, res) => {
 
     const occasionCategory = mapCategory(req, occasionCategoryResult.rows[0]);
 
-    // Get all subcategories for this category - similar to milestone-year-cakes
+    // Get all subcategories for this category
+    // Use ascending order_index so it matches the admin panel ordering
     const subcategoriesResult = await query(
-      'SELECT * FROM subcategories WHERE category_id = ? AND is_active = 1 ORDER BY order_index DESC, name ASC',
+      'SELECT * FROM subcategories WHERE category_id = ? AND is_active = 1 ORDER BY order_index ASC, name ASC',
       [occasionCategory.id]
     );
 
@@ -842,7 +839,12 @@ const getSubcategoryBySlugs = async (req, res) => {
         return sub.slug.toLowerCase() === subCategorySlug.toLowerCase();
       }
       // Otherwise, generate slug from name
-      const subSlug = sub.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and').replace(/'/g, '');
+      const subSlug = sub.name
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/\//g, '-') // ensure "1/2 Year" becomes "1-2-year"
+        .replace(/&/g, 'and')
+        .replace(/'/g, '');
       return subSlug === subCategorySlug.toLowerCase();
     });
 
@@ -976,8 +978,6 @@ const getAllMainCategories = async (req, res) => {
         name,
         description,
         image_url,
-        icon,
-        icon_image_url,
         display_name,
         is_active,
         order_index,

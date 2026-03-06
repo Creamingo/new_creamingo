@@ -283,9 +283,90 @@ const sendMilestoneEmail = async (toEmail, customerName, milestone, totalEarned)
   }
 };
 
+// Vendor application notification (to team email)
+const VENDOR_CATEGORY_LABELS = {
+  cake_bakery: 'Cake and Bakery Related',
+  flowers: 'Flowers and Related',
+  sweets: 'Sweets and Related',
+  dry_fruits: 'Dry Fruits and Related',
+  gifting: 'Gifting Items and Related',
+  plants: 'Plants and Related'
+};
+
+const getCategoryLabel = (slugOrIds) => {
+  if (!slugOrIds) return '—';
+  const slug = typeof slugOrIds === 'string' ? slugOrIds.split(',')[0].trim() : String(slugOrIds);
+  return VENDOR_CATEGORY_LABELS[slug] || slug;
+};
+
+const generateVendorApplicationEmailHtml = (application) => {
+  const categoryLabel = getCategoryLabel(application.category_ids || application.category_slug);
+  const adminUrl = process.env.ADMIN_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
+  const linkToAdmin = `${adminUrl.replace(/\/$/, '')}/vendor-applications`;
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>New Vendor Application</title></head>
+<body style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
+  <div style="max-width: 560px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+    <div style="background: linear-gradient(135deg, #ec4899 0%, #f43f5e 100%); padding: 24px 24px; text-align: center;">
+      <h1 style="color: #fff; margin: 0; font-size: 22px;">New Vendor Application</h1>
+      <p style="color: rgba(255,255,255,0.9); margin: 8px 0 0 0; font-size: 14px;">Someone wants to sell on Creamingo</p>
+    </div>
+    <div style="padding: 24px;">
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Name</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${application.name || '—'}</td></tr>
+        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Email</td><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><a href="mailto:${application.email}">${application.email || '—'}</a></td></tr>
+        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Phone</td><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><a href="tel:${application.phone}">${application.phone || '—'}</a></td></tr>
+        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Shop name</td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${application.shop_name || '—'}</td></tr>
+        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Category</td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${categoryLabel}</td></tr>
+        <tr><td style="padding: 8px 0; color: #666;">Applied at</td><td style="padding: 8px 0;">${application.created_at || '—'}</td></tr>
+      </table>
+      <p style="margin: 20px 0 0 0; text-align: center;">
+        <a href="${linkToAdmin}" style="display: inline-block; background: linear-gradient(135deg, #ec4899 0%, #f43f5e 100%); color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600;">View in Admin</a>
+      </p>
+    </div>
+    <div style="background: #f9fafb; padding: 16px; text-align: center; font-size: 12px; color: #999;">Creamingo Admin</div>
+  </div>
+</body>
+</html>
+  `.trim();
+};
+
+const sendVendorApplicationNotification = async (toEmail, application) => {
+  if (!emailConfigured) {
+    console.log('Email service not configured. Skipping vendor notification to:', toEmail);
+    return { success: false, message: 'Email service not configured' };
+  }
+
+  try {
+    const transporter = createTransporter();
+    if (!transporter) {
+      return { success: false, message: 'Email transporter not available' };
+    }
+
+    const categoryLabel = getCategoryLabel(application.category_ids);
+    const mailOptions = {
+      from: `"Creamingo" <${process.env.SMTP_USER}>`,
+      to: toEmail,
+      subject: `[Creamingo] New vendor application: ${application.name} – ${categoryLabel}`,
+      html: generateVendorApplicationEmailHtml(application),
+      text: `New vendor application\n\nName: ${application.name}\nEmail: ${application.email}\nPhone: ${application.phone}\nShop: ${application.shop_name || '—'}\nCategory: ${categoryLabel}\nApplied: ${application.created_at || ''}\n\nView in admin: ${process.env.ADMIN_URL || process.env.FRONTEND_URL || 'http://localhost:3000'}/vendor-applications`
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Vendor application notification sent:', info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('Send vendor application notification error:', error);
+    return { success: false, message: error.message };
+  }
+};
+
 module.exports = {
   sendReferralEmail,
   sendMilestoneEmail,
+  sendVendorApplicationNotification,
   emailConfigured
 };
 

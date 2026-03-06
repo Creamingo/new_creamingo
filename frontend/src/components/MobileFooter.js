@@ -1,22 +1,40 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { Home, Wallet, ShoppingCart, Headphones, Heart, MessageSquare, Phone, Ticket, ClipboardList, User, Star, Bell } from 'lucide-react'
+import { useRouter, usePathname } from 'next/navigation'
+import { Home, Wallet, ShoppingCart, Headphones, Heart, MessageSquare, Phone, Ticket, ClipboardList, User, Star, Bell, Gift } from 'lucide-react'
 import { useCart } from '../contexts/CartContext'
 import { useWishlist } from '../contexts/WishlistContext'
-import { useNotifications } from '../contexts/NotificationContext'
+import { useWallet } from '../contexts/WalletContext'
+import { useCustomerAuth } from '../contexts/CustomerAuthContext'
+import { useAuthModal } from '../contexts/AuthModalContext'
+import { useToast } from '../contexts/ToastContext'
 import CartDisplay from './CartDisplay'
 
-const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }) => {
+const MobileFooter = ({ wishlistCount: propWishlistCount = 0 }) => {
   const router = useRouter()
+  const pathname = usePathname()
   const [activeTab, setActiveTab] = useState('home')
+  const { balance: walletBalance = 0 } = useWallet()
+
+  // Sync active tab with current pathname so redirects (e.g. close login modal → Account) show correct tab
+  useEffect(() => {
+    if (!pathname) return
+    if (pathname === '/') setActiveTab('home')
+    else if (pathname === '/account') setActiveTab('account')
+    else if (pathname === '/wishlist') setActiveTab('wishlist')
+    else if (pathname === '/cart') setActiveTab('cart')
+    else if (pathname === '/wallet') setActiveTab('wallet')
+    else if (pathname === '/orders') setActiveTab('orders')
+  }, [pathname])
   const [isHelpExpanded, setIsHelpExpanded] = useState(false)
   const [isCartOpen, setIsCartOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const { getItemCount } = useCart()
   const { wishlistCount: contextWishlistCount, isInitialized: wishlistInitialized } = useWishlist()
-  const { unreadCount: notificationCount, openNotificationCenter } = useNotifications()
+  const { isAuthenticated } = useCustomerAuth()
+  const { isAuthModalOpen, openAuthModal } = useAuthModal()
+  const { showInfo } = useToast()
   const [cartItemCount, setCartItemCount] = useState(0)
   
   // Use context wishlist count if available, otherwise use prop (for backwards compatibility)
@@ -49,27 +67,36 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
     return () => clearInterval(interval)
   }, [mounted, cartItemCount, getItemCount])
 
+  // Help section: manage contact number and Raise Ticket target here
+  const HELP_PHONE_NUMBER = '7570030333'
+  const HELP_PHONE_E164 = `+91${HELP_PHONE_NUMBER}` // India
+  const HELP_WHATSAPP_URL = `https://wa.me/91${HELP_PHONE_NUMBER}`
+
   const helpOptions = [
-    { 
-      icon: Phone, 
-      label: 'Call', 
-      action: () => window.open('tel:+91-22-4343-3333', '_blank')
+    {
+      icon: Phone,
+      label: 'Call',
+      action: () => window.open(`tel:${HELP_PHONE_E164}`, '_blank')
     },
-    { 
-      icon: MessageSquare, 
-      label: 'WhatsApp', 
-      action: () => window.open('https://wa.me/919876543210', '_blank')
+    {
+      icon: MessageSquare,
+      label: 'WhatsApp',
+      action: () => window.open(HELP_WHATSAPP_URL, '_blank')
     },
-    { 
-      icon: Ticket, 
-      label: 'Raise Ticket', 
-      action: () => window.open('/support/ticket', '_blank')
+    {
+      icon: Ticket,
+      label: 'Raise Ticket',
+      action: () => {
+        router.push('/support');
+        setIsHelpExpanded(false);
+      }
     }
   ]
 
   const footerItems = [
     { icon: Home, label: 'Home', href: '/', id: 'home' },
     { icon: Star, label: 'Midnight Wish', href: '/midnight-wish', id: 'midnight-wish', desktopOnly: true },
+    { icon: Gift, label: 'Fulfill a wish', href: '/midnight-wish/fulfill', id: 'fulfill-wish', desktopOnly: true },
     { icon: ClipboardList, label: 'Orders', href: '/orders', id: 'orders', desktopOnly: true },
     { 
       icon: Heart, 
@@ -89,7 +116,9 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
       icon: Wallet, 
       label: 'Wallet', 
       href: '/wallet', 
-      badge: notificationCount > 0 ? notificationCount : undefined,
+      badge: mounted && isAuthenticated && walletBalance > 0
+        ? (walletBalance >= 1000 ? `${(walletBalance / 1000).toFixed(1)}k` : walletBalance)
+        : undefined,
       id: 'wallet'
     },
     { icon: User, label: 'Account', href: '/account', id: 'account', desktopOnly: true },
@@ -100,11 +129,37 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
     if (tabId === 'help') {
       setIsHelpExpanded(!isHelpExpanded)
       setActiveTab('help')
+    } else if (tabId === 'account') {
+      if (!isAuthenticated) {
+        if (pathname === '/account') {
+          router.push('/')
+          setIsHelpExpanded(false)
+          setActiveTab('home')
+          return
+        }
+        openAuthModal('/account')
+        return
+      }
+      router.push('/account')
+      setIsHelpExpanded(false)
+      setActiveTab('account')
     } else if (tabId === 'cart') {
       // Navigate to cart page instead of opening modal
       router.push('/cart')
       setIsHelpExpanded(false)
       setActiveTab('cart')
+    } else if (tabId === 'wallet') {
+      if (!isAuthenticated) {
+        showInfo(
+          'Log in required',
+          'Please log in to access your wallet. Sign up & get wallet cashback up to ₹100.'
+        )
+        openAuthModal('/wallet')
+        return
+      }
+      router.push('/wallet')
+      setIsHelpExpanded(false)
+      setActiveTab('wallet')
     } else if (href && href !== '#') {
       // Navigate to the href if it exists and is not a placeholder
       router.push(href)
@@ -114,6 +169,16 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
       setIsHelpExpanded(false)
       setActiveTab(tabId)
     }
+  }
+
+  // Hide sticky footer when Login/Sign up modal is open so the layout feels connected
+  if (isAuthModalOpen) {
+    return (
+      <CartDisplay
+        isOpen={isCartOpen}
+        onClose={() => setIsCartOpen(false)}
+      />
+    )
   }
 
   return (
@@ -138,7 +203,9 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
         </div>
       )}
 
-      <footer className="fixed bottom-0 left-0 right-0 w-full bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-t-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 z-50 border border-white/20 dark:border-gray-700/50 border-t-2 border-t-pink-200 dark:border-t-pink-700 h-[3.6rem] max-w-full">
+      <footer
+        className="fixed bottom-0 left-0 right-0 w-full z-50 h-[3.6rem] max-w-full bg-white dark:bg-gray-800 backdrop-blur-md rounded-t-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 border border-gray-200/50 dark:border-gray-700/50 border-t-2 border-t-pink-200 dark:border-t-pink-700"
+      >
         <div className="flex items-center justify-around h-full px-2 gap-1">
           {footerItems.map((item, index) => {
             const isActive = activeTab === item.id
@@ -156,11 +223,18 @@ const MobileFooter = ({ walletAmount = 0, wishlistCount: propWishlistCount = 0 }
                   <item.icon className={`w-[22px] h-[22px] transition-all duration-300 flex-shrink-0 ${
                     isActive ? 'text-pink-600 dark:text-pink-400' : 'text-gray-600 dark:text-gray-300 group-hover:text-pink-500 dark:group-hover:text-pink-400'
                   }`} />
-                  {item.badge !== undefined && item.badge > 0 && (
-                    <span className={`absolute -top-1.5 -right-1.5 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-inter font-semibold transition-all duration-300 shadow-sm ${
-                      isActive ? 'bg-pink-600' : 'bg-red-500'
-                    }`} suppressHydrationWarning>
-                      {item.badge > 99 ? '99+' : item.badge}
+                  {item.badge !== undefined && item.badge !== '' && (item.badge > 0 || typeof item.badge === 'string') && (
+                    <span
+                      className={`absolute -top-2 -right-2 flex items-center justify-center rounded-full min-w-[1.25rem] h-5 px-1.5 text-[10px] font-semibold tabular-nums text-white tracking-tight ring-2 ring-white dark:ring-gray-800 shadow-md transition-all duration-300 ${
+                        isActive
+                          ? 'bg-pink-600 dark:bg-pink-500'
+                          : 'bg-gradient-to-br from-pink-500 to-rose-500 dark:from-pink-600 dark:to-rose-600'
+                      }`}
+                      suppressHydrationWarning
+                    >
+                      {item.id === 'wallet'
+                        ? item.badge
+                        : (typeof item.badge === 'number' && item.badge > 99 ? '99+' : item.badge)}
                     </span>
                   )}
                 </div>
