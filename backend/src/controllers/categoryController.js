@@ -402,9 +402,10 @@ const getOccasionCategories = async (req, res) => {
 
     const occasionCategory = mapCategory(req, occasionCategoryResult.rows[0]);
 
-    // Get all subcategories for this category - similar to milestone-year-cakes
+    // Get all subcategories for this category
+    // Use ascending order_index so it matches the admin panel ordering
     const subcategoriesResult = await query(
-      'SELECT * FROM subcategories WHERE category_id = ? AND is_active = 1 ORDER BY order_index DESC, name ASC',
+      'SELECT * FROM subcategories WHERE category_id = ? AND is_active = 1 ORDER BY order_index ASC, name ASC',
       [occasionCategory.id]
     );
 
@@ -838,7 +839,12 @@ const getSubcategoryBySlugs = async (req, res) => {
         return sub.slug.toLowerCase() === subCategorySlug.toLowerCase();
       }
       // Otherwise, generate slug from name
-      const subSlug = sub.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and').replace(/'/g, '');
+      const subSlug = sub.name
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/\//g, '-') // ensure "1/2 Year" becomes "1-2-year"
+        .replace(/&/g, 'and')
+        .replace(/'/g, '');
       return subSlug === subCategorySlug.toLowerCase();
     });
 

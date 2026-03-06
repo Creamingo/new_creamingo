@@ -117,7 +117,8 @@ export const ROUTE_PERMISSIONS = {
   '/users': ['users.view'],
   '/chatbot-answers': ['settings.view'],
   '/chat-analytics': ['settings.view'],
-  '/tickets': ['settings.view']
+  '/tickets': ['settings.view'],
+  '/vendor-applications': ['settings.view']
 };
 
 // Define sidebar menu permissions
@@ -139,6 +140,7 @@ export const MENU_PERMISSIONS = {
   'chatbot-answers': ['settings.view'],
   'chat-analytics': ['settings.view'],
   tickets: ['settings.view'],
+  vendorapplications: ['settings.view'],
   chatbotanswers: ['settings.view'],
   chatanalytics: ['settings.view']
 };

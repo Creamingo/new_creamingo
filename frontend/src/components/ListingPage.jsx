@@ -104,10 +104,15 @@ const ListingPage = () => {
       
       if (response.success && response.data && response.data.subcategory) {
         const subcategory = response.data.subcategory;
+        const slugFromName = subcategory.name
+          .toLowerCase()
+          .replace(/\s+/g, '-')
+          .replace(/\//g, '-') // handle "1/2 Year" style names
+          .replace(/&/g, 'and');
         return {
           id: subcategory.id,
           name: subcategory.name,
-          slug: subcategory.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and'),
+          slug: slugFromName,
           description: subcategory.description,
           metaTitle: `${subcategory.name} | Creamingo`,
           metaDescription: subcategory.description,
@@ -146,13 +151,20 @@ const ListingPage = () => {
         return [];
       }
 
-      const transformedData = rawSubcategories.map(subcategory => ({
-        id: subcategory.id,
-        name: subcategory.name,
-        slug: subcategory.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and'),
-        image: subcategory.image_url,
-        productCount: subcategory.product_count || subcategory.products_count || subcategory.productCount || 0 // Use API count if available
-      }));
+      const transformedData = rawSubcategories.map(subcategory => {
+        const slugFromName = subcategory.name
+          .toLowerCase()
+          .replace(/\s+/g, '-')
+          .replace(/\//g, '-') // handle "1/2 Year" style names
+          .replace(/&/g, 'and');
+        return {
+          id: subcategory.id,
+          name: subcategory.name,
+          slug: slugFromName,
+          image: subcategory.image_url,
+          productCount: subcategory.product_count || subcategory.products_count || subcategory.productCount || 0 // Use API count if available
+        };
+      });
       console.log('Transformed subcategories data:', transformedData);
       return transformedData;
     } catch (error) {

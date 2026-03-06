@@ -30,6 +30,7 @@ import BakeryProduction from './pages/BakeryProduction';
 import { ChatbotAnswers } from './pages/ChatbotAnswers';
 import { ChatAnalytics } from './pages/ChatAnalytics';
 import { Tickets } from './pages/Tickets';
+import { VendorApplications } from './pages/VendorApplications';
 
 function App() {
   return (
@@ -70,6 +71,7 @@ function App() {
             <Route path="chatbot-answers" element={<ProtectedRoute requiredPermission="settings.view"><ChatbotAnswers /></ProtectedRoute>} />
             <Route path="chat-analytics" element={<ProtectedRoute requiredPermission="settings.view"><ChatAnalytics /></ProtectedRoute>} />
             <Route path="tickets" element={<ProtectedRoute requiredPermission="settings.view"><Tickets /></ProtectedRoute>} />
+            <Route path="vendor-applications" element={<ProtectedRoute requiredPermission="settings.view"><VendorApplications /></ProtectedRoute>} />
             <Route path="settings" element={<ProtectedRoute requiredPermission="settings.view"><Settings /></ProtectedRoute>} />
           </Route>
           
