@@ -193,6 +193,18 @@ const ContactPage = () => {
                 </motion.div>
               ))}
             </div>
+
+            {/* Secondary entry: open support chat in popup without leaving this page */}
+            <motion.div variants={fadeInUp} className="mt-6 flex justify-center">
+              <button
+                type="button"
+                onClick={() => typeof window !== 'undefined' && window.dispatchEvent(new CustomEvent('open-creamingo-chat'))}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-pink-500 hover:bg-pink-600 text-white font-medium transition-colors shadow-lg hover:shadow-xl"
+              >
+                <MessageCircle className="w-5 h-5" />
+                Chat with us
+              </button>
+            </motion.div>
           </motion.div>
         </div>
       </section>

@@ -4,6 +4,10 @@ require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  experimental: {
+    // Restore scroll position when user navigates back (e.g. category -> back to home)
+    scrollRestoration: true,
+  },
   // Use default Next.js behavior
   onDemandEntries: {
     // period (in ms) where the server will keep pages in the buffer

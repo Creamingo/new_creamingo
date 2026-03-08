@@ -128,7 +128,7 @@ function SignupPageContent() {
 
     try {
       const { confirmPassword, ...registrationData } = formData;
-      await register(registrationData);
+      await register(registrationData, { source: 'account' });
       // Redirect to intended page or home
       const redirectTo = searchParams.get('redirect') || '/';
       router.push(redirectTo);

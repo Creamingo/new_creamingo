@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   ArrowLeft,
   User,
@@ -24,7 +24,10 @@ import {
   Tag,
   Package,
   Gift,
-  Navigation
+  Navigation,
+  Eye,
+  EyeOff,
+  ExternalLink
 } from 'lucide-react';
 import { useCart } from '../../contexts/CartContext';
 import { usePinCode } from '../../contexts/PinCodeContext';
@@ -35,6 +38,7 @@ import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import MobileFooter from '../../components/MobileFooter';
 import DeliverySlotSelector from '../../components/DeliverySlotSelector';
+import deliverySlotApi from '../../api/deliverySlotApi';
 import orderApi from '../../api/orderApi';
 import settingsApi from '../../api/settingsApi';
 import customerAuthApi from '../../api/customerAuthApi';
@@ -118,14 +122,16 @@ const formatTimeSlot = (deliverySlot) => {
   return 'N/A';
 };
 
-function CheckoutPageContent() {
+function CheckoutPageContent({ isClient }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { cartItems, getCartSummary, clearCart, isInitialized, autoUpdateExpiredSlots } = useCart();
   const { showSuccess } = useToast();
   const {
     deliveryInfo,
     currentPinCode,
-    getFormattedDeliveryCharge
+    getFormattedDeliveryCharge,
+    isValidPinCode
   } = usePinCode();
   const { customer, isAuthenticated, login, register } = useCustomerAuth();
   const { balance: walletBalance = 0, fetchBalance } = useWallet();
@@ -143,6 +149,9 @@ function CheckoutPageContent() {
   const [authEmail, setAuthEmail] = useState('');
   const [authStep, setAuthStep] = useState('email');
   const [authPassword, setAuthPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [showSignupConfirmPassword, setShowSignupConfirmPassword] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
   const [emailCheckResult, setEmailCheckResult] = useState(null);
@@ -176,6 +185,8 @@ function CheckoutPageContent() {
   });
 
   // Update form data when customer data loads
+  // isClient passed from wrapper to keep hook order stable
+
   useEffect(() => {
     if (customer && isAuthenticated) {
       setFormData(prev => ({
@@ -308,7 +319,7 @@ function CheckoutPageContent() {
         phone: signupData.phone?.trim() || undefined,
         password: signupData.password,
         referralCode: signupData.referralCode?.trim() || undefined
-      });
+      }, { source: 'checkout' });
       setSignupData(prev => ({
         ...prev,
         password: '',
@@ -390,12 +401,14 @@ function CheckoutPageContent() {
   const [applyWalletDiscount, setApplyWalletDiscount] = useState(false);
   const [countdown, setCountdown] = useState(null); // { hours: number, minutes: number } or null
   const [dismissExpiringSoonWarning, setDismissExpiringSoonWarning] = useState(false);
+  const [isAutoSelected, setIsAutoSelected] = useState(false); // Track if slot was auto-selected
+  const [isLoadingEarliestSlot, setIsLoadingEarliestSlot] = useState(false);
   
-  // Collapsible sections state for mobile accordion
+  // Collapsible sections state for mobile accordion (Delivery Date & Time expanded by default)
   const [expandedSections, setExpandedSections] = useState({
     customerInfo: true, // Default open
     deliveryAddress: true, // Default open
-    deliverySlot: true, // Default open
+    deliverySlot: true, // Delivery Date & Time * - expanded by default so user sees slot selection first
     paymentMethod: true, // Default open
     specialInstructions: false // Default closed
   });
@@ -415,10 +428,7 @@ function CheckoutPageContent() {
   const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState(1500); // Default value, will be fetched from API
   
   const toggleSection = (section) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }));
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
   
   // Scroll to section
@@ -486,56 +496,69 @@ function CheckoutPageContent() {
     return () => clearTimeout(timeoutId);
   }, [formData, selectedSlot, appliedPromo, applyWalletDiscount]);
   
-  // Load saved form progress on mount
+  // Load saved form progress on mount – prefill form and address so user doesn't re-enter
   useEffect(() => {
     try {
       const savedData = localStorage.getItem('checkout_form_progress');
       if (savedData) {
         const parsed = JSON.parse(savedData);
-        
-        // Only restore if form is empty (user hasn't started filling)
+        const savedAddress = parsed.formData?.address;
+        const hasSavedAddress = savedAddress && (savedAddress.street || savedAddress.city || savedAddress.state);
+        const currentAddressEmpty = !formData.address.street && !formData.address.city && !formData.address.state;
+
+        // Full restore when form is empty (name, email, phone not filled)
         if (!formData.name && !formData.email && !formData.phone) {
           if (parsed.formData) {
             setFormData(prev => ({
               ...prev,
               ...parsed.formData,
-              // Don't restore delivery date/time if slot is expired
               deliveryDate: parsed.formData.deliveryDate || prev.deliveryDate,
-              deliveryTime: parsed.formData.deliveryTime || prev.deliveryTime
+              deliveryTime: parsed.formData.deliveryTime || prev.deliveryTime,
+              address: {
+                street: savedAddress?.street ?? prev.address.street,
+                landmark: savedAddress?.landmark ?? prev.address.landmark,
+                city: savedAddress?.city ?? prev.address.city,
+                state: savedAddress?.state ?? prev.address.state,
+                zip_code: savedAddress?.zip_code ?? prev.address.zip_code ?? currentPinCode ?? '',
+                country: savedAddress?.country ?? prev.address.country ?? 'India',
+                location: null
+              }
             }));
-            
-            // Restore locationName if location exists
-            if (parsed.formData?.address?.location?.name) {
-              setLocationName(parsed.formData.address.location.name);
-            }
+            setLocationName(null);
           }
-          
+
           if (parsed.selectedSlot) {
-            const restoredDate = parsed.selectedSlot.date 
+            const restoredDate = parsed.selectedSlot.date
               ? new Date(parsed.selectedSlot.date)
               : null;
-            const restoredSlot = {
-              ...parsed.selectedSlot,
-              date: restoredDate
-            };
-            
-            // Only restore slot if it's not expired
+            const restoredSlot = { ...parsed.selectedSlot, date: restoredDate };
             if (restoredDate && getSlotExpirationStatus(restoredSlot) !== 'expired') {
               setSelectedSlot(restoredSlot);
             }
           }
-          
-          // DO NOT restore promo from checkout_form_progress
-          // Promo should ONLY come from applied_promo localStorage (Cart is source of truth)
-          // Clear any stale promo from checkout_form_progress
+
           if (parsed.appliedPromo) {
             const cleanedData = { ...parsed, appliedPromo: null };
             localStorage.setItem('checkout_form_progress', JSON.stringify(cleanedData));
           }
-          
           if (parsed.applyWalletDiscount !== undefined) {
             setApplyWalletDiscount(parsed.applyWalletDiscount);
           }
+        } else if (hasSavedAddress && currentAddressEmpty) {
+          // Form has name/email/phone (e.g. logged in) but address is empty – prefill address only
+          setFormData(prev => ({
+            ...prev,
+            address: {
+              ...prev.address,
+              street: savedAddress.street || prev.address.street,
+              landmark: savedAddress.landmark || prev.address.landmark,
+              city: savedAddress.city || prev.address.city,
+              state: savedAddress.state || prev.address.state,
+              zip_code: savedAddress.zip_code || prev.address.zip_code,
+              location: null
+            }
+          }));
+          setLocationName(null);
         }
       }
     } catch (error) {
@@ -583,6 +606,13 @@ function CheckoutPageContent() {
     }
   };
   
+  // Delivery Date & Time: always expanded when checkout page is shown (user can collapse via header if they choose)
+  useLayoutEffect(() => {
+    if (pathname === '/checkout') {
+      setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+    }
+  }, [pathname]);
+
   // Track active section on scroll
   useEffect(() => {
     const handleScroll = () => {
@@ -929,6 +959,7 @@ function CheckoutPageContent() {
         // Only clear if this is a stale slot (from cart or previous selection)
         // Don't clear if user just actively selected it
         setError('Your delivery slot has expired. Please select a new slot.');
+        setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
         setShowSlotSelector(true);
         if (selectedSlot) {
           setSelectedSlot(null);
@@ -964,6 +995,7 @@ function CheckoutPageContent() {
       if (currentExpirationStatus === 'expired' && previousStatus !== 'expired' && !slotJustSelectedRef.current) {
         // Slot just expired - show error and open selector
         setError('Your delivery slot has just expired. Please select a new slot.');
+        setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
         setShowSlotSelector(true);
         setSelectedSlot(null);
         setFormData(prev => ({
@@ -984,6 +1016,7 @@ function CheckoutPageContent() {
           setCountdown(null);
           if (currentExpirationStatus === 'expired' && previousStatus !== 'expired' && !slotJustSelectedRef.current) {
             setError('Your delivery slot has just expired. Please select a new slot.');
+            setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
             setShowSlotSelector(true);
             setSelectedSlot(null);
             setFormData(prev => ({
@@ -1026,6 +1059,7 @@ function CheckoutPageContent() {
     // Clear selectedSlot if cartDeliverySlot is null (expired)
     if (!cartDeliverySlot && selectedSlot && hasInitializedSlot.current) {
       setSelectedSlot(null);
+      setIsAutoSelected(false); // Reset auto-selected flag
       setFormData(prev => ({
         ...prev,
         deliveryDate: '',
@@ -1033,6 +1067,11 @@ function CheckoutPageContent() {
       }));
       hasInitializedSlot.current = false;
       return;
+    }
+    
+    // Reset auto-selected flag if cart delivery slot exists (user has a slot from cart)
+    if (cartDeliverySlot) {
+      setIsAutoSelected(false);
     }
     
     // Only initialize once, and only if we don't have a selectedSlot already
@@ -1085,6 +1124,104 @@ function CheckoutPageContent() {
     // Only depend on cartDeliverySlot and currentPinCode to avoid re-initialization
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cartDeliverySlot, currentPinCode]);
+
+  // Smart Auto-Selection: Auto-select earliest available slot if no slot is selected
+  useEffect(() => {
+    // Only auto-select if:
+    // 1. No slot is currently selected
+    // 2. No cart delivery slot exists
+    // 3. Pin code is valid
+    // 4. We haven't already auto-selected
+    // 5. User hasn't manually interacted with slot selector
+    if (
+      !selectedSlot && 
+      !cartDeliverySlot && 
+      currentPinCode && 
+      isValidPinCode && 
+      !isAutoSelected &&
+      !showSlotSelector &&
+      !isLoadingEarliestSlot
+    ) {
+      setIsLoadingEarliestSlot(true);
+      
+      const autoSelectEarliestSlot = async () => {
+        try {
+          const today = new Date();
+          const endDate = new Date(today);
+          endDate.setDate(today.getDate() + 6); // Check next 7 days
+          
+          const startDateStr = today.toISOString().split('T')[0];
+          const endDateStr = endDate.toISOString().split('T')[0];
+          
+          const response = await deliverySlotApi.getSlotAvailability(startDateStr, endDateStr);
+          
+          if (response.success && response.data && response.data.length > 0) {
+            // Find earliest available slot
+            const now = new Date();
+            const currentTime = now.getHours() * 60 + now.getMinutes();
+            
+            for (const item of response.data) {
+              // Check if slot is available and not expired
+              if (item.isAvailable && item.availableOrders > 0) {
+                const slotDate = new Date(item.deliveryDate);
+                const slotDateOnly = new Date(slotDate.getFullYear(), slotDate.getMonth(), slotDate.getDate());
+                const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                
+                // If slot is today, check if time hasn't passed
+                if (slotDateOnly.getTime() === todayOnly.getTime()) {
+                  const [startHour, startMin] = item.startTime.split(':').map(Number);
+                  const slotStartTime = startHour * 60 + startMin;
+                  if (currentTime >= slotStartTime) {
+                    continue; // Skip expired slots
+                  }
+                }
+                
+                // Found earliest available slot - auto-select it
+                const slotDateObj = new Date(item.deliveryDate);
+                const timeString = item.endTime 
+                  ? `${formatTime(item.startTime)} - ${formatTime(item.endTime)}`
+                  : formatTime(item.startTime);
+                
+                const autoSelectedSlot = {
+                  date: slotDateObj,
+                  slot: { 
+                    id: item.slotId,
+                    startTime: item.startTime,
+                    endTime: item.endTime
+                  },
+                  time: timeString,
+                  pinCode: currentPinCode,
+                  slotId: item.slotId
+                };
+                
+                setSelectedSlot(autoSelectedSlot);
+                setIsAutoSelected(true);
+                setFormData(prev => ({
+                  ...prev,
+                  deliveryDate: slotDateObj.toISOString().split('T')[0],
+                  deliveryTime: timeString
+                }));
+                
+                break; // Stop after finding first available slot
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error auto-selecting earliest slot:', error);
+          // Don't show error to user - just silently fail
+        } finally {
+          setIsLoadingEarliestSlot(false);
+        }
+      };
+      
+      // Small delay to ensure page is fully loaded
+      const timer = setTimeout(() => {
+        autoSelectEarliestSlot();
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [selectedSlot, cartDeliverySlot, currentPinCode, isValidPinCode, isAutoSelected, showSlotSelector, isLoadingEarliestSlot]);
 
   // Auto-update expired delivery slots when checkout page loads
   useEffect(() => {
@@ -1550,16 +1687,7 @@ function CheckoutPageContent() {
           }
           
           setLocationAccuracy(accuracyInMeters);
-          
-          // Show warning (not error) if accuracy is poor but valid
-          if (accuracyInMeters && accuracyInMeters > 1000 && accuracyInMeters <= 100000) {
-            const accuracyKm = (accuracyInMeters / 1000).toFixed(1);
-            setLocationWarning(`Location accuracy is approximately ${accuracyKm} km. The detected location may not be precise. Please verify the address below.`);
-          } else if (accuracyInMeters === null) {
-            setLocationWarning('Location accuracy information is unavailable. Please verify the detected location is correct.');
-          } else {
-            setLocationWarning(null); // Clear warning if accuracy is good
-          }
+          setLocationWarning(null); // No accuracy warning shown in UI; user enters full address below
 
           // Reverse geocode to get city/locality name (with delay to respect rate limits)
           const locationNameResult = await reverseGeocode(latitude, longitude);
@@ -1630,6 +1758,7 @@ function CheckoutPageContent() {
     if (expirationStatus === 'expired') {
       // Slot is expired, don't set it and show error
       setError('The selected delivery slot has expired. Please choose a different slot.');
+      setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
       setShowSlotSelector(true); // Keep selector open
       return;
     }
@@ -1648,6 +1777,9 @@ function CheckoutPageContent() {
     if (isSlotChanged) {
       setDismissExpiringSoonWarning(false);
     }
+    
+    // Clear auto-selected flag when user manually selects a slot
+    setIsAutoSelected(false);
     
     // Set the new slot
     setSelectedSlot(normalizedSlot);
@@ -1717,6 +1849,7 @@ function CheckoutPageContent() {
     const currentSlot = selectedSlot || cartDeliverySlot;
     if (!currentSlot) {
       setError('Please select a delivery date and time slot to place your order.');
+      setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
       setShowSlotSelector(true);
       return false;
     }
@@ -1725,6 +1858,7 @@ function CheckoutPageContent() {
     const expirationStatus = getSlotExpirationStatus(currentSlot);
     if (expirationStatus === 'expired') {
       setError('Your delivery slot has expired. Please select a new slot.');
+      setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
       setShowSlotSelector(true); // Auto-open slot selector
       return false;
     }
@@ -1744,6 +1878,7 @@ function CheckoutPageContent() {
     // Check if slot is selected first
     if (!selectedSlot && !cartDeliverySlot) {
       setError('Please select a delivery date and time slot to place your order.');
+      setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
       setShowSlotSelector(true);
       return;
     }
@@ -1759,6 +1894,7 @@ function CheckoutPageContent() {
       const expirationStatus = getSlotExpirationStatus(currentSlot);
       if (expirationStatus === 'expired') {
         setError('Your delivery slot has expired. Please select a new slot before placing your order.');
+        setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
         setShowSlotSelector(true);
         setSelectedSlot(null);
         setFormData(prev => ({
@@ -2272,7 +2408,7 @@ function CheckoutPageContent() {
         )}
 
         {/* Delivery Slot Warning Banner - Prominent warning for expired/expiring slots */}
-        {(selectedSlot || cartDeliverySlot) && !showSlotSelector && (() => {
+        {isClient && (selectedSlot || cartDeliverySlot) && !showSlotSelector && (() => {
           const currentSlot = selectedSlot || cartDeliverySlot;
           if (!currentSlot) return null;
           
@@ -2303,8 +2439,11 @@ function CheckoutPageContent() {
                       Your selected delivery slot has expired. Please select a new slot to continue with your order.
                     </p>
                     <button
-                      onClick={() => setShowSlotSelector(true)}
-                      className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-600 transition-colors font-medium"
+                      onClick={() => {
+                        setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+                        setShowSlotSelector(true);
+                      }}
+                      className="px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-600 transition-colors font-medium"
                     >
                       Select New Slot
                     </button>
@@ -2335,15 +2474,18 @@ function CheckoutPageContent() {
                     </p>
                     <div className="flex flex-wrap gap-2">
                       <button
-                        onClick={() => setShowSlotSelector(true)}
-                        className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm border border-yellow-600 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300 rounded-lg hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition-colors font-medium"
+                        onClick={() => {
+                          setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+                          setShowSlotSelector(true);
+                        }}
+                        className="px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm border border-yellow-600 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300 rounded-lg hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition-colors font-medium"
                       >
                         Change Slot
                       </button>
                       <button
                         onClick={handlePlaceOrder}
                         disabled={loading || !selectedSlot || !isAuthenticated}
-                        className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-yellow-600 dark:bg-yellow-700 text-white rounded-lg hover:bg-yellow-700 dark:hover:bg-yellow-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm bg-yellow-600 dark:bg-yellow-700 text-white rounded-lg hover:bg-yellow-700 dark:hover:bg-yellow-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Complete Order Now
                       </button>
@@ -2400,7 +2542,7 @@ function CheckoutPageContent() {
                           value={authEmail}
                           onChange={(e) => setAuthEmail(e.target.value)}
                           required
-                          className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                          className="w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
                           placeholder="your@email.com"
                         />
                       </div>
@@ -2424,14 +2566,28 @@ function CheckoutPageContent() {
                         <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
                           Password *
                         </label>
-                        <input
-                          type="password"
-                          value={authPassword}
-                          onChange={(e) => setAuthPassword(e.target.value)}
-                          required
-                          className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
-                          placeholder="Enter your password"
-                        />
+                        <div className="relative">
+                          <input
+                            type={showLoginPassword ? 'text' : 'password'}
+                            value={authPassword}
+                            onChange={(e) => setAuthPassword(e.target.value)}
+                            required
+                            className="w-full pr-10 px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                            placeholder="Enter your password"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowLoginPassword(prev => !prev)}
+                            aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                          >
+                            {showLoginPassword ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
                       </div>
                       <button
                         type="submit"
@@ -2464,10 +2620,11 @@ function CheckoutPageContent() {
                         </label>
                         <input
                           type="text"
+                          autoComplete="name"
                           value={signupData.name}
                           onChange={(e) => setSignupData(prev => ({ ...prev, name: e.target.value }))}
                           required
-                          className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                          className="w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
                           placeholder="Enter your full name"
                         />
                       </div>
@@ -2477,9 +2634,10 @@ function CheckoutPageContent() {
                         </label>
                         <input
                           type="tel"
+                          autoComplete="tel"
                           value={signupData.phone}
                           onChange={(e) => setSignupData(prev => ({ ...prev, phone: e.target.value }))}
-                          className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                          className="w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
                           placeholder="Enter mobile number"
                         />
                       </div>
@@ -2488,27 +2646,57 @@ function CheckoutPageContent() {
                           <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
                             Password *
                           </label>
-                          <input
-                            type="password"
-                            value={signupData.password}
-                            onChange={(e) => setSignupData(prev => ({ ...prev, password: e.target.value }))}
-                            required
-                            className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
-                            placeholder="Create a password"
-                          />
+                          <div className="relative">
+                            <input
+                              type={showSignupPassword ? 'text' : 'password'}
+                              autoComplete="new-password"
+                              value={signupData.password}
+                              onChange={(e) => setSignupData(prev => ({ ...prev, password: e.target.value }))}
+                              required
+                              className="w-full pr-10 px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                              placeholder="Create a password"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowSignupPassword(prev => !prev)}
+                              aria-label={showSignupPassword ? 'Hide password' : 'Show password'}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                            >
+                              {showSignupPassword ? (
+                                <EyeOff className="w-4 h-4" />
+                              ) : (
+                                <Eye className="w-4 h-4" />
+                              )}
+                            </button>
+                          </div>
                         </div>
                         <div>
                           <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
                             Confirm Password *
                           </label>
-                          <input
-                            type="password"
-                            value={signupData.confirmPassword}
-                            onChange={(e) => setSignupData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                            required
-                            className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
-                            placeholder="Confirm password"
-                          />
+                          <div className="relative">
+                            <input
+                              type={showSignupConfirmPassword ? 'text' : 'password'}
+                              autoComplete="new-password"
+                              value={signupData.confirmPassword}
+                              onChange={(e) => setSignupData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                              required
+                              className="w-full pr-10 px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                              placeholder="Confirm password"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowSignupConfirmPassword(prev => !prev)}
+                              aria-label={showSignupConfirmPassword ? 'Hide password' : 'Show password'}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                            >
+                              {showSignupConfirmPassword ? (
+                                <EyeOff className="w-4 h-4" />
+                              ) : (
+                                <Eye className="w-4 h-4" />
+                              )}
+                            </button>
+                          </div>
                         </div>
                       </div>
                       <div>
@@ -2519,7 +2707,7 @@ function CheckoutPageContent() {
                           type="text"
                           value={signupData.referralCode}
                           onChange={(e) => setSignupData(prev => ({ ...prev, referralCode: e.target.value }))}
-                          className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                          className="w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
                           placeholder="Enter referral code"
                         />
                       </div>
@@ -2554,25 +2742,26 @@ function CheckoutPageContent() {
             )}
 
             {/* Customer Information - Collapsible on Mobile */}
-            <div id="customerInfo" className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-blue-500 dark:border-blue-400 border border-gray-200 dark:border-gray-700 overflow-hidden scroll-mt-24">
-              {/* Header - Clickable on Mobile */}
-              <button
-                onClick={() => toggleSection('customerInfo')}
-                className="w-full lg:pointer-events-none flex items-center justify-between p-3 sm:p-4 lg:p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors lg:hover:bg-transparent"
-              >
-                <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  <div className="p-1.5 sm:p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                    <User className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <span className="text-blue-900 dark:text-blue-100">Customer Information</span>
-              </h2>
-                <ChevronDown className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform duration-200 lg:hidden ${expandedSections.customerInfo ? 'rotate-180' : ''}`} />
-              </button>
-              
-              {/* Content - Collapsible on Mobile */}
-              <div className={`px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6 transition-all duration-300 lg:block ${expandedSections.customerInfo ? 'block' : 'hidden'}`}>
-                <div className="space-y-3 sm:space-y-4">
-                <div>
+            {isAuthenticated && (
+              <div id="customerInfo" className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-blue-500 dark:border-blue-400 border border-gray-200 dark:border-gray-700 overflow-hidden scroll-mt-24">
+                {/* Header - Clickable on Mobile */}
+                <button
+                  onClick={() => toggleSection('customerInfo')}
+                  className="w-full lg:pointer-events-none flex items-center justify-between p-3 sm:p-4 lg:p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors lg:hover:bg-transparent"
+                >
+                  <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                    <div className="p-1.5 sm:p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                      <User className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <span className="text-blue-900 dark:text-blue-100">Customer Information</span>
+                  </h2>
+                  <ChevronDown className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform duration-200 lg:hidden ${expandedSections.customerInfo ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {/* Content - Collapsible on Mobile */}
+                <div className={`px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6 transition-all duration-300 lg:block ${expandedSections.customerInfo ? 'block' : 'hidden'}`}>
+                  <div className="space-y-3 sm:space-y-4">
+                  <div>
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
                     Full Name *
                   </label>
@@ -2582,7 +2771,7 @@ function CheckoutPageContent() {
                     value={formData.name}
                     onChange={handleInputChange}
                     required
-                    className={`w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                    className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
                       fieldErrors.name 
                         ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
                         : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400'
@@ -2609,7 +2798,7 @@ function CheckoutPageContent() {
                       value={formData.email}
                       onChange={handleInputChange}
                       required
-                      className={`w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
                         fieldErrors.email 
                           ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
                           : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400'
@@ -2636,7 +2825,7 @@ function CheckoutPageContent() {
                       onChange={handleInputChange}
                       required
                       maxLength={15}
-                      className={`w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
                         fieldErrors.phone 
                           ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
                           : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400'
@@ -2651,9 +2840,10 @@ function CheckoutPageContent() {
                     )}
                   </div>
                   </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Delivery Address - Collapsible on Mobile */}
             <div id="deliveryAddress" className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-green-500 dark:border-green-400 border border-gray-200 dark:border-gray-700 overflow-hidden scroll-mt-24">
@@ -2675,33 +2865,29 @@ function CheckoutPageContent() {
               <div className={`px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6 transition-all duration-300 lg:block ${expandedSections.deliveryAddress ? 'block' : 'hidden'}`}>
               <div className="space-y-3 sm:space-y-4">
               <div>
-                  {/* Optional precise location capture for delivery */}
-                  <div className="mb-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
-                    <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-gray-600 dark:text-gray-300">
-                      <MapPin className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
-                      <span className="font-medium">Delivery location (optional)</span>
-                    </div>
+                  {/* Delivery location: label + Use current location button */}
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 mb-3">
+                    <label className="flex items-center gap-1.5 text-xs sm:text-sm text-gray-600 dark:text-gray-300 font-medium">
+                      <MapPin className="w-3.5 h-3.5 text-green-600 dark:text-green-400 flex-shrink-0" />
+                      Delivery location (optional)
+                    </label>
                     <button
                       type="button"
                       onClick={handleUseMyLocation}
                       disabled={isFetchingLocation}
-                      className={`group relative inline-flex items-center gap-2 text-xs sm:text-sm text-blue-700 dark:text-blue-300 font-semibold px-4 py-2 rounded-lg border-2 border-blue-400 dark:border-blue-600 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-800/30 hover:from-blue-100 hover:to-blue-200 dark:hover:from-blue-900/50 dark:hover:to-blue-800/40 hover:border-blue-500 dark:hover:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-md hover:shadow-lg hover:shadow-blue-200/50 dark:hover:shadow-blue-900/30 active:scale-95 ${
+                      className={`group relative inline-flex items-center justify-center gap-2 text-xs sm:text-sm text-blue-700 dark:text-blue-300 font-semibold px-4 py-2 rounded-lg border-2 border-blue-400 dark:border-blue-600 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-800/30 hover:from-blue-100 hover:to-blue-200 dark:hover:from-blue-900/50 dark:hover:to-blue-800/40 hover:border-blue-500 dark:hover:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-md hover:shadow-lg hover:shadow-blue-200/50 dark:hover:shadow-blue-900/30 active:scale-95 w-full sm:w-auto ${
                         isFetchingLocation ? 'grayscale-[0.3] backdrop-blur-[2px] pointer-events-none' : ''
                       }`}
                     >
-                      {/* Overlay when fetching location */}
                       {isFetchingLocation && (
-                        <div className="absolute inset-0 bg-white/30 dark:bg-gray-900/30 rounded-lg backdrop-blur-[1px] z-10"></div>
+                        <div className="absolute inset-0 bg-white/30 dark:bg-gray-900/30 rounded-lg backdrop-blur-[1px] z-10" />
                       )}
-                      {/* Subtle pulsing location indicator - only when not fetching */}
                       {!isFetchingLocation && (
-                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-blue-500 rounded-full animate-pulse opacity-80"></span>
+                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-blue-500 rounded-full animate-pulse opacity-80" />
                       )}
-                      {/* GPS/Location icon with rotation when fetching */}
                       <div className={`relative ${isFetchingLocation ? 'animate-spin' : ''}`}>
                         <Navigation className="w-4 h-4 text-blue-600 dark:text-blue-400" strokeWidth={2.5} />
                       </div>
-                      {/* Map pin icon as secondary indicator */}
                       <MapPin className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" strokeWidth={2} />
                       <span className="relative z-10">
                         {isFetchingLocation ? (
@@ -2716,40 +2902,28 @@ function CheckoutPageContent() {
                     </button>
                   </div>
 
+                  {/* Detected location block – only when location is set */}
                   {formData.address?.location && typeof formData.address.location.lat === 'number' && typeof formData.address.location.lng === 'number' && (
-                    <div className="mb-1 space-y-1">
-                      <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">
-                        Location captured: {locationName ? `${locationName} ` : ''}({formData.address.location.lat.toFixed(4)}, {formData.address.location.lng.toFixed(4)}). Add street & landmark for accurate delivery.
+                    <div className="rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 px-3 py-2.5 mb-4 space-y-1.5">
+                      <p className="text-[11px] sm:text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                        Current location detected
                       </p>
-                      {/* Location Warning (separate from error) */}
-                      {locationWarning && (
-                        <div className="p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
-                          <p className="text-[10px] sm:text-xs text-yellow-700 dark:text-yellow-300 flex items-start gap-1.5">
-                            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                            <span>{locationWarning}</span>
-                          </p>
-                        </div>
-                      )}
-                      {/* Accuracy indicator (only show if valid) */}
-                      {locationAccuracy && locationAccuracy <= 100000 && (
-                        <p className={`text-[10px] sm:text-xs flex items-center gap-1 ${
-                          locationAccuracy <= 100 
-                            ? 'text-green-600 dark:text-green-400' 
-                            : locationAccuracy <= 500 
-                              ? 'text-yellow-600 dark:text-yellow-400' 
-                              : 'text-orange-600 dark:text-orange-400'
-                        }`}>
-                          <AlertCircle className="w-3 h-3" />
-                          {locationAccuracy <= 100 
-                            ? `High accuracy (~${Math.round(locationAccuracy)}m)` 
-                            : locationAccuracy <= 500 
-                              ? `Moderate accuracy (~${Math.round(locationAccuracy)}m) - Please verify address` 
-                              : `Low accuracy (~${(locationAccuracy / 1000).toFixed(1)}km) - Location may be inaccurate, please verify and correct if needed`}
-                        </p>
-                      )}
-                      <p className="text-[10px] text-gray-400 dark:text-gray-500 italic">
-                        💡 Tip: If the location seems incorrect, please manually enter your complete address below.
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        {locationName || 'Location set'}
                       </p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400">
+                        Location already detected. Verify if it’s correct and also enter your full address below.
+                      </p>
+                      <a
+                        href={`https://www.google.com/maps?q=${formData.address.location.lat},${formData.address.location.lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 hover:underline"
+                      >
+                        <MapPin className="w-3.5 h-3.5" />
+                        View on map to verify
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
                     </div>
                   )}
 
@@ -2765,7 +2939,7 @@ function CheckoutPageContent() {
                     value={formData.address.street}
                     onChange={handleInputChange}
                     required
-                      className={`w-full px-2.5 sm:px-4 py-1.5 sm:py-2 pr-10 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 transition-all duration-300 ${
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 pr-10 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 transition-all duration-300 ${
                       fieldErrors['address.street'] 
                         ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
                           : formData.address.street && addressScore >= 75
@@ -2796,14 +2970,25 @@ function CheckoutPageContent() {
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
                       Landmark (Optional)
                     </label>
-                    <input
-                      type="text"
-                      name="address.landmark"
-                      value={formData.address.landmark}
-                      onChange={handleInputChange}
-                      className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500 dark:focus:ring-green-400 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500"
-                      placeholder="Nearby landmark or location (optional)"
-                    />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        name="address.landmark"
+                        value={formData.address.landmark}
+                        onChange={handleInputChange}
+                        className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 pr-10 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                          formData.address.landmark.trim().length >= 3
+                            ? 'border-green-400 dark:border-green-500 focus:ring-green-500 dark:focus:ring-green-400'
+                            : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
+                        }`}
+                        placeholder="Nearby landmark or location (optional)"
+                      />
+                      {formData.address.landmark.trim().length >= 3 && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                          <CheckCircle className="w-5 h-5 text-green-500 dark:text-green-400 animate-in fade-in duration-300" />
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -2816,7 +3001,7 @@ function CheckoutPageContent() {
                       value={formData.address.city}
                       onChange={handleInputChange}
                       required
-                      className={`w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
                         fieldErrors['address.city'] 
                           ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
                           : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
@@ -2843,7 +3028,7 @@ function CheckoutPageContent() {
                       value={formData.address.state}
                       onChange={handleInputChange}
                       required
-                      className={`w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
                         fieldErrors['address.state'] 
                           ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
                           : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
@@ -2869,7 +3054,7 @@ function CheckoutPageContent() {
                       onChange={handleInputChange}
                       required
                       maxLength={6}
-                      className={`w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
                         fieldErrors['address.zip_code'] 
                           ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
                           : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
@@ -2914,7 +3099,7 @@ function CheckoutPageContent() {
                 </div>
               )}
               {/* Always-visible slot display */}
-              {(selectedSlot || cartDeliverySlot) && !showSlotSelector && (() => {
+              {isClient && (selectedSlot || cartDeliverySlot) && !showSlotSelector && (() => {
                 const currentSlot = selectedSlot || cartDeliverySlot;
                 const expirationStatus = getSlotExpirationStatus(currentSlot);
                 const isExpired = expirationStatus === 'expired';
@@ -2942,9 +3127,11 @@ function CheckoutPageContent() {
                   badgeBorder = 'border-2 border-green-200 dark:border-green-800';
                   badgeText = 'text-green-800 dark:text-green-300';
                   badgeIcon = <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 dark:text-green-400 flex-shrink-0" />;
-                  badgeMessage = countdown 
-                    ? `Slot expires in ${countdown.hours}h ${countdown.minutes}m`
-                    : 'Delivery Slot Selected';
+                  badgeMessage = isAutoSelected && selectedSlot
+                    ? 'Delivery Slot Pre-selected (Earliest Available)'
+                    : countdown 
+                      ? `Slot expires in ${countdown.hours}h ${countdown.minutes}m`
+                      : 'Delivery Slot Selected';
                 }
                 
                 return (
@@ -2953,22 +3140,33 @@ function CheckoutPageContent() {
                       <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
                         {badgeIcon}
                         <div className="flex-1 min-w-0">
-                          <p className={`text-xs sm:text-sm font-medium ${badgeText} mb-1`}>
-                            {badgeMessage}
-                          </p>
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <p className={`text-xs sm:text-sm font-medium ${badgeText}`}>
+                              {badgeMessage}
+                            </p>
+                            {isAutoSelected && selectedSlot && (
+                              <span className="px-2 py-0.5 text-[10px] sm:text-xs font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded border border-blue-200 dark:border-blue-800">
+                                Auto-selected
+                              </span>
+                            )}
+                          </div>
                           <p className={`text-xs sm:text-sm ${badgeText} opacity-90`}>
                             {formatDeliveryDate(currentSlot.date)} • {formatTimeSlot(currentSlot)}
-                            </p>
-                          </div>
+                          </p>
                         </div>
+                      </div>
                       <button
-                        onClick={() => setShowSlotSelector(true)}
+                        onClick={() => {
+                          setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+                          setShowSlotSelector(true);
+                          setIsAutoSelected(false); // Clear auto-selected flag when user manually changes
+                        }}
                         className="px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium whitespace-nowrap flex-shrink-0"
                       >
                         Change
                       </button>
-                      </div>
                     </div>
+                  </div>
                 );
               })()}
                   
@@ -2976,7 +3174,10 @@ function CheckoutPageContent() {
                 /* Show Select Button if no slot */
                 !(selectedSlot || cartDeliverySlot) && (
                   <button
-                    onClick={() => setShowSlotSelector(true)}
+                    onClick={() => {
+                      setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+                      setShowSlotSelector(true);
+                    }}
                     className="w-full px-3 sm:px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
                   >
                     Select Delivery Slot
@@ -3094,7 +3295,7 @@ function CheckoutPageContent() {
                 onChange={handleInputChange}
                   rows={3}
                 maxLength={150}
-                  className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:focus:ring-gray-400 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                  className="w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:focus:ring-gray-400 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500"
                 placeholder="Any special delivery instructions or notes (optional)..."
               />
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 sm:mt-2">
@@ -3363,8 +3564,8 @@ function CheckoutPageContent() {
                 </div>
               </div>
 
-              {/* Error Alert - Desktop Only - Above Place Order Button */}
-              {(error || (!selectedSlot && !cartDeliverySlot)) && (
+              {/* Error Alert - Desktop Only - Shown when user tries to place order without slot or other validation fails */}
+              {error && (
                 <div 
                   data-error-alert
                   className="hidden lg:block mb-3 p-3 sm:p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-800 rounded-lg"
@@ -3378,9 +3579,12 @@ function CheckoutPageContent() {
                       <p className="text-xs sm:text-sm text-red-700 dark:text-red-400">
                         {error || 'Please select a delivery date and time slot to place your order.'}
                       </p>
-                      {!selectedSlot && !cartDeliverySlot && !error && (
+                      {(!selectedSlot && !cartDeliverySlot) && (
                         <button
-                          onClick={() => setShowSlotSelector(true)}
+                          onClick={() => {
+                            setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+                            setShowSlotSelector(true);
+                          }}
                           className="mt-2 px-3 py-1.5 text-xs bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-600 transition-colors font-medium"
                         >
                           Select Delivery Slot
@@ -3440,8 +3644,8 @@ function CheckoutPageContent() {
       {/* Mobile Sticky Checkout Bar */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-2xl dark:shadow-black/50 z-40">
         <div className="max-w-7xl mx-auto px-3 py-2.5">
-          {/* Error Alert - Mobile - Above Place Order Button */}
-          {(error || (!selectedSlot && !cartDeliverySlot)) && (
+          {/* Error Alert - Mobile - Shown when user tries to place order without slot or other validation fails */}
+          {error && (
             <div 
               data-error-alert
               className="mb-2 p-3 bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-800 rounded-lg"
@@ -3455,9 +3659,12 @@ function CheckoutPageContent() {
                   <p className="text-[11px] text-red-700 dark:text-red-400 leading-tight">
                     {error || 'Please select a delivery date and time slot to place your order.'}
                   </p>
-                  {!selectedSlot && !cartDeliverySlot && !error && (
+                  {(!selectedSlot && !cartDeliverySlot) && (
                     <button
-                      onClick={() => setShowSlotSelector(true)}
+                      onClick={() => {
+                        setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+                        setShowSlotSelector(true);
+                      }}
                       className="mt-1.5 px-2.5 py-1 text-[10px] bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-600 transition-colors font-medium"
                     >
                       Select Slot
@@ -3826,6 +4033,23 @@ function CheckoutPageContent() {
 }
 
 export default function CheckoutPage() {
-  return <CheckoutPageContent />;
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
+          <div className="h-6 w-40 bg-gray-200 dark:bg-gray-800 rounded" />
+          <div className="mt-4 h-32 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700" />
+        </div>
+      </div>
+    );
+  }
+
+  return <CheckoutPageContent isClient />;
 }
 

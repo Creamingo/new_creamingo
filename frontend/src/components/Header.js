@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter, usePathname } from 'next/navigation'
 import { 
   Search, 
@@ -31,7 +32,9 @@ import { usePinCode } from '../contexts/PinCodeContext'
 import { useCategoryMenu } from '../contexts/CategoryMenuContext'
 import { useCart } from '../contexts/CartContext'
 import { useCustomerAuth } from '../contexts/CustomerAuthContext'
+import { useAuthModal } from '../contexts/AuthModalContext'
 import CartDisplay from './CartDisplay'
+import AuthModal from './AuthModal'
 import categoryApi from '../api/categoryApi'
 import productApi from '../api/productApi'
 import { formatPrice } from '../utils/priceFormatter'
@@ -161,17 +164,27 @@ const Header = () => {
 
   // Get authentication state
   const { isAuthenticated, customer, logout } = useCustomerAuth()
+  const { isAuthModalOpen, authRedirectPath, openAuthModal, closeAuthModal } = useAuthModal()
+
+  const handleAuthSuccess = () => {
+    closeAuthModal()
+    if (authRedirectPath) {
+      router.push(authRedirectPath)
+    }
+  }
 
   // Dynamic useful links based on authentication state
   const usefulLinks = isAuthenticated ? [
     { icon: User, label: 'Profile', href: '/profile' },
     { icon: ClipboardList, label: 'Order History', href: '/orders' },
     { icon: Star, label: 'Midnight Wish', href: '/midnight-wish' },
+    { icon: Heart, label: 'Fulfill a wish', href: '/midnight-wish/fulfill' },
     { icon: Store, label: 'Become a Vendor', href: '/vendor' },
     { icon: LogOut, label: 'Logout', href: '#', isLogout: true }
   ] : [
-    { icon: LogIn, label: 'Login', href: '/login' },
-    { icon: UserPlus, label: 'Sign Up', href: '/signup' }
+    { icon: Star, label: 'Midnight wish', href: '/midnight-wish' },
+    { icon: Heart, label: 'Fulfill a wish', href: '/midnight-wish/fulfill' },
+    { icon: LogIn, label: 'Log in / Sign up', href: '#', isAuth: true }
   ]
 
   const trendingSearches = [
@@ -731,7 +744,14 @@ const Header = () => {
               {(!mounted || !isOnPDP) && (
                 <button
                   onClick={() => {
-                    // On mobile, if on account page, navigate back; otherwise navigate to account
+                    if (!isAuthenticated) {
+                      if (pathname === '/account') {
+                        router.push('/')
+                        return
+                      }
+                      openAuthModal('/account')
+                      return
+                    }
                     if (pathname === '/account') {
                       router.push('/')
                     } else {
@@ -788,14 +808,16 @@ const Header = () => {
                     </div>
                   </button>
                   
-                  {/* Desktop Menu Side Panel */}
-                  {(isCategoryMenuOpen || isMenuClosing) && (
-                    <div 
-                      id="desktop-category-menu"
-                      role="dialog"
-                      aria-modal="true"
-                      aria-label="Category menu"
-                      className="fixed top-16 bottom-0 left-0 w-[30vw] min-w-[320px] max-w-[500px] bg-white dark:bg-gray-800 shadow-2xl dark:shadow-black/50 z-[9999] lg:block hidden overflow-y-auto"
+                  {/* Desktop Menu: portaled to body so it opens reliably on laptop (avoids header stacking context) */}
+                  {typeof document !== 'undefined' && (isCategoryMenuOpen || isMenuClosing) && createPortal(
+                    <>
+                      <div className="hidden lg:block fixed inset-0 top-16 z-[100] bg-black/40 backdrop-blur-[2px]" onClick={closeCategoryMenu} aria-hidden="true" />
+                      <div 
+                        id="desktop-category-menu"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="Category menu"
+                        className="hidden lg:block fixed top-16 bottom-0 left-0 w-[30vw] min-w-[320px] max-w-[500px] bg-white dark:bg-gray-800 shadow-2xl dark:shadow-black/50 z-[101] overflow-y-auto"
                       style={{ 
                         animation: isMenuClosing 
                           ? 'slideOutLeft 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)' 
@@ -1085,6 +1107,8 @@ const Header = () => {
                                   if (link.isLogout) {
                                     // Handle logout
                                     await logout()
+                                  } else if (link.isAuth) {
+                                    openAuthModal()
                                   } else {
                                     // Navigate to link
                                     router.push(link.href)
@@ -1104,7 +1128,11 @@ const Header = () => {
                       {/* Bottom padding to ensure all content is scrollable */}
                       <div className="h-12"></div>
                     </div>
-                  )}
+                    </>
+                  ,
+                  document.body,
+                  'desktop-category-menu-portal'
+                )}
                 </div>
                 
                 {/* Desktop Logo */}
@@ -1820,27 +1848,28 @@ const Header = () => {
           </>
         )}
 
-        {/* Mobile Backdrop Overlay */}
-        {(isCategoryMenuOpen || isMenuClosing) && (
-          <div 
-            className="fixed top-[3.6rem] left-0 right-0 bottom-0 bg-black/50 backdrop-blur-sm z-[45] lg:hidden"
-            style={{ 
-              animation: isMenuClosing 
-                ? 'fadeOut 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)' 
-                : 'fadeIn 200ms ease-out' 
-            }}
-            onClick={closeCategoryMenu}
-          />
-        )}
+        {/* Mobile category menu: portaled to body; positioned above sticky footer */}
+        {typeof document !== 'undefined' && (isCategoryMenuOpen || isMenuClosing) && createPortal(
+          <>
+            {/* Mobile Backdrop Overlay - above sticky footer */}
+            <div 
+              className="fixed top-[3.6rem] left-0 right-0 bottom-[3.6rem] bg-black/50 backdrop-blur-sm z-[51] lg:hidden"
+              style={{ 
+                animation: isMenuClosing 
+                  ? 'fadeOut 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)' 
+                  : 'fadeIn 200ms ease-out' 
+              }}
+              onClick={closeCategoryMenu}
+              aria-hidden="true"
+            />
 
-        {/* Mobile Menu Side Panel */}
-        {(isCategoryMenuOpen || isMenuClosing) && (
-          <div
-            id="mobile-category-menu"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Category menu"
-            className="fixed top-[3.6rem] bottom-16 left-0 w-[90vw] max-w-sm bg-white dark:bg-gray-800 shadow-2xl dark:shadow-black/50 z-50 lg:hidden overflow-y-auto"
+            {/* Mobile Menu Side Panel - positioned above sticky footer */}
+            <div
+              id="mobile-category-menu"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Category menu"
+              className="fixed top-[3.6rem] bottom-[3.6rem] left-0 w-[90vw] max-w-sm bg-white dark:bg-gray-800 shadow-2xl dark:shadow-black/50 z-[52] lg:hidden overflow-y-auto"
             style={{ 
               animation: isMenuClosing 
                 ? 'slideOutLeft 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)' 
@@ -2056,6 +2085,8 @@ const Header = () => {
                       if (link.isLogout) {
                         // Handle logout
                         await logout()
+                      } else if (link.isAuth) {
+                        openAuthModal()
                       } else {
                         // Navigate to link
                         router.push(link.href)
@@ -2071,11 +2102,20 @@ const Header = () => {
                 ))}
               </div>
             </div>
-            {/* Bottom padding to ensure all content is scrollable */}
-            <div className="h-4"></div>
+            {/* Bottom padding for better spacing */}
+            <div className="h-4 min-h-[1rem]"></div>
           </div>
+          </>,
+          document.body,
+          'mobile-category-menu-portal'
         )}
       </div>
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={closeAuthModal}
+        onSuccess={handleAuthSuccess}
+      />
 
       {/* Cart Display Modal */}
       <CartDisplay isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />

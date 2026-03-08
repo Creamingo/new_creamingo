@@ -266,6 +266,7 @@ CREATE TABLE one_rupee_deals (
     id INT PRIMARY KEY AUTO_INCREMENT,
     deal_title VARCHAR(200) NOT NULL,
     product_id INT NOT NULL,
+    variant_id INT NULL,
     threshold_amount DECIMAL(10, 2) NOT NULL,
     deal_price DECIMAL(10, 2) DEFAULT 1.00,
     max_quantity_per_order INT DEFAULT 1,
@@ -275,7 +276,8 @@ CREATE TABLE one_rupee_deals (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     
-    UNIQUE(product_id, threshold_amount)
+    UNIQUE(product_id, threshold_amount),
+    FOREIGN KEY (variant_id) REFERENCES product_variants(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Table: delivery_tracking

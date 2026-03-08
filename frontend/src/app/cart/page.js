@@ -28,13 +28,17 @@ import { usePinCode } from '../../contexts/PinCodeContext';
 import { useToast } from '../../contexts/ToastContext';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
+import MobileFooter from '../../components/MobileFooter';
 import CartDeals from '../../components/CartDeals';
+import ConfirmModal from '../../components/ConfirmModal';
 import promoCodeApi from '../../api/promoCodeApi';
 import promoCodeTrackingApi from '../../api/promoCodeTrackingApi';
 import productApi from '../../api/productApi';
+import addOnApi from '../../api/addOnApi';
 import settingsApi from '../../api/settingsApi';
 import { formatPrice } from '../../utils/priceFormatter';
 import { resolveImageUrl } from '../../utils/imageUrl';
+import { getRecommendationConfig } from '../../utils/cartRecommendationRules';
 
 // Helper functions for formatting dates and times
 const formatDeliveryDate = (date) => {
@@ -149,6 +153,7 @@ export default function CartPage() {
     removeSavedItem,
     updateComboItemQuantity,
     removeComboItem,
+    updateCartItemCombos,
     autoUpdateExpiredSlots,
     addToCart
   } = useCart();
@@ -225,7 +230,7 @@ export default function CartPage() {
     currentPinCode 
   } = usePinCode();
   
-  const { showSuccess, showError } = useToast();
+  const { showSuccess, showError, showInfo } = useToast();
 
   const [promoCode, setPromoCode] = useState('');
   const [appliedPromo, setAppliedPromo] = useState(null);
@@ -249,46 +254,52 @@ export default function CartPage() {
   const [selectedItemForActions, setSelectedItemForActions] = useState(null);
   const [suggestedProducts, setSuggestedProducts] = useState([]);
   const [suggestedProductsLoading, setSuggestedProductsLoading] = useState(false);
+  // Recommendation sections: addOns, gift (flowers/sweets), smallTreats (3 sections only)
+  const [suggestedSections, setSuggestedSections] = useState({
+    addOns: [],
+    gift: [],
+    smallTreats: []
+  });
+  const [suggestedSectionsLoading, setSuggestedSectionsLoading] = useState(false);
   const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState(1500); // Default value, will be fetched from API
+  const [confirmModal, setConfirmModal] = useState({
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Delete',
+    cancelLabel: 'Cancel',
+    variant: 'danger',
+    onConfirm: null
+  });
 
-  // Fetch suggested products from Small Treats Desserts and Sweets and Dry Fruits
+  const openConfirmModal = (options) => {
+    setConfirmModal(prev => ({ ...prev, open: true, ...options }));
+  };
+  const closeConfirmModal = () => {
+    setConfirmModal(prev => ({ ...prev, open: false, onConfirm: null }));
+  };
+  const handleConfirmModalConfirm = () => {
+    confirmModal.onConfirm?.();
+    closeConfirmModal();
+  };
+
+  // Fetch suggested products (legacy single list, kept for fallback)
   useEffect(() => {
     const fetchSuggestedProducts = async () => {
       if (!mounted || !isInitialized) return;
       
       setSuggestedProductsLoading(true);
       try {
-        // Fetch products from both categories
         const [treatsResponse, sweetsResponse] = await Promise.all([
-          productApi.getProductsByCategory('small-treats-desserts', null, { 
-            page: 1, 
-            limit: 8
-          }),
-          productApi.getProductsByCategory('sweets-dry-fruits', null, { 
-            page: 1, 
-            limit: 8
-          })
+          productApi.getProductsByCategory('small-treats-desserts', null, { page: 1, limit: 8 }),
+          productApi.getProductsByCategory('sweets-dry-fruits', null, { page: 1, limit: 8 })
         ]);
-
-        // Combine products from both categories
         const treatsProducts = treatsResponse?.products || treatsResponse?.data?.products || [];
         const sweetsProducts = sweetsResponse?.products || sweetsResponse?.data?.products || [];
-        
-        // Mix and randomize products
         const allProducts = [...treatsProducts, ...sweetsProducts];
-        
-        // Shuffle array to randomize
         const shuffled = allProducts.sort(() => Math.random() - 0.5);
-        
-        // Take 12-15 products (or all if less)
-        const selectedProducts = shuffled.slice(0, Math.min(15, shuffled.length));
-        
-        // Filter out products already in cart
         const cartProductIds = new Set(cartItems.map(item => item.product?.id));
-        const filteredProducts = selectedProducts.filter(product => 
-          !cartProductIds.has(product.id)
-        );
-        
+        const filteredProducts = shuffled.filter(p => !cartProductIds.has(p.id)).slice(0, 15);
         setSuggestedProducts(filteredProducts);
       } catch (error) {
         console.error('Error fetching suggested products:', error);
@@ -297,9 +308,70 @@ export default function CartPage() {
         setSuggestedProductsLoading(false);
       }
     };
-
     fetchSuggestedProducts();
   }, [mounted, isInitialized, cartItems.length]);
+
+  // Fetch recommendation sections using rules (when to show flowers vs sweets vs small treats, limits)
+  const cartTotalForRules = useMemo(() => cartItems.reduce((sum, i) => sum + (i.totalPrice || 0), 0), [cartItems]);
+  useEffect(() => {
+    const extractProducts = (res) => res?.products || res?.data?.products || [];
+    const cartProductIds = new Set(cartItems.map(item => item.product?.id));
+    const config = getRecommendationConfig(cartItems);
+
+    const fetchSections = async () => {
+      if (!mounted || !isInitialized) return;
+      setSuggestedSectionsLoading(true);
+      try {
+        const promises = [];
+
+        if (config.fetchAddOns) {
+          promises.push(addOnApi.getAddOnProducts());
+        }
+        if (config.fetchGift) {
+          promises.push(productApi.getProductsByCategory('flowers', null, { page: 1, limit: config.flowersLimit }));
+          promises.push(productApi.getProductsByCategory('sweets-dry-fruits', null, { page: 1, limit: config.sweetsLimit }));
+        }
+        if (config.fetchSmallTreats) {
+          promises.push(productApi.getProductsByCategory('small-treats-desserts', null, { page: 1, limit: config.smallTreatsLimit }));
+        }
+
+        const results = await Promise.all(promises);
+        let idx = 0;
+
+        const addOns = config.fetchAddOns
+          ? (Array.isArray(results[idx]) ? results[idx] : []).slice(0, config.addOnsLimit)
+          : [];
+        if (config.fetchAddOns) idx += 1;
+
+        let gift = [];
+        if (config.fetchGift) {
+          const flowers = extractProducts(results[idx]);
+          const sweets = extractProducts(results[idx + 1]);
+          idx += 2;
+          gift = [...flowers, ...sweets]
+            .sort(() => Math.random() - 0.5)
+            .filter(p => !cartProductIds.has(p.id))
+            .slice(0, config.totalGiftLimit);
+        }
+
+        const smallTreats = config.fetchSmallTreats
+          ? extractProducts(results[idx]).filter(p => !cartProductIds.has(p.id)).slice(0, config.smallTreatsLimit)
+          : [];
+
+        setSuggestedSections({
+          addOns,
+          gift,
+          smallTreats
+        });
+      } catch (error) {
+        console.error('Error fetching recommendation sections:', error);
+        setSuggestedSections({ addOns: [], gift: [], smallTreats: [] });
+      } finally {
+        setSuggestedSectionsLoading(false);
+      }
+    };
+    fetchSections();
+  }, [mounted, isInitialized, cartItems.length, cartTotalForRules]);
 
   // Expand all items by default when cart items change
   useEffect(() => {
@@ -462,15 +534,20 @@ export default function CartPage() {
   };
 
   const handleRemoveItem = async (itemId) => {
-    // Show confirmation dialog
-    if (!window.confirm('Do you want to delete this item?')) return;
-    
-    // User confirmed deletion
-    setRemovingItemId(itemId);
-    setTimeout(() => {
-      removeFromCart(itemId);
-      setRemovingItemId(null);
-    }, 300);
+    openConfirmModal({
+      title: 'Remove item?',
+      message: 'Do you want to delete this item from your cart?',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      variant: 'danger',
+      onConfirm: () => {
+        setRemovingItemId(itemId);
+        setTimeout(() => {
+          removeFromCart(itemId);
+          setRemovingItemId(null);
+        }, 300);
+      }
+    });
   };
 
   // Handle combo item quantity change
@@ -489,11 +566,18 @@ export default function CartPage() {
     const combo = item?.combos?.find(c => 
       c.id === comboId || (c.product_id && c.product_id.toString() === comboId.toString())
     );
-    
-    if (combo && window.confirm(`Remove ${combo.product_name} from combo?`)) {
-      removeComboItem(itemId, comboId);
-      showSuccess('Combo Item Removed', `${combo.product_name} has been removed from the combo.`);
-    }
+    if (!combo) return;
+    openConfirmModal({
+      title: 'Remove from combo?',
+      message: `Remove ${combo.product_name} from this combo?`,
+      confirmLabel: 'Remove',
+      cancelLabel: 'Cancel',
+      variant: 'danger',
+      onConfirm: () => {
+        removeComboItem(itemId, comboId);
+        showSuccess('Combo Item Removed', `${combo.product_name} has been removed from the combo.`);
+      }
+    });
   };
 
   // Load applied promo from localStorage on mount and sync with localStorage
@@ -617,12 +701,20 @@ export default function CartPage() {
   };
 
   const handleRemoveSavedItem = (savedItemId) => {
-    if (!window.confirm('Remove this item from saved items?')) return;
-    setRemovingSavedItemId(savedItemId);
-    setTimeout(() => {
-      removeSavedItem(savedItemId);
-      setRemovingSavedItemId(null);
-    }, 300);
+    openConfirmModal({
+      title: 'Remove from saved?',
+      message: 'Remove this item from saved items?',
+      confirmLabel: 'Remove',
+      cancelLabel: 'Cancel',
+      variant: 'danger',
+      onConfirm: () => {
+        setRemovingSavedItemId(savedItemId);
+        setTimeout(() => {
+          removeSavedItem(savedItemId);
+          setRemovingSavedItemId(null);
+        }, 300);
+      }
+    });
   };
 
   // Real-time validation with debouncing
@@ -1117,7 +1209,7 @@ export default function CartPage() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header />
       
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 pb-20 lg:pb-8">
+      <div className={`max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 lg:pb-8 ${mounted && isInitialized && cartItems.length > 0 ? 'pb-40' : 'pb-20'}`}>
         {/* Page Header */}
         <div className="mb-3 sm:mb-4">
           <div className="flex items-center justify-between">
@@ -1220,6 +1312,7 @@ export default function CartPage() {
                               src={resolveImageUrl(item.product.image_url)}
                               alt={item.product.name}
                               className="w-full h-full object-cover"
+                              loading="lazy"
                             />
                           </div>
 
@@ -1441,6 +1534,7 @@ export default function CartPage() {
                               src={resolveImageUrl(item.product.image_url)}
                               alt={item.product.name}
                               className="w-full h-full object-cover"
+                              loading="lazy"
                             />
                             {/* Product Number Label */}
                             <div className="absolute top-0 left-0 bg-gradient-to-r from-blue-600 to-blue-500 dark:from-blue-500 dark:to-blue-600 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded-br-md shadow-sm z-10 leading-tight">
@@ -1591,6 +1685,7 @@ export default function CartPage() {
                                 src={resolveImageUrl(item.product.image_url)}
                                 alt={item.product.name}
                                 className="w-full h-full object-cover"
+                                loading="lazy"
                               />
                             </div>
 
@@ -1742,64 +1837,62 @@ export default function CartPage() {
                                   
                                   return (
                                   <div
-                                      key={comboId}
-                                    className="flex items-center justify-between gap-2 bg-gray-50 dark:bg-gray-800/60 rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-700"
-                                    >
-                                      {/* Combo Item Info */}
-                                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                                        <Package className="w-4 h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
-                                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                                          {combo.product_name}
+                                    key={comboId}
+                                    className="flex flex-col gap-2 bg-gray-50 dark:bg-gray-800/60 rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-700 items-start"
+                                  >
+                                    {/* Combo Item Title */}
+                                    <div className="flex items-center gap-2 min-w-0 w-full">
+                                      <Package className="w-4 h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
+                                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap overflow-x-auto no-scrollbar">
+                                        {combo.product_name}
+                                      </span>
+                                    </div>
+
+                                    {/* Controls Row */}
+                                    <div className="flex items-center gap-2 flex-wrap justify-start w-full">
+                                      <div className="flex items-center gap-1 border border-gray-300 dark:border-gray-600 rounded-lg p-1 bg-white dark:bg-gray-700">
+                                        <button
+                                          onClick={() => handleComboQuantityChange(item.id, comboId, combo.quantity - 1)}
+                                          disabled={isRemoving}
+                                          className="w-7 h-7 flex items-center justify-center bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded transition-colors disabled:opacity-50 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
+                                          title="Decrease quantity"
+                                        >
+                                          <Minus className="w-3.5 h-3.5" />
+                                        </button>
+                                        <span className="w-8 text-center text-xs font-semibold text-gray-900 dark:text-gray-100">
+                                          {combo.quantity}
+                                        </span>
+                                        <button
+                                          onClick={() => handleComboQuantityChange(item.id, comboId, combo.quantity + 1)}
+                                          disabled={isRemoving}
+                                          className="w-7 h-7 flex items-center justify-center bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded transition-colors disabled:opacity-50 text-pink-600 dark:text-pink-400 hover:text-pink-700 dark:hover:text-pink-300"
+                                          title="Increase quantity"
+                                        >
+                                          <Plus className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+
+                                      <div className="flex items-center gap-1.5">
+                                        {hasDiscount && (
+                                          <span className="text-xs text-gray-400 dark:text-gray-500 line-through">
+                                            {formatPrice(originalTotal)}
+                                          </span>
+                                        )}
+                                        <span className="text-sm font-semibold text-purple-600 dark:text-purple-400">
+                                          {formatPrice(comboTotal)}
                                         </span>
                                       </div>
 
-                                      {/* Quantity Controls */}
-                                      <div className="flex items-center gap-2">
-                                        <div className="flex items-center gap-1 border border-gray-300 dark:border-gray-600 rounded-lg p-1 bg-white dark:bg-gray-700">
-                                          <button
-                                            onClick={() => handleComboQuantityChange(item.id, comboId, combo.quantity - 1)}
-                                            disabled={isRemoving}
-                                            className="w-7 h-7 flex items-center justify-center bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded transition-colors disabled:opacity-50 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
-                                            title="Decrease quantity"
-                                          >
-                                            <Minus className="w-3.5 h-3.5" />
-                                          </button>
-                                          <span className="w-8 text-center text-xs font-semibold text-gray-900 dark:text-gray-100">
-                                            {combo.quantity}
-                                          </span>
-                                          <button
-                                            onClick={() => handleComboQuantityChange(item.id, comboId, combo.quantity + 1)}
-                                            disabled={isRemoving}
-                                            className="w-7 h-7 flex items-center justify-center bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded transition-colors disabled:opacity-50 text-pink-600 dark:text-pink-400 hover:text-pink-700 dark:hover:text-pink-300"
-                                            title="Increase quantity"
-                                          >
-                                            <Plus className="w-3.5 h-3.5" />
-                                          </button>
-                                        </div>
-
-                                        {/* Price */}
-                                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                                          {hasDiscount && (
-                                            <span className="text-xs text-gray-400 dark:text-gray-500 line-through">
-                                              {formatPrice(originalTotal)}
-                                            </span>
-                                          )}
-                                          <span className="text-sm font-semibold text-purple-600 dark:text-purple-400">
-                                            {formatPrice(comboTotal)}
-                                          </span>
-                                        </div>
-
-                                        {/* Delete Button */}
-                                        <button
-                                          onClick={() => handleRemoveComboItem(item.id, comboId)}
-                                          disabled={isRemoving}
-                                          className="p-1.5 text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
-                                          title="Remove combo item"
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                      </div>
+                                      <button
+                                        onClick={() => handleRemoveComboItem(item.id, comboId)}
+                                        disabled={isRemoving}
+                                        className="p-1.5 text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
+                                        title="Remove combo item"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
                                     </div>
+                                  </div>
                                   );
                                 })}
                               </div>
@@ -1819,6 +1912,7 @@ export default function CartPage() {
                                 src={resolveImageUrl(item.product.image_url)}
                                 alt={item.product.name}
                                 className="w-full h-full object-cover"
+                                loading="lazy"
                               />
                             </div>
 
@@ -1987,18 +2081,18 @@ export default function CartPage() {
                                     return (
                                       <div
                                         key={comboId}
-                                        className="flex items-center justify-between gap-2 bg-gray-50 dark:bg-gray-800/60 rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-700"
+                                        className="flex flex-col gap-2 bg-gray-50 dark:bg-gray-800/60 rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-700 items-start"
                                       >
-                                        {/* Combo Item Info */}
-                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                        {/* Combo Item Title */}
+                                        <div className="flex items-center gap-2 min-w-0 w-full">
                                           <Package className="w-4 h-4 sm:w-4 sm:h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
-                                          <span className="text-sm sm:text-base font-medium text-gray-900 dark:text-gray-100 truncate">
+                                          <span className="text-sm sm:text-base font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap overflow-x-auto no-scrollbar">
                                             {combo.product_name}
                                           </span>
                                         </div>
 
-                                        {/* Quantity Controls */}
-                                        <div className="flex items-center gap-2">
+                                        {/* Controls Row */}
+                                        <div className="flex items-center gap-2 flex-wrap justify-start w-full">
                                           <div className="flex items-center gap-1 border border-gray-300 dark:border-gray-600 rounded-lg p-1 bg-white dark:bg-gray-700">
                                             <button
                                               onClick={() => handleComboQuantityChange(item.id, comboId, combo.quantity - 1)}
@@ -2021,8 +2115,7 @@ export default function CartPage() {
                                             </button>
                                           </div>
 
-                                          {/* Price */}
-                                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                                          <div className="flex items-center gap-1.5">
                                             {hasDiscount && (
                                               <span className="text-xs sm:text-sm text-gray-400 dark:text-gray-500 line-through">
                                                 {formatPrice(originalTotal)}
@@ -2033,11 +2126,10 @@ export default function CartPage() {
                                             </span>
                                           </div>
 
-                                          {/* Delete Button */}
                                           <button
                                             onClick={() => handleRemoveComboItem(item.id, comboId)}
                                             disabled={isRemoving}
-                                            className="p-1.5 text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
+                                            className="p-1.5 text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
                                             title="Remove combo item"
                                           >
                                             <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -2208,6 +2300,7 @@ export default function CartPage() {
                                 src={resolveImageUrl(item.product.image_url)}
                                 alt={item.product.name}
                                 className="w-full h-full object-cover"
+                                loading="lazy"
                               />
                             </div>
 
@@ -2624,7 +2717,7 @@ export default function CartPage() {
                           onClick={() => setIsSuggestedPromosOpen(!isSuggestedPromosOpen)}
                           className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                         >
-                          {isSuggestedPromosOpen ? 'Hide' : 'Show'}
+                          {isSuggestedPromosOpen ? 'Hide' : 'View Promos'}
                         </button>
                       </div>
                       {isSuggestedPromosOpen && (
@@ -2688,7 +2781,7 @@ export default function CartPage() {
                 {/* Checkout Button - Hidden on mobile, shown on desktop */}
                 <button
                   onClick={handleCheckout}
-                  className="hidden lg:block w-full py-3 sm:py-4 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white rounded-lg hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all duration-200 font-semibold text-base sm:text-lg shadow-lg dark:shadow-xl dark:shadow-black/30 hover:shadow-xl transform hover:scale-[1.02]"
+                  className="hidden lg:block w-full min-h-[48px] py-2 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white rounded-lg hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all duration-200 font-semibold text-base sm:text-lg shadow-lg dark:shadow-xl dark:shadow-black/30 hover:shadow-xl transform hover:scale-[1.02]"
                 >
                   PROCEED TO CHECKOUT
                 </button>
@@ -2702,126 +2795,206 @@ export default function CartPage() {
               </div>
 
               {/* You May Also Like Section - Collapsible */}
-              <div className="mt-4 sm:mt-6 mb-12 lg:mb-0 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-xl dark:shadow-black/20 p-4 sm:p-6 lg:overflow-hidden lg:min-w-0 lg:max-w-full lg:w-full">
+              <div className="mt-8 sm:mt-10 mb-0 bg-gradient-to-br from-pink-50/80 to-rose-50/60 dark:from-pink-900/10 dark:to-rose-900/10 rounded-xl border border-pink-200/60 dark:border-pink-800/50 shadow-md dark:shadow-xl dark:shadow-black/20 p-4 sm:p-6 lg:overflow-hidden lg:min-w-0 lg:max-w-full lg:w-full">
                 <button
                   onClick={() => setIsYouMayAlsoLikeOpen(!isYouMayAlsoLikeOpen)}
-                  className="flex items-center justify-between w-full mb-2 sm:mb-4"
+                  className="flex items-center justify-between w-full mb-2 sm:mb-4 group/header"
                 >
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-pink-600 dark:text-pink-400" />
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 rounded-lg bg-pink-100 dark:bg-pink-900/40">
+                      <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-pink-600 dark:text-pink-400" />
+                    </div>
                     <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">You May Also Like</h3>
                 </div>
                   {isYouMayAlsoLikeOpen ? (
-                    <ChevronUp className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                    <ChevronUp className="w-4 h-4 text-pink-500 dark:text-pink-400" />
                   ) : (
-                    <ChevronDown className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                    <ChevronDown className="w-4 h-4 text-pink-500 dark:text-pink-400" />
                   )}
                 </button>
                 {isYouMayAlsoLikeOpen && (
                   <>
-                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 mb-3 sm:mb-4">
+                    <p className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 mb-4 sm:mb-5">
                       Add these popular items to complete your order
                     </p>
                     
-                    {suggestedProductsLoading ? (
+                    {suggestedSectionsLoading ? (
                       <div className="text-center py-6 sm:py-8">
                         <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-pink-600"></div>
                         <p className="text-xs sm:text-sm text-gray-400 dark:text-gray-500 mt-2">Loading suggestions...</p>
                       </div>
-                    ) : suggestedProducts.length === 0 ? (
+                    ) : (suggestedSections.addOns.length === 0 && suggestedSections.gift.length === 0 && suggestedSections.smallTreats.length === 0) ? (
                       <div className="text-center py-6 sm:py-8 text-gray-400 dark:text-gray-400">
                         <Package className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 opacity-50" />
                         <p className="text-xs sm:text-sm">No suggestions available at the moment</p>
                       </div>
                     ) : (
-                      <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0 w-full lg:max-w-full lg:min-w-0">
-                        <div className="flex gap-3 sm:gap-4 lg:gap-4 pb-2 lg:min-w-0">
-                          {suggestedProducts.map((product) => {
-                            const productPrice = product.discounted_price || product.base_price || 0;
-                            const originalPrice = product.base_price;
-                            const hasDiscount = product.discounted_price && product.discounted_price < originalPrice;
-                            const productWeight = product.base_weight || product.variants?.[0]?.weight || null;
-                            
-                            return (
-                              <div
-                                key={product.id}
-                                className="relative flex-shrink-0 w-[140px] sm:w-[160px] lg:w-[170px] bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm hover:shadow-lg dark:hover:shadow-xl dark:hover:shadow-black/30 transition-all duration-300 hover:border-pink-300 dark:hover:border-pink-600 group"
-                              >
-                                {/* Discount Badge - Positioned at card's top-right corner */}
-                                {hasDiscount && (
-                                  <div className="absolute top-0 right-0 bg-gradient-to-r from-red-500 to-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-tr-xl rounded-bl-md shadow-md z-10">
-                                    {Math.round(((originalPrice - product.discounted_price) / originalPrice) * 100)}% OFF
-                                  </div>
-                                )}
-                                
-                                {/* Product Image */}
-                                <div 
-                                  className="relative w-full h-[140px] sm:h-[160px] lg:h-[180px] bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 cursor-pointer overflow-hidden"
-                                  onClick={() => router.push(`/product/${product.slug || product.id}`)}
-                                >
-                                  <img
-                                    src={resolveImageUrl(product.image_url)}
-                                    alt={product.name}
-                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                  />
-                                </div>
-                                
-                                {/* Product Info */}
-                                <div className="p-2.5 sm:p-3 lg:p-3 space-y-2">
-                                  {/* Product Name */}
-                                  <h4 
-                                    className="text-xs sm:text-sm lg:text-sm font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 cursor-pointer hover:text-pink-600 dark:hover:text-pink-400 transition-colors leading-tight"
-                                    onClick={() => router.push(`/product/${product.slug || product.id}`)}
-                                  >
-                                    {product.name}
-                                  </h4>
-                                  
-                                  {/* Weight */}
-                                  {productWeight && (
-                                    <div className="flex items-center gap-1">
-                                      <Package className="w-3 h-3 text-gray-500 dark:text-gray-400" />
-                                      <span className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 font-medium">
-                                        {productWeight}
-                                      </span>
-                                    </div>
-                                  )}
-                                  
-                                  {/* Price */}
-                                  <div className="flex items-baseline gap-1.5">
-                                    <span className="text-sm lg:text-base font-bold text-pink-600 dark:text-pink-400">
-                                      {formatPrice(productPrice)}
-                                    </span>
-                                    {hasDiscount && (
-                                      <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 line-through">
-                                        {formatPrice(originalPrice)}
-                                      </span>
-                                    )}
-                                  </div>
-                                  
-                                  {/* Add to Cart Button */}
-                                  <button
-                                    onClick={() => {
-                                      addToCart({
-                                        product: product,
-                                        quantity: 1,
-                                        variant: null,
-                                        flavor: null,
-                                        tier: null,
-                                        combos: [],
-                                        deliverySlot: null,
-                                        cakeMessage: ''
-                                      });
-                                      // Note: addToCart already shows a success toast, so we don't need to show another one
-                                    }}
-                                    className="w-full py-2 sm:py-2 lg:py-2 border-2 border-pink-500 dark:border-pink-600 text-pink-600 dark:text-pink-400 text-xs sm:text-sm lg:text-sm font-semibold rounded-lg hover:bg-pink-50 dark:hover:bg-pink-900/20 hover:border-pink-600 dark:hover:border-pink-500 transition-all duration-200 active:scale-95"
-                                  >
-                                    Add to Cart
-                                  </button>
-                                </div>
+                      <div className="space-y-6 sm:space-y-7">
+                        {/* Section 1: Make Your Cake Extra Special - Add-ons */}
+                        {suggestedSections.addOns.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="p-1 rounded-md bg-amber-100 dark:bg-amber-800/40">
+                                <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
                               </div>
-                            );
-                          })}
-                        </div>
+                              <h4 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">Make Your Cake Extra Special</h4>
+                            </div>
+                            <p className="text-xs text-amber-800/80 dark:text-amber-200/80 mb-0.5">Candles, balloons, toppers</p>
+                            <p className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mb-3">Make the moment memorable—add to your cake in one tap.</p>
+                            <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
+                              <div className="flex gap-3 sm:gap-4 pb-2">
+                                {suggestedSections.addOns.map((item) => {
+                                  const price = item.discounted_price ?? item.price ?? 0;
+                                  const firstCakeItem = cartItems.find(i => !i.is_deal_item);
+                                    const handleAddAddOn = () => {
+                                    if (!firstCakeItem) {
+                                      showInfo('Add a cake first', 'Add a cake to your cart to include add-ons like candles, balloons & toppers.');
+                                      return;
+                                    }
+                                    const newCombo = {
+                                      id: Date.now(),
+                                      add_on_product_id: item.id,
+                                      product_id: item.id,
+                                      product_name: item.name || 'Product',
+                                      category_name: item.category_name || '',
+                                      price: item.price ?? 0,
+                                      discounted_price: item.discounted_price ?? null,
+                                      discount_percentage: item.discount_percentage ?? 0,
+                                      quantity: 1,
+                                      image_url: item.image_url || null
+                                    };
+                                    const existingCombos = firstCakeItem.combos || [];
+                                    const existingIndex = existingCombos.findIndex(c => (c.add_on_product_id === item.id || c.product_id === item.id));
+                                    const updatedCombos = existingIndex >= 0
+                                      ? existingCombos.map((c, i) => i === existingIndex ? { ...c, quantity: (c.quantity || 1) + 1 } : c)
+                                      : [...existingCombos, newCombo];
+                                    updateCartItemCombos(firstCakeItem.id, updatedCombos);
+                                    showSuccess('Added', `${item.name} added to your cake.`);
+                                  };
+                                  return (
+                                    <div key={item.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] bg-white dark:bg-gray-800 rounded-xl border border-amber-200/70 dark:border-amber-600/40 overflow-hidden shadow-md hover:shadow-lg hover:border-amber-300 dark:hover:border-amber-500/60 transition-all duration-200 group">
+                                      <div className="relative w-full h-[90px] sm:h-[100px] bg-amber-50/80 dark:bg-amber-900/20 overflow-hidden rounded-t-xl">
+                                        <img src={resolveImageUrl(item.image_url)} alt={item.name} className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-200" loading="lazy" />
+                                      </div>
+                                      <div className="p-2 space-y-1">
+                                        <h4 className="text-[11px] sm:text-xs font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight min-h-[2rem]">{item.name}</h4>
+                                        <p className="text-xs font-bold text-amber-700 dark:text-amber-400">{formatPrice(price)}</p>
+                                        <button onClick={handleAddAddOn} className="w-full py-1.5 text-[11px] sm:text-xs font-semibold rounded-lg border-2 border-amber-500 dark:border-amber-500 text-amber-700 dark:text-amber-300 bg-amber-50/80 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-800/30 hover:border-amber-600 transition-colors active:scale-[0.98]">
+                                          + Include
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Section 2: Complete Your Gift - Flowers, chocolates, dry fruits */}
+                        {suggestedSections.gift.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="p-1 rounded-md bg-emerald-100 dark:bg-emerald-800/40">
+                                <Gift className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                              </div>
+                              <h4 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">Complete Your Gift</h4>
+                            </div>
+                            <p className="text-xs text-emerald-800/80 dark:text-emerald-200/80 mb-0.5">Flowers, chocolates, teddy, dry fruits</p>
+                            <p className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mb-3">Pair with your cake for a complete, gift-ready surprise.</p>
+                            <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
+                              <div className="flex gap-3 sm:gap-4 pb-2">
+                                {suggestedSections.gift.map((product) => {
+                                  const productPrice = product.discounted_price || product.base_price || 0;
+                                  const originalPrice = product.base_price;
+                                  const hasDiscount = product.discounted_price && product.discounted_price < originalPrice;
+                                  const productWeight = product.base_weight || product.variants?.[0]?.weight || null;
+                                  return (
+                                    <div key={product.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] lg:w-[160px] bg-white dark:bg-gray-800 rounded-xl border border-emerald-200/70 dark:border-emerald-600/40 overflow-hidden shadow-md hover:shadow-lg hover:border-emerald-300 dark:hover:border-emerald-500/60 transition-all duration-200 group">
+                                      {hasDiscount && (
+                                        <div className="absolute top-0 right-0 bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-bl-md z-10">
+                                          {Math.round(((originalPrice - product.discounted_price) / originalPrice) * 100)}% OFF
+                                        </div>
+                                      )}
+                                      <div className="relative w-full h-[110px] sm:h-[120px] bg-emerald-50/70 dark:bg-emerald-900/20 cursor-pointer overflow-hidden rounded-t-xl" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
+                                        <img src={resolveImageUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" loading="lazy" />
+                                      </div>
+                                      <div className="p-2 space-y-1">
+                                        <h4 className="text-[11px] sm:text-xs font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight min-h-[2rem] cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors" onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
+                                        {productWeight && (
+                                          <div className="flex items-center gap-1">
+                                            <Package className="w-3 h-3 text-emerald-500 dark:text-emerald-400" />
+                                            <span className="text-[10px] text-gray-600 dark:text-gray-400">{productWeight}</span>
+                                          </div>
+                                        )}
+                                        <div className="flex items-baseline gap-1.5 flex-wrap">
+                                          <span className="text-xs font-bold text-pink-600 dark:text-pink-400">{formatPrice(productPrice)}</span>
+                                          {hasDiscount && <span className="text-[10px] text-gray-400 line-through">{formatPrice(originalPrice)}</span>}
+                                        </div>
+                                        <button onClick={() => addToCart({ product, quantity: 1, variant: null, flavor: null, tier: null, combos: [], deliverySlot: null, cakeMessage: '' })} className="w-full py-1.5 text-[11px] sm:text-xs font-semibold rounded-lg border-2 border-emerald-500 dark:border-emerald-500 text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-800/30 hover:border-emerald-600 transition-colors active:scale-[0.98]">
+                                          + Add
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Section 3: Small Treats for Guests */}
+                        {suggestedSections.smallTreats.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="p-1 rounded-md bg-rose-100 dark:bg-rose-800/40">
+                                <Package className="w-4 h-4 text-rose-600 dark:text-rose-400 flex-shrink-0" />
+                              </div>
+                              <h4 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">Small Treats for Guests</h4>
+                            </div>
+                            <p className="text-xs text-rose-800/80 dark:text-rose-200/80 mb-0.5">Brownies, pastries, mini desserts</p>
+                            <p className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mb-3">Light bites everyone will love—easy to add.</p>
+                            <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
+                              <div className="flex gap-3 sm:gap-4 pb-2">
+                                {suggestedSections.smallTreats.map((product) => {
+                                  const productPrice = product.discounted_price || product.base_price || 0;
+                                  const originalPrice = product.base_price;
+                                  const hasDiscount = product.discounted_price && product.discounted_price < originalPrice;
+                                  const productWeight = product.base_weight || product.variants?.[0]?.weight || null;
+                                  return (
+                                    <div key={product.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] lg:w-[160px] bg-white dark:bg-gray-800 rounded-xl border border-rose-200/70 dark:border-rose-600/40 overflow-hidden shadow-md hover:shadow-lg hover:border-rose-300 dark:hover:border-rose-500/60 transition-all duration-200 group">
+                                      {hasDiscount && (
+                                        <div className="absolute top-0 right-0 bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-bl-md z-10">
+                                          {Math.round(((originalPrice - product.discounted_price) / originalPrice) * 100)}% OFF
+                                        </div>
+                                      )}
+                                      <div className="relative w-full h-[110px] sm:h-[120px] bg-rose-50/70 dark:bg-rose-900/20 cursor-pointer overflow-hidden rounded-t-xl" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
+                                        <img src={resolveImageUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" loading="lazy" />
+                                      </div>
+                                      <div className="p-2 space-y-1">
+                                        <h4 className="text-[11px] sm:text-xs font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight min-h-[2rem] cursor-pointer hover:text-rose-600 dark:hover:text-rose-400 transition-colors" onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
+                                        {productWeight && (
+                                          <div className="flex items-center gap-1">
+                                            <Package className="w-3 h-3 text-rose-500 dark:text-rose-400" />
+                                            <span className="text-[10px] text-gray-600 dark:text-gray-400">{productWeight}</span>
+                                          </div>
+                                        )}
+                                        <div className="flex items-baseline gap-1.5 flex-wrap">
+                                          <span className="text-xs font-bold text-pink-600 dark:text-pink-400">{formatPrice(productPrice)}</span>
+                                          {hasDiscount && <span className="text-[10px] text-gray-400 line-through">{formatPrice(originalPrice)}</span>}
+                                        </div>
+                                        <button onClick={() => addToCart({ product, quantity: 1, variant: null, flavor: null, tier: null, combos: [], deliverySlot: null, cakeMessage: '' })} className="w-full py-1.5 text-[11px] sm:text-xs font-semibold rounded-lg border-2 border-rose-500 dark:border-rose-500 text-rose-700 dark:text-rose-300 bg-rose-50/80 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-800/30 hover:border-rose-600 transition-colors active:scale-[0.98]">
+                                          + Add Extra
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
                       </div>
                     )}
                   </>
@@ -2832,42 +3005,72 @@ export default function CartPage() {
         )}
       </div>
 
-      {/* Mobile Sticky Checkout Bar */}
-      {mounted && isInitialized && cartItems.length > 0 && (
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-2xl dark:shadow-black/50 z-40">
-          <div className="max-w-7xl mx-auto px-2 py-1.5">
-            {/* Total Box and Checkout Button Row */}
-            <div className="flex items-center gap-1.5 mb-1">
-              {/* Total Box - 20vw */}
-              <div className="w-[20vw] min-w-[70px] bg-gray-50 dark:bg-gray-700/50 rounded-lg px-1.5 py-1.5 border border-pink-300 dark:border-pink-500/50 h-[56px] flex items-center">
-                <div className="flex flex-col w-full items-center text-center">
-                  <p className="text-sm font-bold text-pink-600 dark:text-pink-400 leading-tight mb-0.5">{formatPrice(total)}</p>
-                  <span className="text-[9px] text-gray-500 dark:text-gray-400 leading-tight">
-                    {cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'}
+      {/* Mobile Sticky Delivery Slot Summary */}
+      {mounted && isInitialized && cartItems.length > 0 && (() => {
+        // Get common delivery slot from cart items (non-deal items only)
+        const regularItems = cartItems.filter(item => !item.is_deal_item && item.deliverySlot);
+        const commonSlot = regularItems.length > 0 ? regularItems[0].deliverySlot : null;
+        
+        // Check if all regular items have the same slot
+        const allSameSlot = regularItems.length > 0 && regularItems.every(item => {
+          const slot1 = commonSlot;
+          const slot2 = item.deliverySlot;
+          const date1 = slot1?.date || slot1?.deliveryDate;
+          const date2 = slot2?.date || slot2?.deliveryDate;
+          const time1 = slot1?.time || slot1?.slot?.startTime;
+          const time2 = slot2?.time || slot2?.slot?.startTime;
+          return date1 === date2 && time1 === time2;
+        });
+
+        return commonSlot && allSameSlot ? (
+          <div className="lg:hidden fixed left-0 right-0 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-t border-green-200 dark:border-green-800 shadow-lg dark:shadow-black/30 z-39 bottom-[8.5rem]">
+            <div className="max-w-7xl mx-auto px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <Clock className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" />
+                  <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 truncate">
+                    <span className="font-semibold">Delivery:</span>{' '}
+                    {formatDeliveryDate(commonSlot.date || commonSlot.deliveryDate)} • {formatTimeSlot(commonSlot)}
                   </span>
                 </div>
+                <button
+                  onClick={() => router.push('/checkout')}
+                  className="text-xs font-semibold text-green-700 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 underline underline-offset-2 flex-shrink-0"
+                >
+                  Change
+                </button>
               </div>
-              
-              {/* Checkout Button - 80vw */}
+            </div>
+          </div>
+        ) : null;
+      })()}
+
+      {/* Mobile Sticky Checkout Bar - compact height; action button matches PDP (52px) */}
+      {mounted && isInitialized && cartItems.length > 0 && (
+        <div className="lg:hidden fixed left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-black/40 z-40 bottom-0">
+          <div className="max-w-7xl mx-auto px-2 py-1">
+            {/* Total Box and Checkout Button Row */}
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <div className="w-[20vw] min-w-[64px] h-[48px] bg-gray-50 dark:bg-gray-700/50 rounded-lg px-1.5 py-1 border border-pink-300 dark:border-pink-500/50 flex items-center justify-center shrink-0">
+                <div className="flex flex-col items-center justify-center text-center leading-tight">
+                  <p className="text-xs font-bold text-pink-600 dark:text-pink-400">{formatPrice(total)}</p>
+                  <span className="text-[9px] text-gray-500 dark:text-gray-400">{cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'}</span>
+                </div>
+              </div>
               <button
                 onClick={handleCheckout}
-                className="flex-1 w-[80vw] h-[56px] bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all font-bold text-base shadow-lg dark:shadow-xl dark:shadow-black/30 active:scale-95 flex items-center justify-center gap-2"
+                className="flex-1 min-h-[48px] h-[48px] py-2 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all font-bold text-sm shadow-lg dark:shadow-xl dark:shadow-black/30 active:scale-[0.98] flex items-center justify-center gap-1.5"
               >
                 <span>PROCEED TO CHECKOUT</span>
-                <ChevronRight className="w-5 h-5" />
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
-            
-            {/* Free Delivery Message & Security Badge - Inline */}
-            <div className="flex items-center justify-center gap-1.5">
-            {!isFreeDeliveryEligible && (
-                <p className="text-[9px] text-gray-500 dark:text-gray-400">
-                Add {formatPrice(amountToFreeDelivery)} more for free delivery
-              </p>
-            )}
-              <p className="text-[8px] text-gray-400 dark:text-gray-500">
-                🔒 Secure checkout
-              </p>
+            {/* Helper line - compact */}
+            <div className="flex items-center justify-center gap-2 min-h-[14px]">
+              {!isFreeDeliveryEligible && (
+                <p className="text-[8px] text-gray-500 dark:text-gray-400">Add {formatPrice(amountToFreeDelivery)} more for free delivery</p>
+              )}
+              <p className="text-[8px] text-gray-400 dark:text-gray-500">🔒 Secure checkout</p>
             </div>
           </div>
         </div>
@@ -2974,6 +3177,11 @@ export default function CartPage() {
         <Footer />
       </div>
 
+      {/* Mobile Footer (Home, Wishlist, Cart, etc.) - show only when cart is empty after mount to avoid hydration mismatch */}
+      <div className="lg:hidden">
+        {mounted && cartItems.length === 0 && <MobileFooter />}
+      </div>
+
       {/* Duplicate Products Validation Modal */}
       {showDuplicateModal && duplicateGroups.length > 0 && (
         <div className="fixed inset-0 bg-black/50 dark:bg-black/70 z-50 flex items-center justify-center p-4">
@@ -3016,6 +3224,7 @@ export default function CartPage() {
                               src={resolveImageUrl(item.product?.image_url)}
                               alt={item.product?.name}
                               className="w-full h-full object-cover"
+                              loading="lazy"
                             />
                           </div>
                           <div className="flex-1 min-w-0">
@@ -3221,6 +3430,17 @@ export default function CartPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmModal.open}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmLabel={confirmModal.confirmLabel}
+        cancelLabel={confirmModal.cancelLabel}
+        variant={confirmModal.variant}
+        onConfirm={handleConfirmModalConfirm}
+        onCancel={closeConfirmModal}
+      />
     </div>
   );
 }

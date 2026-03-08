@@ -5,10 +5,14 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Star, Heart, ChevronLeft, ChevronRight, Share2, Trophy, TrendingUp } from 'lucide-react';
 import { useWishlist } from '../../../../contexts/WishlistContext';
+import { useCustomerAuth } from '../../../../contexts/CustomerAuthContext';
+import { useAuthModal } from '../../../../contexts/AuthModalContext';
 import { resolveImageUrl } from '../../../../utils/imageUrl';
 
 const RelatedProducts = ({ products, currentProductId }) => {
   const { isInWishlist, toggleWishlist } = useWishlist();
+  const { isAuthenticated } = useCustomerAuth();
+  const { openAuthModal } = useAuthModal();
   const scrollContainerRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -228,6 +232,11 @@ const RelatedProducts = ({ products, currentProductId }) => {
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
+                        if (!isAuthenticated) {
+                          if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('pending_wishlist_add', String(sanitizedProduct.id));
+                          openAuthModal();
+                          return;
+                        }
                         toggleWishlist(sanitizedProduct.id);
                       }}
                       className={`w-6 h-6 sm:w-8 sm:h-8 rounded flex items-center justify-center transition-all duration-200 backdrop-blur-md shadow-lg border border-white/30 dark:border-white/20 ${
