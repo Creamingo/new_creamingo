@@ -363,10 +363,58 @@ const sendVendorApplicationNotification = async (toEmail, application) => {
   }
 };
 
+// Send email to vendor applicant (from admin)
+const sendEmailToVendorApplicant = async (toEmail, subject, htmlBody, textBody) => {
+  if (!emailConfigured || !toEmail) {
+    return { success: false, message: 'Email not configured or no recipient' };
+  }
+  try {
+    const transporter = createTransporter();
+    if (!transporter) return { success: false, message: 'Email transporter not available' };
+    const mailOptions = {
+      from: `"Creamingo" <${process.env.SMTP_USER}>`,
+      to: toEmail,
+      subject: subject || 'Message from Creamingo',
+      html: htmlBody || textBody || '',
+      text: textBody || (htmlBody ? htmlBody.replace(/<[^>]+>/g, '') : '')
+    };
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Email to vendor applicant sent:', info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('Send email to vendor applicant error:', error);
+    return { success: false, message: error.message };
+  }
+};
+
+// Default email templates for admin to send to applicants
+const getVendorEmailTemplates = () => [
+  {
+    id: 'welcome',
+    name: 'Welcome / Next steps',
+    subject: 'Your Creamingo vendor application – next steps',
+    body: `<p>Hi {{name}},</p><p>Thank you for applying to sell on Creamingo. We've received your application and will review it within 24 hours.</p><p>We'll reach out to you on the contact details you shared. If you have any questions in the meantime, reply to this email.</p><p>Best,<br/>The Creamingo Team</p>`
+  },
+  {
+    id: 'shortlist',
+    name: 'Shortlisted – schedule call',
+    subject: 'Creamingo vendor application – let\'s talk!',
+    body: `<p>Hi {{name}},</p><p>Good news – we'd like to take your vendor application forward and schedule a quick call to discuss onboarding.</p><p>Please reply with 2–3 time slots that work for you in the next few days, and we'll confirm.</p><p>Best,<br/>The Creamingo Team</p>`
+  },
+  {
+    id: 'rejection',
+    name: 'Not approved (polite)',
+    subject: 'Update on your Creamingo vendor application',
+    body: `<p>Hi {{name}},</p><p>Thank you for your interest in selling on Creamingo. After review, we're unable to onboard your application at this time. We'll keep your details on file and may reach out if things change.</p><p>Best,<br/>The Creamingo Team</p>`
+  }
+];
+
 module.exports = {
   sendReferralEmail,
   sendMilestoneEmail,
   sendVendorApplicationNotification,
+  sendEmailToVendorApplicant,
+  getVendorEmailTemplates,
   emailConfigured
 };
 

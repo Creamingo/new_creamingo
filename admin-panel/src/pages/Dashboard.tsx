@@ -52,7 +52,8 @@ import {
   ThumbsUp,
   Flag,
   Code,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Store
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
@@ -65,6 +66,7 @@ import { Button } from '../components/ui/Button';
 import { DashboardStats, Order, TableColumn } from '../types';
 import dashboardService from '../services/dashboardService';
 import orderService from '../services/orderService';
+import vendorApplicationService from '../services/vendorApplicationService';
 import { useToastContext } from '../contexts/ToastContext';
 
 // Currency formatting utility
@@ -512,6 +514,7 @@ export const Dashboard: React.FC = () => {
     customers: 0,
     products: 0
   });
+  const [vendorAppCounts, setVendorAppCounts] = useState<{ pending: number; total: number } | null>(null);
   
   // Date range filtering
   const [dateRangeStart, setDateRangeStart] = useState<string | null>(null);
@@ -834,6 +837,13 @@ export const Dashboard: React.FC = () => {
         });
       } catch (err) {
         console.warn('Could not fetch order stats:', err);
+      }
+
+      try {
+        const counts = await vendorApplicationService.getCounts();
+        setVendorAppCounts({ pending: counts.pending, total: counts.total });
+      } catch {
+        setVendorAppCounts(null);
       }
 
       // Fetch recent orders with date filter
@@ -2515,6 +2525,32 @@ export const Dashboard: React.FC = () => {
             onClick={() => navigate('/orders')}
             tooltip="Average amount per order (Total Sales ÷ Total Orders)"
           />
+          {vendorAppCounts !== null && (
+            <div
+              className="cursor-pointer"
+              onClick={() => navigate('/vendor-applications')}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && navigate('/vendor-applications')}
+            >
+              <Card className="hover:shadow-md transition-shadow">
+                <CardContent className="px-5 py-4 md:px-6 md:py-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-pink-100 dark:bg-pink-500/20 rounded-xl flex-shrink-0 shadow-sm">
+                    <Store className="h-6 w-6 text-pink-600 dark:text-pink-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Vendor Applications</p>
+                    <p className="text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-white leading-none tracking-tight">
+                      {vendorAppCounts.pending} <span className="text-base font-normal text-gray-500 dark:text-gray-400">pending</span>
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{vendorAppCounts.total} total</p>
+                  </div>
+                </div>
+              </CardContent>
+              </Card>
+            </div>
+          )}
           
           {/* Order Status Breakdown */}
           <Card className="hover:shadow-md transition-shadow">
