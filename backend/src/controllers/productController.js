@@ -1376,6 +1376,8 @@ const updateProduct = async (req, res) => {
       }
     }
 
+    const flavorIdsFromSubcategories = [];
+
     const shouldUpdateFlavors = updateData.available_flavor_ids !== undefined
       || updateData.primary_flavor_id !== undefined
       || flavorIdsFromSubcategories.length > 0;

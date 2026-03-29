@@ -1,8 +1,10 @@
-import React, { useState, useEffect, forwardRef, useImperativeHandle, useRef } from 'react';
+import React, { useState, useEffect, useMemo, forwardRef, useImperativeHandle, useRef } from 'react';
 import { ChevronDown, ChevronUp, Edit3, Save, X } from 'lucide-react';
 import { Button } from './Button';
 import { Input } from './Input';
 import { Subcategory } from '../../types';
+import type { ProductFormProfile } from '../../utils/productFormProfile';
+import { getDefaultPleaseNoteBullets } from '../../utils/productSupplementalDefaults';
 
 interface ProductDetails {
   cakeFlavour: string;
@@ -32,6 +34,10 @@ interface StructuredDescriptionEditorProps {
   subcategories?: Subcategory[];
   productVariations?: Array<{ weight: string; price: number; discount_percent: number }>;
   baseWeight?: string;
+  /** When false (non-cake price forms), do not infer kg/gm from bare numbers in primary option label. */
+  isCakePricingForm?: boolean;
+  /** Drives shape dropdown options and Product Details field order (cake vs treats / flowers / sweets). */
+  formProfile?: ProductFormProfile;
   // New prop for short description sync
   onShortDescriptionChange?: (shortDescription: string) => void;
   initialShortDescription?: string;
@@ -40,6 +46,172 @@ interface StructuredDescriptionEditorProps {
 export interface StructuredDescriptionEditorRef {
   reset: () => void;
   clean: () => void;
+}
+
+/** True if the string looks like a mass/volume (not a pack count like "Set of 3"). */
+function hasExplicitMassUnit(raw: string): boolean {
+  const t = raw.toLowerCase().trim();
+  if (!t) return false;
+  if (/\b(kg|kilogram|kilograms)\b/.test(t)) return true;
+  if (/\b(gm|gram|grams)\b/.test(t)) return true;
+  if (/\d+(?:\.\d+)?\s*(kg|g|gm|gram)s?\b/.test(t)) return true;
+  if (/\b(ml|millilitre|milliliter|litre|liter|l)\b/.test(t)) return true;
+  if (/\b(lb|oz|pound|ounce)s?\b/.test(t)) return true;
+  return false;
+}
+
+const CAKE_SHAPE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'Round', label: 'Round' },
+  { value: 'Square', label: 'Square' },
+  { value: 'Rectangular', label: 'Rectangular' },
+  { value: 'Heart', label: 'Heart' },
+];
+
+/** Florist-facing arrangement / presentation styles (stored as Shape: … in the description). */
+const FLOWER_ARRANGEMENT_OPTIONS: { value: string; label: string }[] = [
+  { value: 'Round bouquet', label: 'Round / dome bouquet' },
+  { value: 'Vertical / tall', label: 'Vertical / tall' },
+  { value: 'Cascading', label: 'Cascading' },
+  { value: 'Hand-tied', label: 'Hand-tied' },
+  { value: 'Vase arrangement', label: 'Vase arrangement' },
+  { value: 'Basket', label: 'Basket' },
+  { value: 'Box / hatbox', label: 'Box / hatbox' },
+  { value: 'Heart', label: 'Heart-shaped' },
+  { value: 'Wreath', label: 'Wreath' },
+  { value: 'Other', label: 'Other' },
+];
+
+const TREATS_SHAPE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'Round', label: 'Round' },
+  { value: 'Square', label: 'Square' },
+  { value: 'Rectangular', label: 'Rectangular' },
+  { value: 'Heart', label: 'Heart' },
+  { value: 'Assorted', label: 'Assorted / variety' },
+  { value: 'Other', label: 'Other' },
+];
+
+const SWEETS_SHAPE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'Round', label: 'Round' },
+  { value: 'Square', label: 'Square' },
+  { value: 'Rectangular', label: 'Rectangular' },
+  { value: 'Bar / slab', label: 'Bar / slab' },
+  { value: 'Bite-sized', label: 'Bite-sized pieces' },
+  { value: 'Assorted', label: 'Assorted' },
+  { value: 'Other', label: 'Other' },
+];
+
+function getShapeOptionsForProfile(profile: ProductFormProfile): { value: string; label: string }[] {
+  switch (profile) {
+    case 'cake':
+      return CAKE_SHAPE_OPTIONS;
+    case 'flowers':
+      return FLOWER_ARRANGEMENT_OPTIONS;
+    case 'treats':
+      return TREATS_SHAPE_OPTIONS;
+    case 'sweets':
+      return SWEETS_SHAPE_OPTIONS;
+    default:
+      return CAKE_SHAPE_OPTIONS;
+  }
+}
+
+function productDetailsFlavourLabel(profile: ProductFormProfile): string {
+  switch (profile) {
+    case 'cake':
+      return 'Cake Flavour';
+    case 'flowers':
+      return 'Flower mix / variety';
+    case 'treats':
+      return 'Flavor / style';
+    case 'sweets':
+      return 'Variety';
+    default:
+      return 'Cake Flavour';
+  }
+}
+
+function productDetailsShapeLabel(profile: ProductFormProfile): string {
+  switch (profile) {
+    case 'cake':
+      return 'Shape';
+    case 'flowers':
+      return 'Arrangement style';
+    case 'treats':
+      return 'Shape / format';
+    case 'sweets':
+      return 'Shape / pack style';
+    default:
+      return 'Shape';
+  }
+}
+
+function productDetailsFlavourPlaceholder(profile: ProductFormProfile): string {
+  switch (profile) {
+    case 'cake':
+      return 'e.g., Chocolate, Vanilla, Strawberry';
+    case 'flowers':
+      return 'e.g., Roses, Mixed seasonal blooms';
+    case 'treats':
+      return 'e.g., Chocolate chip, Red velvet';
+    case 'sweets':
+      return 'e.g., Kaju katli, Assorted mithai';
+    default:
+      return '';
+  }
+}
+
+function productDetailsFlowersBouquetLabel(): string {
+  return 'Stems, blooms & presentation';
+}
+
+function productDetailsFlowersBouquetPlaceholder(): string {
+  return 'e.g., 4 pink Oriental lilies, white premium paper wrap';
+}
+
+function productDetailsToppingsPlaceholder(profile: ProductFormProfile): string {
+  switch (profile) {
+    case 'flowers':
+      return "e.g., Satin ribbon, baby's breath, eucalyptus, gift message card";
+    case 'treats':
+      return 'e.g., Drizzle, sprinkles, edible glitter';
+    case 'sweets':
+      return 'e.g., Silver leaf, nuts, rose petals (decorative)';
+    case 'cake':
+    default:
+      return 'e.g., Fresh fruits, Chocolate shavings, Nuts';
+  }
+}
+
+function calculateServingsFromWeight(weight: string): string {
+  if (!weight) return '0 servings';
+
+  const match = weight.match(/^(\d+(?:\.\d+)?)\s*(.*)$/);
+  if (!match) return '0 servings';
+
+  const [, numberStr, unit] = match;
+  const number = parseFloat(numberStr);
+
+  if (isNaN(number)) return '0 servings';
+
+  let weightInGrams = number;
+  const unitLower = unit.toLowerCase();
+
+  if (unitLower === 'kg' || unitLower === 'kilogram' || unitLower === 'kilograms') {
+    weightInGrams = number * 1000;
+  } else if (unitLower === 'lb' || unitLower === 'pound' || unitLower === 'pounds') {
+    weightInGrams = number * 453.592;
+  } else if (unitLower === 'oz' || unitLower === 'ounce' || unitLower === 'ounces') {
+    weightInGrams = number * 28.3495;
+  }
+
+  const minServings = Math.floor(weightInGrams / 100);
+  const maxServings = Math.round(weightInGrams / 83.33);
+
+  if (minServings === maxServings) {
+    return `${minServings} serving${minServings !== 1 ? 's' : ''}`;
+  }
+
+  return `${minServings}–${maxServings} servings`;
 }
 
 const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, StructuredDescriptionEditorProps>(({
@@ -59,6 +231,8 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
   subcategories = [],
   productVariations = [],
   baseWeight,
+  isCakePricingForm = true,
+  formProfile = 'cake',
   onShortDescriptionChange,
   initialShortDescription
 }, ref) => {
@@ -66,9 +240,12 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
   const isUpdatingRef = useRef(false);
   const [details, setDetails] = useState<ProductDetails>({
     cakeFlavour: '',
-    // Defaults for easier listing
     version: 'Eggless',
-    shape: 'Round',
+    shape: productDetails.shape !== undefined && productDetails.shape !== ''
+      ? productDetails.shape
+      : formProfile === 'cake'
+        ? 'Round'
+        : '',
     servings: '',
     toppings: '',
     weight: '',
@@ -77,10 +254,9 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
   });
 
   const [isWeightManuallyEdited, setIsWeightManuallyEdited] = useState(false);
-  const [pleaseNote, setPleaseNote] = useState(`• Cake stands and cutlery shown in images are for display only and are not included with the cake.
-• This cake is hand-delivered in a high-quality cardboard box.`);
+  const [pleaseNote, setPleaseNote] = useState(() => getDefaultPleaseNoteBullets(formProfile));
   const [isEditingPleaseNote, setIsEditingPleaseNote] = useState(false);
-  const [tempPleaseNote, setTempPleaseNote] = useState(pleaseNote);
+  const [tempPleaseNote, setTempPleaseNote] = useState(() => getDefaultPleaseNoteBullets(formProfile));
   const [internalShowPreview, setInternalShowPreview] = useState(false);
   const showPreview = externalShowPreview !== undefined ? externalShowPreview : internalShowPreview;
   const [expandedSections, setExpandedSections] = useState({
@@ -88,6 +264,28 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
     details: true,
     pleaseNote: true
   });
+
+  const isCakeDetailsLayout = formProfile === 'cake';
+  const showTreatsEggVersion = formProfile === 'treats';
+  const isFlowersProfile = formProfile === 'flowers';
+  const flavourFieldLabel = productDetailsFlavourLabel(formProfile);
+  const shapeFieldLabel = productDetailsShapeLabel(formProfile);
+  const flavourPlaceholder = productDetailsFlavourPlaceholder(formProfile);
+  const toppingsPlaceholder = productDetailsToppingsPlaceholder(formProfile);
+  const flowersBouquetLabel = productDetailsFlowersBouquetLabel();
+  const flowersBouquetPlaceholder = productDetailsFlowersBouquetPlaceholder();
+
+  const shapeSelectOptions = useMemo(() => {
+    const base = getShapeOptionsForProfile(formProfile);
+    const v = details.shape?.trim();
+    if (v && !base.some((o) => o.value === v)) {
+      return [{ value: v, label: `${v} (saved value)` }, ...base];
+    }
+    return base;
+  }, [formProfile, details.shape]);
+
+  const shapeSelectClassName =
+    'w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent';
 
   // Auto-population logic based on primary subcategory and variations
   useEffect(() => {
@@ -108,47 +306,63 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
 
   // Auto-populate weight from base_weight or product variations
   useEffect(() => {
+    // Flowers: bouquet text is free-form only — never pull from price options
+    if (formProfile === 'flowers') return;
+
     // Only auto-populate if weight is empty or if baseWeight has changed and weight wasn't manually edited
     if (!details.weight || (!isWeightManuallyEdited && baseWeight && baseWeight.trim())) {
       let defaultWeight = '';
-      
+
       // Priority 1: Use base_weight if available
       if (baseWeight && baseWeight.trim()) {
-        // Format base_weight properly - add units if missing
-        const numericValue = parseFloat(baseWeight.replace(/[^\d.]/g, ''));
-        if (!isNaN(numericValue)) {
-          // Check if base_weight already has units
-          if (baseWeight.toLowerCase().includes('kg') || baseWeight.toLowerCase().includes('g') || baseWeight.toLowerCase().includes('gm')) {
-            // Already has units
-            defaultWeight = baseWeight;
-          } else {
-            // No units - for cake weights, assume grams for values >= 10
-            if (numericValue >= 10) {
-              // Large numbers (like 500) are likely in grams
-              defaultWeight = `${numericValue} gm`;
+        if (isCakePricingForm) {
+          const numericValue = parseFloat(baseWeight.replace(/[^\d.]/g, ''));
+          if (!isNaN(numericValue)) {
+            if (hasExplicitMassUnit(baseWeight)) {
+              defaultWeight = baseWeight;
             } else {
-              // Small numbers are likely in kg
-              defaultWeight = `${numericValue} kg`;
+              if (numericValue >= 10) {
+                defaultWeight = `${numericValue} gm`;
+              } else {
+                defaultWeight = `${numericValue} kg`;
+              }
             }
+          } else {
+            // Cake only: allow non-numeric base labels (e.g. custom text) to flow through
+            defaultWeight = baseWeight;
           }
         } else {
-          // If it's not a number, use as-is
-          defaultWeight = baseWeight;
+          // Non-cake: never copy primary option label into Weight unless it clearly states mass/volume
+          // (avoids "Set of", "Set of 3", "Standard", etc. in the weight field)
+          if (hasExplicitMassUnit(baseWeight)) {
+            defaultWeight = baseWeight;
+          }
+        }
+      } else if (productVariations.length > 0) {
+        const vw = productVariations[0].weight;
+        if (isCakePricingForm || hasExplicitMassUnit(vw)) {
+          defaultWeight = vw;
         }
       }
-      // Priority 2: Use first variation if no base_weight
-      else if (productVariations.length > 0) {
-        defaultWeight = productVariations[0].weight;
-      }
-      
+
       if (defaultWeight) {
         setDetails(prev => ({
           ...prev,
           weight: defaultWeight
         }));
+      } else if (
+        !isCakePricingForm &&
+        !isWeightManuallyEdited &&
+        baseWeight &&
+        baseWeight.trim() &&
+        !hasExplicitMassUnit(baseWeight) &&
+        details.weight.trim() === baseWeight.trim()
+      ) {
+        // Drop stale mirror of option label (e.g. "Set of") from Weight after label-only sync was removed
+        setDetails(prev => ({ ...prev, weight: '' }));
       }
     }
-  }, [baseWeight, productVariations, details.weight, isWeightManuallyEdited]);
+  }, [baseWeight, productVariations, details.weight, isWeightManuallyEdited, isCakePricingForm, formProfile]);
 
   // Reset manual edit flag when baseWeight changes
   useEffect(() => {
@@ -187,6 +401,8 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
             // Parse product details
             if (trimmedLine.includes('Cake Flavour:')) {
               currentDetails.cakeFlavour = stripHtmlTags(trimmedLine.replace('Cake Flavour:', '').trim());
+            } else if (trimmedLine.includes('Bouquet contents:')) {
+              currentDetails.weight = stripHtmlTags(trimmedLine.replace('Bouquet contents:', '').trim());
             } else if (trimmedLine.includes('Weight:')) {
               currentDetails.weight = stripHtmlTags(trimmedLine.replace('Weight:', '').trim());
             } else if (trimmedLine.includes('Servings:')) {
@@ -228,6 +444,20 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]); // details and pleaseNote are intentionally excluded to avoid infinite loops
 
+  const pleaseNoteProfileRef = useRef<ProductFormProfile | undefined>(undefined);
+  useEffect(() => {
+    if (pleaseNoteProfileRef.current === undefined) {
+      pleaseNoteProfileRef.current = formProfile;
+      return;
+    }
+    if (pleaseNoteProfileRef.current !== formProfile) {
+      const next = getDefaultPleaseNoteBullets(formProfile);
+      setPleaseNote(next);
+      setTempPleaseNote(next);
+      pleaseNoteProfileRef.current = formProfile;
+    }
+  }, [formProfile]);
+
   // Parse initial short description for overview text
   useEffect(() => {
     if (initialShortDescription && initialShortDescription.trim()) {
@@ -235,67 +465,16 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
     }
   }, [initialShortDescription]);
 
-  // Auto-calculate servings based on weight
+  // Auto-calculate servings from weight only for cake pricing or when weight clearly has mass units (avoids flicker / "0 servings" for non-cake labels)
   useEffect(() => {
-    if (details.weight) {
-      const servings = calculateServings(details.weight);
-      if (servings && !details.servings) {
-        setDetails(prev => ({
-          ...prev,
-          servings: servings
-        }));
-      }
-    }
-  }, [details.weight, details.servings]);
+    if (formProfile === 'flowers') return;
+    const w = details.weight?.trim();
+    if (!w) return;
+    if (!isCakePricingForm && !hasExplicitMassUnit(w)) return;
 
-  // Real-time servings update when weight changes
-  useEffect(() => {
-    if (details.weight) {
-      const newServings = calculateServings(details.weight);
-      setDetails(prev => ({
-        ...prev,
-        servings: newServings
-      }));
-    }
-  }, [details.weight]);
-
-  // Helper function to calculate servings based on weight
-  const calculateServings = (weight: string): string => {
-    if (!weight) return '0 servings';
-    
-    // Extract number and unit from weight string
-    const match = weight.match(/^(\d+(?:\.\d+)?)\s*(.*)$/);
-    if (!match) return '0 servings';
-    
-    const [, numberStr, unit] = match;
-    const number = parseFloat(numberStr);
-    
-    if (isNaN(number)) return '0 servings';
-    
-    // Convert to grams for calculation
-    let weightInGrams = number;
-    const unitLower = unit.toLowerCase();
-    
-    if (unitLower === 'kg' || unitLower === 'kilogram' || unitLower === 'kilograms') {
-      weightInGrams = number * 1000;
-    } else if (unitLower === 'lb' || unitLower === 'pound' || unitLower === 'pounds') {
-      weightInGrams = number * 453.592; // 1 lb = 453.592 g
-    } else if (unitLower === 'oz' || unitLower === 'ounce' || unitLower === 'ounces') {
-      weightInGrams = number * 28.3495; // 1 oz = 28.3495 g
-    }
-    // For g, gm, gram, grams, ml, l, etc., use the number as is
-    
-    // Calculate servings: 100g per serving (min), 83.33g per serving (max)
-    // This gives us the exact ranges: 500g = 5-6, 1kg = 10-12, 1.5kg = 15-18
-    const minServings = Math.floor(weightInGrams / 100);
-    const maxServings = Math.round(weightInGrams / 83.33);
-    
-    if (minServings === maxServings) {
-      return `${minServings} serving${minServings !== 1 ? 's' : ''}`;
-    }
-    
-    return `${minServings}–${maxServings} servings`;
-  };
+    const newServings = calculateServingsFromWeight(w);
+    setDetails(prev => (prev.servings === newServings ? prev : { ...prev, servings: newServings }));
+  }, [details.weight, isCakePricingForm, formProfile]);
 
   // Expose reset and clean methods to parent component
   useImperativeHandle(ref, () => ({
@@ -310,8 +489,7 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
         weight: '',
         countryOfOrigin: ''
       });
-      setPleaseNote(`• Cake stands and cutlery shown in images are for display only and are not included with the cake.
-• This cake is hand-delivered in a high-quality cardboard box.`);
+      setPleaseNote(getDefaultPleaseNoteBullets(formProfile));
       onChange(''); // Clear the main description value
     },
     clean: () => {
@@ -338,7 +516,7 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
       const cleanedDescription = value.replace(/\(\)/g, '').trim();
       onChange(cleanedDescription);
     }
-  }), [value, onChange]);
+  }), [value, onChange, formProfile]);
 
   // Helper function to strip HTML tags and template text
   const stripHtmlTags = (text: string): string => {
@@ -394,9 +572,14 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
       if (details.cakeFlavour) description += `Cake Flavour: ${details.cakeFlavour}\n`;
       if (details.version) description += `Version: ${details.version}\n`;
       if (details.shape) description += `Shape: ${details.shape}\n`;
-      if (details.servings) description += `Servings: ${details.servings}\n`;
-      if (details.toppings) description += `Toppings: ${details.toppings}\n`;
-      if (details.weight) description += `Weight: ${details.weight}\n`;
+      if (formProfile === 'flowers') {
+        if (details.weight) description += `Bouquet contents: ${details.weight}\n`;
+        if (details.toppings) description += `Toppings: ${details.toppings}\n`;
+      } else {
+        if (details.servings) description += `Servings: ${details.servings}\n`;
+        if (details.toppings) description += `Toppings: ${details.toppings}\n`;
+        if (details.weight) description += `Weight: ${details.weight}\n`;
+      }
       if (details.countryOfOrigin) description += `Country of Origin: ${details.countryOfOrigin}\n`;
       description += '\n';
     }
@@ -489,8 +672,7 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
         weight: '',
         countryOfOrigin: ''
       });
-      setPleaseNote(`• Cake stands and cutlery shown in images are for display only and are not included with the cake.
-• This cake is hand-delivered in a high-quality cardboard box.`);
+      setPleaseNote(getDefaultPleaseNoteBullets(formProfile));
     }
   };
 
@@ -615,110 +797,246 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
         
         {expandedSections.details && (
           <div className="px-3 pb-3 space-y-2">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Cake Flavour
-                {primarySubcategoryId && subcategories.find(sub => 
-                  sub.id === primarySubcategoryId || sub.id === primarySubcategoryId.toString()
-                ) && (
-                  <span className="ml-1 text-xs text-blue-600 dark:text-blue-400">(Auto-filled)</span>
+            {isCakeDetailsLayout ? (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {flavourFieldLabel}
+                      {primarySubcategoryId && subcategories.find(sub =>
+                        sub.id === primarySubcategoryId || sub.id === primarySubcategoryId.toString()
+                      ) && (
+                        <span className="ml-1 text-xs text-blue-600 dark:text-blue-400">(Auto-filled)</span>
+                      )}
+                    </label>
+                    <Input
+                      value={details.cakeFlavour}
+                      onChange={(e) => handleDetailChange('cakeFlavour', e.target.value)}
+                      placeholder={flavourPlaceholder}
+                      className="text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Version
+                    </label>
+                    <select
+                      value={details.version}
+                      onChange={(e) => handleDetailChange('version', e.target.value)}
+                      className={shapeSelectClassName}
+                    >
+                      <option value="">Select version</option>
+                      <option value="Egg">Egg</option>
+                      <option value="Eggless">Eggless</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Weight
+                      {isCakePricingForm && (baseWeight || productVariations.length > 0) && (
+                        <span className="ml-1 text-xs text-blue-600 dark:text-blue-400">
+                          {baseWeight ? '(From base weight)' : '(Auto-filled)'}
+                        </span>
+                      )}
+                      {!isCakePricingForm && (
+                        <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
+                          (Not synced from primary option label unless it includes kg, g, ml, etc.)
+                        </span>
+                      )}
+                    </label>
+                    <Input
+                      value={details.weight}
+                      onChange={(e) => handleDetailChange('weight', e.target.value)}
+                      placeholder="e.g., 1 kg, 500g, 2 lbs"
+                      className="text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {shapeFieldLabel}
+                    </label>
+                    <select
+                      value={details.shape}
+                      onChange={(e) => handleDetailChange('shape', e.target.value)}
+                      className={shapeSelectClassName}
+                    >
+                      <option value="">Select shape</option>
+                      {shapeSelectOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Servings
+                      {details.weight &&
+                        (isCakePricingForm || hasExplicitMassUnit(details.weight)) && (
+                        <span className="ml-1 text-xs text-blue-600 dark:text-blue-400">(Auto-calculated)</span>
+                      )}
+                    </label>
+                    <Input
+                      value={details.servings}
+                      onChange={(e) => handleDetailChange('servings', e.target.value)}
+                      placeholder="e.g., 8-10 people, 12 servings"
+                      className="text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Country of Origin
+                    </label>
+                    <Input
+                      value={details.countryOfOrigin}
+                      onChange={(e) => handleDetailChange('countryOfOrigin', e.target.value)}
+                      placeholder="e.g., India"
+                      className="text-sm"
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {shapeFieldLabel}
+                    </label>
+                    <select
+                      value={details.shape}
+                      onChange={(e) => handleDetailChange('shape', e.target.value)}
+                      className={shapeSelectClassName}
+                    >
+                      <option value="">
+                        {formProfile === 'flowers' ? 'Select arrangement style' : 'Select shape'}
+                      </option>
+                      {shapeSelectOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Country of Origin
+                    </label>
+                    <Input
+                      value={details.countryOfOrigin}
+                      onChange={(e) => handleDetailChange('countryOfOrigin', e.target.value)}
+                      placeholder="e.g., India"
+                      className="text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {flavourFieldLabel}
+                      {primarySubcategoryId && subcategories.find(sub =>
+                        sub.id === primarySubcategoryId || sub.id === primarySubcategoryId.toString()
+                      ) && (
+                        <span className="ml-1 text-xs text-blue-600 dark:text-blue-400">(Auto-filled)</span>
+                      )}
+                    </label>
+                    <Input
+                      value={details.cakeFlavour}
+                      onChange={(e) => handleDetailChange('cakeFlavour', e.target.value)}
+                      placeholder={flavourPlaceholder}
+                      className="text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {isFlowersProfile ? (
+                        <>
+                          {flowersBouquetLabel}
+                          <span className="ml-1 text-xs font-normal text-gray-500 dark:text-gray-400">
+                            (stem counts, varieties, wrap, vase — not synced from price options)
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          Weight
+                          {isCakePricingForm && (baseWeight || productVariations.length > 0) && (
+                            <span className="ml-1 text-xs text-blue-600 dark:text-blue-400">
+                              {baseWeight ? '(From base weight)' : '(Auto-filled)'}
+                            </span>
+                          )}
+                          {!isCakePricingForm && (
+                            <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
+                              (Not synced from primary option label unless it includes kg, g, ml, etc.)
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </label>
+                    {isFlowersProfile ? (
+                      <textarea
+                        value={details.weight}
+                        onChange={(e) => handleDetailChange('weight', e.target.value)}
+                        rows={3}
+                        placeholder={flowersBouquetPlaceholder}
+                        className={`${shapeSelectClassName} min-h-[4.5rem] resize-y font-sans`}
+                      />
+                    ) : (
+                      <Input
+                        value={details.weight}
+                        onChange={(e) => handleDetailChange('weight', e.target.value)}
+                        placeholder="e.g., 1 kg, 500g, 2 lbs"
+                        className="text-sm"
+                      />
+                    )}
+                  </div>
+                </div>
+                {!isFlowersProfile && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className={showTreatsEggVersion ? '' : 'md:col-span-2'}>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Servings
+                      {details.weight &&
+                        (isCakePricingForm || hasExplicitMassUnit(details.weight)) && (
+                        <span className="ml-1 text-xs text-blue-600 dark:text-blue-400">(Auto-calculated)</span>
+                      )}
+                    </label>
+                    <Input
+                      value={details.servings}
+                      onChange={(e) => handleDetailChange('servings', e.target.value)}
+                      placeholder="e.g., 8-10 people, 12 servings"
+                      className="text-sm"
+                    />
+                  </div>
+                  {showTreatsEggVersion && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Version
+                      </label>
+                      <select
+                        value={details.version}
+                        onChange={(e) => handleDetailChange('version', e.target.value)}
+                        className={shapeSelectClassName}
+                      >
+                        <option value="">Select version</option>
+                        <option value="Egg">Egg</option>
+                        <option value="Eggless">Eggless</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
                 )}
-              </label>
-              <Input
-                value={details.cakeFlavour}
-                onChange={(e) => handleDetailChange('cakeFlavour', e.target.value)}
-                placeholder="e.g., Chocolate, Vanilla, Strawberry"
-                className="text-sm"
-              />
-            </div>
-              
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Version
-                </label>
-                <select
-                  value={details.version}
-                  onChange={(e) => handleDetailChange('version', e.target.value)}
-                  className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">Select version</option>
-                  <option value="Egg">Egg</option>
-                  <option value="Eggless">Eggless</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Weight
-                  {(baseWeight || productVariations.length > 0) && (
-                    <span className="ml-1 text-xs text-blue-600 dark:text-blue-400">
-                      {baseWeight ? '(From base weight)' : '(Auto-filled)'}
-                    </span>
-                  )}
-                </label>
-                <Input
-                  value={details.weight}
-                  onChange={(e) => handleDetailChange('weight', e.target.value)}
-                  placeholder="e.g., 1 kg, 500g, 2 lbs"
-                  className="text-sm"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Shape
-                </label>
-                <select
-                  value={details.shape}
-                  onChange={(e) => handleDetailChange('shape', e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">Select shape</option>
-                  <option value="Round">Round</option>
-                  <option value="Heart">Heart</option>
-                  <option value="Square">Square</option>
-                </select>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Servings
-                  {details.weight && (
-                    <span className="ml-1 text-xs text-blue-600 dark:text-blue-400">(Auto-calculated)</span>
-                  )}
-                </label>
-                <Input
-                  value={details.servings}
-                  onChange={(e) => handleDetailChange('servings', e.target.value)}
-                  placeholder="e.g., 8-10 people, 12 servings"
-                  className="text-sm"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Country of Origin
-                </label>
-                <Input
-                  value={details.countryOfOrigin}
-                  onChange={(e) => handleDetailChange('countryOfOrigin', e.target.value)}
-                  placeholder="e.g., India"
-                  className="text-sm"
-                />
-              </div>
-            </div>
-            
+              </>
+            )}
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Toppings
+                {formProfile === 'flowers' ? 'Add-ons (ribbon, foliage, etc.)' : 'Toppings'}
               </label>
               <Input
                 value={details.toppings}
                 onChange={(e) => handleDetailChange('toppings', e.target.value)}
-                placeholder="e.g., Fresh fruits, Chocolate shavings, Nuts"
+                placeholder={toppingsPlaceholder}
                 className="text-sm"
               />
             </div>

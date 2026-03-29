@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { resolveProductFormProfileFromProduct, isCakeProfile } from '../../../../utils/productFormProfile';
 import { 
   Info,
   Shield,
@@ -22,6 +23,16 @@ import {
 const ProductTabs = ({ product, selectedVariant, customizations = {}, dynamicContent = null, selectedTier = null }) => {
   const [activeTab, setActiveTab] = useState('overview');
 
+  const formProfile = useMemo(
+    () => resolveProductFormProfileFromProduct(product),
+    [product]
+  );
+  const isCake = isCakeProfile(formProfile);
+  const showShapeInOverview =
+    isCake || formProfile === 'flowers' || formProfile === 'treats' || formProfile === 'sweets';
+  const shapeOverviewLabel =
+    formProfile === 'flowers' ? 'Arrangement' : formProfile === 'sweets' ? 'Shape / pack' : 'Shape';
+
   // Helper function to parse product details from description
   const parseProductDetails = () => {
     const details = {};
@@ -29,7 +40,7 @@ const ProductTabs = ({ product, selectedVariant, customizations = {}, dynamicCon
     let description = dynamicContent ? dynamicContent.description : product.description;
     
     // Add tier information to description if not already present
-    if (selectedTier && !description.includes('Cake Tiers:')) {
+    if (isCake && selectedTier && !description.includes('Cake Tiers:')) {
       description += `\nCake Tiers: ${selectedTier}`;
     }
     
@@ -59,6 +70,10 @@ const ProductTabs = ({ product, selectedVariant, customizations = {}, dynamicCon
         else if (trimmedLine.includes('Servings:')) {
           details.servings = trimmedLine.replace('Servings:', '').trim();
         }
+        // Parse bouquet line (flowers; same slot as legacy Weight: for older listings)
+        else if (trimmedLine.includes('Bouquet contents:')) {
+          details.weight = trimmedLine.replace('Bouquet contents:', '').trim();
+        }
         // Parse Weight
         else if (trimmedLine.includes('Weight:')) {
           details.weight = trimmedLine.replace('Weight:', '').trim();
@@ -80,6 +95,42 @@ const ProductTabs = ({ product, selectedVariant, customizations = {}, dynamicCon
   // Get dynamic product details based on current selections
   const getDynamicProductDetails = () => {
     const parsedDetails = parseProductDetails();
+
+    if (!isCake && formProfile !== 'treats') {
+      const isFlowers = formProfile === 'flowers';
+      const purchaseOption = selectedVariant
+        ? selectedVariant.weight
+        : (product.base_weight || '—');
+      return {
+        cakeFlavour: '—',
+        version: customizations.isEggless ? 'Eggless' : (parsedDetails.version || (product.is_eggless ? 'Eggless' : 'Egg')),
+        shape: customizations.shape || parsedDetails.shape || product.shape || '—',
+        cakeTiers: '—',
+        servings: isFlowers
+          ? null
+          : (product.serving_size_description || product.serving_size || parsedDetails.servings || '—'),
+        purchaseOption,
+        bouquetContents: isFlowers ? (parsedDetails.weight || '') : '',
+        weight: isFlowers
+          ? purchaseOption
+          : (selectedVariant ? selectedVariant.weight : (parsedDetails.weight || product.base_weight || '—')),
+        toppings: parsedDetails.toppings || '—',
+        countryOfOrigin: parsedDetails.countryOfOrigin || product.country_of_origin || 'India'
+      };
+    }
+
+    if (formProfile === 'treats') {
+      return {
+        cakeFlavour: customizations.flavor || parsedDetails.cakeFlavour || '—',
+        version: customizations.isEggless ? 'Eggless' : (parsedDetails.version || (product.is_eggless ? 'Eggless' : 'Egg')),
+        shape: customizations.shape || parsedDetails.shape || product.shape || '—',
+        cakeTiers: '—',
+        servings: product.serving_size_description || product.serving_size || parsedDetails.servings || '—',
+        weight: selectedVariant ? selectedVariant.weight : (parsedDetails.weight || product.base_weight || '—'),
+        toppings: parsedDetails.toppings || '—',
+        countryOfOrigin: parsedDetails.countryOfOrigin || product.country_of_origin || 'India'
+      };
+    }
     
     return {
       cakeFlavour: customizations.flavor || parsedDetails.cakeFlavour || 'Chocolate',
@@ -144,14 +195,18 @@ const ProductTabs = ({ product, selectedVariant, customizations = {}, dynamicCon
             <div className="bg-gray-50/50 dark:bg-gray-700/30 border border-rose-200/30 dark:border-rose-800/30 rounded-lg p-3 sm:p-4 lg:p-4">
               {/* Mobile: Grid Layout with Icons */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5 lg:hidden">
+                {(isCake || formProfile === 'treats') && (
                 <div className="flex items-center gap-2">
                   <Cake className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0" />
                   <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">Cake Flavour</span>
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                      {formProfile === 'treats' ? 'Flavor' : 'Cake Flavour'}
+                    </span>
                     <span className="text-gray-400 dark:text-gray-500">-</span>
                     <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate">{dynamicDetails.cakeFlavour}</span>
                   </div>
                 </div>
+                )}
                 <div className="flex items-center gap-2">
                   <Circle className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0" />
                   <div className="flex items-center gap-1.5 flex-1 min-w-0">
@@ -160,14 +215,17 @@ const ProductTabs = ({ product, selectedVariant, customizations = {}, dynamicCon
                     <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate">{dynamicDetails.version}</span>
                   </div>
                 </div>
+                {showShapeInOverview && (
                 <div className="flex items-center gap-2">
                   <Circle className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0" />
                   <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">Shape</span>
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">{shapeOverviewLabel}</span>
                     <span className="text-gray-400 dark:text-gray-500">-</span>
                     <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate">{dynamicDetails.shape}</span>
                   </div>
                 </div>
+                )}
+                {isCake && (
                 <div className="flex items-center gap-2">
                   <Layers className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0" />
                   <div className="flex items-center gap-1.5 flex-1 min-w-0">
@@ -176,22 +234,50 @@ const ProductTabs = ({ product, selectedVariant, customizations = {}, dynamicCon
                     <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate">{dynamicDetails.cakeTiers || selectedTier || 'Not selected'}</span>
                   </div>
                 </div>
+                )}
+                {(isCake || formProfile === 'treats' || formProfile === 'sweets') && (
                 <div className="flex items-center gap-2">
                   <Users className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0" />
                   <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">Servings</span>
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">{isCake ? 'Servings' : 'Pack / size'}</span>
                     <span className="text-gray-400 dark:text-gray-500">-</span>
                     <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate">{dynamicDetails.servings}</span>
                   </div>
                 </div>
+                )}
+                {formProfile === 'flowers' ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <Package className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0" />
+                      <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">Option</span>
+                        <span className="text-gray-400 dark:text-gray-500">-</span>
+                        <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate">{dynamicDetails.purchaseOption}</span>
+                      </div>
+                    </div>
+                    {dynamicDetails.bouquetContents ? (
+                      <div className="flex items-start gap-2 sm:col-span-2">
+                        <Package className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" />
+                        <div className="flex flex-col gap-1 flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">Bouquet contents</span>
+                            <span className="text-gray-400 dark:text-gray-500">-</span>
+                          </div>
+                          <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 leading-relaxed break-words">{dynamicDetails.bouquetContents}</span>
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
                 <div className="flex items-center gap-2">
                   <Package className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0" />
                   <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">Weight</span>
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">{isCake ? 'Weight' : 'Option'}</span>
                     <span className="text-gray-400 dark:text-gray-500">-</span>
                     <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate">{dynamicDetails.weight}</span>
                   </div>
                 </div>
+                )}
                 <div className="flex items-start gap-2 sm:col-span-2">
                   <Sparkles className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" />
                   <div className="flex flex-col gap-1 flex-1 min-w-0">
@@ -214,42 +300,72 @@ const ProductTabs = ({ product, selectedVariant, customizations = {}, dynamicCon
 
               {/* Desktop: Row Layout with Icons */}
               <div className="hidden lg:block space-y-2.5">
+                {(isCake || formProfile === 'treats') && (
                 <div className="flex items-center gap-3 py-1.5">
                   <Cake className="w-4 h-4 text-rose-500 dark:text-rose-400 flex-shrink-0" />
-                  <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Cake Flavour</span>
+                  <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                    {formProfile === 'treats' ? 'Flavor' : 'Cake Flavour'}
+                  </span>
                   <span className="text-gray-400 dark:text-gray-500">-</span>
                   <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{dynamicDetails.cakeFlavour}</span>
                 </div>
+                )}
                 <div className="flex items-center gap-3 py-1.5">
                   <Circle className="w-4 h-4 text-rose-500 dark:text-rose-400 flex-shrink-0" />
                   <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Version</span>
                   <span className="text-gray-400 dark:text-gray-500">-</span>
                   <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{dynamicDetails.version}</span>
                 </div>
+                {showShapeInOverview && (
                 <div className="flex items-center gap-3 py-1.5">
                   <Circle className="w-4 h-4 text-rose-500 dark:text-rose-400 flex-shrink-0" />
-                  <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Shape</span>
+                  <span className="text-sm font-medium text-gray-600 dark:text-gray-400">{shapeOverviewLabel}</span>
                   <span className="text-gray-400 dark:text-gray-500">-</span>
                   <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{dynamicDetails.shape}</span>
                 </div>
+                )}
+                {isCake && (
                 <div className="flex items-center gap-3 py-1.5">
                   <Layers className="w-4 h-4 text-rose-500 dark:text-rose-400 flex-shrink-0" />
                   <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Cake Tiers</span>
                   <span className="text-gray-400 dark:text-gray-500">-</span>
                   <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{dynamicDetails.cakeTiers || selectedTier || 'Not selected'}</span>
                 </div>
+                )}
+                {(isCake || formProfile === 'treats' || formProfile === 'sweets') && (
                 <div className="flex items-center gap-3 py-1.5">
                   <Users className="w-4 h-4 text-rose-500 dark:text-rose-400 flex-shrink-0" />
-                  <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Servings</span>
+                  <span className="text-sm font-medium text-gray-600 dark:text-gray-400">{isCake ? 'Servings' : 'Pack / size'}</span>
                   <span className="text-gray-400 dark:text-gray-500">-</span>
                   <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{dynamicDetails.servings}</span>
                 </div>
+                )}
+                {formProfile === 'flowers' ? (
+                  <>
+                    <div className="flex items-center gap-3 py-1.5">
+                      <Package className="w-4 h-4 text-rose-500 dark:text-rose-400 flex-shrink-0" />
+                      <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Option</span>
+                      <span className="text-gray-400 dark:text-gray-500">-</span>
+                      <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{dynamicDetails.purchaseOption}</span>
+                    </div>
+                    {dynamicDetails.bouquetContents ? (
+                      <div className="flex items-start gap-3 py-1.5">
+                        <Package className="w-4 h-4 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" />
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Bouquet contents</span>
+                          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 leading-relaxed">{dynamicDetails.bouquetContents}</span>
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
                 <div className="flex items-center gap-3 py-1.5">
                   <Package className="w-4 h-4 text-rose-500 dark:text-rose-400 flex-shrink-0" />
-                  <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Weight</span>
+                  <span className="text-sm font-medium text-gray-600 dark:text-gray-400">{isCake ? 'Weight' : 'Option'}</span>
                   <span className="text-gray-400 dark:text-gray-500">-</span>
                   <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{dynamicDetails.weight}</span>
                 </div>
+                )}
                 <div className="flex items-center gap-3 py-1.5">
                   <Sparkles className="w-4 h-4 text-rose-500 dark:text-rose-400 flex-shrink-0" />
                   <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Toppings</span>

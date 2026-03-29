@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Plus, Search, Edit, Trash2, Package, Star, Award, Loader2, Download, Upload, FileText, Eye, RefreshCw, X, MessageSquare, CheckCircle, Image as ImageIcon } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -17,6 +17,15 @@ import productService from '../services/productService';
 import categoryService from '../services/categoryService';
 import apiClient from '../services/api';
 import { useToastContext } from '../contexts/ToastContext';
+import {
+  getProductFormProfile,
+  isCakeFormProfile,
+  getNonCakeProfileCopy,
+} from '../utils/productFormProfile';
+import {
+  getDefaultCareStorageHtml,
+  getDefaultDeliveryGuidelinesHtml,
+} from '../utils/productSupplementalDefaults';
 
 // Utility functions from productService
 const calculateDiscountedPrice = productService.calculateDiscountedPrice;
@@ -48,6 +57,19 @@ const getEgglessIcon = (isEggless: boolean | undefined) => {
     </span>
   );
 };
+
+const ProductImageUploadHint = () => (
+  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 leading-relaxed">
+    Square (1:1) images look best on the storefront—aim for at least{' '}
+    <span className="whitespace-nowrap">1200×1200px</span> when possible. JPEG, PNG, GIF, or WebP. Max 10MB per file.
+  </p>
+);
+
+const ProductGalleryUploadHint = () => (
+  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 leading-relaxed">
+    Optional extras: more photos or short videos (same formats; max 10MB each). Up to 10 files per upload. Square images align with the main product view.
+  </p>
+);
 
 // Modern Rating Component
 const ModernRatingComponent = ({ 
@@ -250,6 +272,38 @@ export const Products: React.FC = () => {
     delivery_guidelines: ''
   });
 
+  const addFormProfile = useMemo(
+    () => getProductFormProfile(newProduct.primary_category_id, newProduct.category_ids),
+    [newProduct.primary_category_id, newProduct.category_ids]
+  );
+  const editFormProfile = useMemo(
+    () => getProductFormProfile(editProduct.primary_category_id, editProduct.category_ids),
+    [editProduct.primary_category_id, editProduct.category_ids]
+  );
+  const isNewCakeForm = isCakeFormProfile(addFormProfile);
+  const isEditCakeForm = isCakeFormProfile(editFormProfile);
+  /** Cakes + Small Treats Desserts (same optional flavor grid as cakes). */
+  const showFlavorPickerOnAdd = isNewCakeForm || addFormProfile === 'treats';
+  const showFlavorPickerOnEdit = isEditCakeForm || editFormProfile === 'treats';
+
+  /** When primary category (profile) changes while adding a product, refresh care & delivery defaults. */
+  const addFormProfileTransitionRef = React.useRef(addFormProfile);
+  React.useEffect(() => {
+    if (!showAddModal) {
+      addFormProfileTransitionRef.current = 'cake';
+      return;
+    }
+    const prev = addFormProfileTransitionRef.current;
+    if (prev !== addFormProfile) {
+      setNewProduct((p) => ({
+        ...p,
+        care_storage: getDefaultCareStorageHtml(addFormProfile),
+        delivery_guidelines: getDefaultDeliveryGuidelinesHtml(addFormProfile),
+      }));
+    }
+    addFormProfileTransitionRef.current = addFormProfile;
+  }, [showAddModal, addFormProfile]);
+
   // Reusable function to reset new product form
   const resetNewProductForm = useCallback(() => {
     // Prefilled template for product description
@@ -271,30 +325,6 @@ export const Products: React.FC = () => {
 <li>Cake stands and cutlery shown in images are for display only and are not included with the cake.</li>
 <li>This cake is hand delivered in a good quality cardboard box.</li>
 </ul>`;
-
-    // Prefilled template for care & storage
-    const careStorageTemplate = `<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">1). Refrigerate:</strong> <span style="color: #6b7280;">Store cream cakes in a refrigerator. Fondant cakes should be kept in an air-conditioned environment. (Use a serrated knife to cut a fondant cake.)</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">2). Temperature:</strong> <span style="color: #6b7280;">Slice and serve the cake at room temperature. Keep away from direct heat.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">3). Consumption:</strong> <span style="color: #6b7280;">Consume the cake within 24 hours for best taste and freshness.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">4). Decorations:</strong> <span style="color: #6b7280;">Some decorations may contain wires, toothpicks, or skewers - please check before serving to children.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; color: #1f2937; margin-top: 16px;">Enjoy your Creamingo cake! 🎂</p>`;
-
-    // Prefilled template for delivery guidelines
-    const deliveryGuidelinesTemplate = `<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Packaging:</strong> <span style="color: #6b7280;">Every Creamingo cake is hand-delivered in a sturdy, premium-quality box.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Complimentary Items:</strong> <span style="color: #6b7280;">Knives and message tags are included whenever available.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Timing:</strong> <span style="color: #6b7280;">Delivery times are estimates and may vary by product and location.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Perishable Nature:</strong> <span style="color: #6b7280;">Cakes are perishable and will be delivered in a single attempt only.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Substitution Policy:</strong> <span style="color: #6b7280;">In rare cases, designs or flavors may vary slightly based on availability.</span></p>
-
-<p style="margin-bottom: 20px;"></p>`;
 
     setNewProduct({
       name: '',
@@ -319,8 +349,8 @@ export const Products: React.FC = () => {
       is_bestseller: false,
       preparation_time: 0,
       serving_size: '',
-      care_storage: careStorageTemplate,
-      delivery_guidelines: deliveryGuidelinesTemplate
+      care_storage: getDefaultCareStorageHtml('cake'),
+      delivery_guidelines: getDefaultDeliveryGuidelinesHtml('cake')
     });
   }, []);
 
@@ -835,6 +865,20 @@ export const Products: React.FC = () => {
         setActionLoading(null);
         return;
       }
+
+      if (!isNewCakeForm) {
+        const hasSubcategories =
+          newProduct.subcategory_ids.length > 0 ||
+          (newProduct.subcategory_id !== '' && newProduct.subcategory_id != null);
+        if (!hasSubcategories) {
+          showError(
+            'Validation Error',
+            'Please select at least one subcategory. Subcategories are required for Treats, Flowers, and Sweets.'
+          );
+          setActionLoading(null);
+          return;
+        }
+      }
       
       const legacyCategoryId = newProduct.primary_category_id
         || (newProduct.category_ids.length > 0 ? newProduct.category_ids[0] : parseInt(newProduct.category_id));
@@ -885,6 +929,11 @@ export const Products: React.FC = () => {
         variations: productVariations, // Include product variations
         gallery_images: selectedGalleryImages // Include gallery images
       };
+
+      if (!showFlavorPickerOnAdd) {
+        productData.available_flavor_ids = [];
+        productData.primary_flavor_id = undefined;
+      }
 
       console.log('Sending product data:', productData); // Debug log
       const response = await productService.createProduct(productData);
@@ -989,65 +1038,21 @@ export const Products: React.FC = () => {
 
   // Handler functions for care & storage reset
   const handleCareStorageReset = useCallback(() => {
-    const careStorageTemplate = `<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">1). Refrigerate:</strong> <span style="color: #6b7280;">Store cream cakes in a refrigerator. Fondant cakes should be kept in an air-conditioned environment. (Use a serrated knife to cut a fondant cake.)</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">2). Temperature:</strong> <span style="color: #6b7280;">Slice and serve the cake at room temperature. Keep away from direct heat.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">3). Consumption:</strong> <span style="color: #6b7280;">Consume the cake within 24 hours for best taste and freshness.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">4). Decorations:</strong> <span style="color: #6b7280;">Some decorations may contain wires, toothpicks, or skewers - please check before serving to children.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; color: #1f2937; margin-top: 16px;">Enjoy your Creamingo cake! 🎂</p>`;
-    
-    handleInputChange('care_storage', careStorageTemplate);
-  }, [handleInputChange]);
+    handleInputChange('care_storage', getDefaultCareStorageHtml(addFormProfile));
+  }, [handleInputChange, addFormProfile]);
 
   const handleEditCareStorageReset = useCallback(() => {
-    const careStorageTemplate = `<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">1). Refrigerate:</strong> <span style="color: #6b7280;">Store cream cakes in a refrigerator. Fondant cakes should be kept in an air-conditioned environment. (Use a serrated knife to cut a fondant cake.)</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">2). Temperature:</strong> <span style="color: #6b7280;">Slice and serve the cake at room temperature. Keep away from direct heat.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">3). Consumption:</strong> <span style="color: #6b7280;">Consume the cake within 24 hours for best taste and freshness.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">4). Decorations:</strong> <span style="color: #6b7280;">Some decorations may contain wires, toothpicks, or skewers - please check before serving to children.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; color: #1f2937; margin-top: 16px;">Enjoy your Creamingo cake! 🎂</p>`;
-    
-    handleEditInputChange('care_storage', careStorageTemplate);
-  }, [handleEditInputChange]);
+    handleEditInputChange('care_storage', getDefaultCareStorageHtml(editFormProfile));
+  }, [handleEditInputChange, editFormProfile]);
 
   // Handler functions for delivery guidelines reset
   const handleDeliveryGuidelinesReset = useCallback(() => {
-    const deliveryGuidelinesTemplate = `<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Packaging:</strong> <span style="color: #6b7280;">Every Creamingo cake is hand-delivered in a sturdy, premium-quality box.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Complimentary Items:</strong> <span style="color: #6b7280;">Knives and message tags are included whenever available.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Timing:</strong> <span style="color: #6b7280;">Delivery times are estimates and may vary by product and location.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Perishable Nature:</strong> <span style="color: #6b7280;">Cakes are perishable and will be delivered in a single attempt only.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Substitution Policy:</strong> <span style="color: #6b7280;">In rare cases, designs or flavors may vary slightly based on availability.</span></p>
-
-<p style="margin-bottom: 20px;"></p>`;
-    
-    handleInputChange('delivery_guidelines', deliveryGuidelinesTemplate);
-  }, [handleInputChange]);
+    handleInputChange('delivery_guidelines', getDefaultDeliveryGuidelinesHtml(addFormProfile));
+  }, [handleInputChange, addFormProfile]);
 
   const handleEditDeliveryGuidelinesReset = useCallback(() => {
-    const deliveryGuidelinesTemplate = `<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Packaging:</strong> <span style="color: #6b7280;">Every Creamingo cake is hand-delivered in a sturdy, premium-quality box.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Complimentary Items:</strong> <span style="color: #6b7280;">Knives and message tags are included whenever available.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Timing:</strong> <span style="color: #6b7280;">Delivery times are estimates and may vary by product and location.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Perishable Nature:</strong> <span style="color: #6b7280;">Cakes are perishable and will be delivered in a single attempt only.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Substitution Policy:</strong> <span style="color: #6b7280;">In rare cases, designs or flavors may vary slightly based on availability.</span></p>
-
-<p style="margin-bottom: 20px;"></p>`;
-    
-    handleEditInputChange('delivery_guidelines', deliveryGuidelinesTemplate);
-  }, [handleEditInputChange]);
+    handleEditInputChange('delivery_guidelines', getDefaultDeliveryGuidelinesHtml(editFormProfile));
+  }, [handleEditInputChange, editFormProfile]);
 
   // Update edit form when editing product changes
   React.useEffect(() => {
@@ -1669,6 +1674,20 @@ export const Products: React.FC = () => {
     try {
       setActionLoading('edit-product');
 
+      if (!isEditCakeForm) {
+        const hasSubcategories =
+          editProduct.subcategory_ids.length > 0 ||
+          (editProduct.subcategory_id !== '' && editProduct.subcategory_id != null);
+        if (!hasSubcategories) {
+          showError(
+            'Validation Error',
+            'Please select at least one subcategory. Subcategories are required for Treats, Flowers, and Sweets.'
+          );
+          setActionLoading(null);
+          return;
+        }
+      }
+
       const toValidNumber = (value: string | number | null | undefined): number | undefined => {
         if (value === null || value === undefined || value === '') {
           return undefined;
@@ -1763,6 +1782,11 @@ export const Products: React.FC = () => {
         shape: editProductDetails.shape || 'Round',
         country_of_origin: editProductDetails.countryOfOrigin || 'India'
       };
+
+      if (!showFlavorPickerOnEdit) {
+        productData.available_flavor_ids = [];
+        productData.primary_flavor_id = undefined;
+      }
 
       // Only include variations if they have been modified
       // Compare current variations with original variations to detect changes
@@ -2308,40 +2332,57 @@ export const Products: React.FC = () => {
             />
           </div>
 
-          {/* Third Box: Available Flavors Selection */}
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-            <FlavorSelector
-              subcategories={subcategories}
-              selectedSubcategoryIds={newProduct.subcategory_ids}
-              selectedFlavorIds={newProduct.available_flavor_ids}
-              primaryFlavorId={newProduct.primary_flavor_id}
-              onFlavorsChange={(flavorIds) => setNewProduct(prev => ({ ...prev, available_flavor_ids: flavorIds }))}
-              onPrimaryFlavorChange={(flavorId) => setNewProduct(prev => ({ ...prev, primary_flavor_id: flavorId }))}
-            />
-          </div>
+          {/* Third Box: Available Flavors (cakes + Small Treats Desserts only) */}
+          {showFlavorPickerOnAdd ? (
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+              <FlavorSelector
+                subcategories={subcategories}
+                selectedSubcategoryIds={newProduct.subcategory_ids}
+                selectedFlavorIds={newProduct.available_flavor_ids}
+                primaryFlavorId={newProduct.primary_flavor_id}
+                onFlavorsChange={(flavorIds) => setNewProduct(prev => ({ ...prev, available_flavor_ids: flavorIds }))}
+                onPrimaryFlavorChange={(flavorId) => setNewProduct(prev => ({ ...prev, primary_flavor_id: flavorId }))}
+                description={
+                  addFormProfile === 'treats'
+                    ? 'Optional: choose which cake-style flavors apply to these bakery treats (same flavor list as cakes).'
+                    : undefined
+                }
+              />
+            </div>
+          ) : (
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Flavors & cake options</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Not used for {getNonCakeProfileCopy(addFormProfile).title}. Use the price section for pack sizes, units, or bouquet options.
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">{getNonCakeProfileCopy(addFormProfile).hint}</p>
+            </div>
+          )}
 
           {/* Fourth Box: Price Section */}
           <div className="bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Price Section</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              {isNewCakeForm ? 'Price Section' : 'Price & purchase options'}
+            </h3>
             
             {/* Base Price Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
                 <Input 
-                  label="Base Weight" 
-                  placeholder="e.g., 1kg" 
+                  label={isNewCakeForm ? 'Base Weight' : 'Primary option label'}
+                  placeholder={isNewCakeForm ? 'e.g., 1kg' : 'e.g., Standard, 250g, Box of 6'}
                   value={newProduct.base_weight}
                   onChange={(e) => handleInputChange('base_weight', e.target.value)}
                 />
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Servings
+                  {isNewCakeForm ? 'Servings' : 'Size / pack note (optional)'}
                 </label>
                 <Input 
-                  placeholder={calculateServings(newProduct.base_weight)} 
+                  placeholder={isNewCakeForm ? calculateServings(newProduct.base_weight) : 'e.g., Serves 2, 12 pieces'}
                   value={newProduct.serving_size}
                   onChange={(e) => handleInputChange('serving_size', e.target.value)}
                 />
-                {!newProduct.serving_size && (
+                {isNewCakeForm && !newProduct.serving_size && (
                   <p className="text-xs text-gray-500 mt-1">
                     Auto-calculated: {calculateServings(newProduct.base_weight)}
                   </p>
@@ -2385,7 +2426,7 @@ export const Products: React.FC = () => {
                   disabled={!canAddNewVariation()}
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  Add New Variation
+                  {isNewCakeForm ? 'Add New Variation' : 'Add another price option'}
                 </Button>
               </div>
             )}
@@ -2395,17 +2436,17 @@ export const Products: React.FC = () => {
               <div key={`variation-${index}`} className="mb-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 p-4 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-700">
                   <Input 
-                    label="Base Weight" 
-                    placeholder="e.g., 500g" 
+                    label={isNewCakeForm ? 'Base Weight' : 'Option label'}
+                    placeholder={isNewCakeForm ? 'e.g., 500g' : 'e.g., 500g pack, Large bouquet'}
                             value={variation.weight}
                             onChange={(e) => handleVariationChange(index, 'weight', e.target.value)}
                           />
                         <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Servings
+                      {isNewCakeForm ? 'Servings' : 'Note'}
                           </label>
                     <div className="px-4 py-3 bg-gray-50 dark:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl text-sm font-semibold text-blue-600">
-                      {calculateServings(variation.weight)}
+                      {isNewCakeForm ? calculateServings(variation.weight) : (variation.weight ? '—' : 'Enter option label')}
                     </div>
                   </div>
                   <Input 
@@ -2483,7 +2524,7 @@ export const Products: React.FC = () => {
                       disabled={!canAddNewVariation()}
                     >
                       <Plus className="h-4 w-4 mr-2" />
-                      Add New Variation
+                      {isNewCakeForm ? 'Add New Variation' : 'Add another price option'}
                     </Button>
                 </div>
               )}
@@ -2545,10 +2586,12 @@ export const Products: React.FC = () => {
                   onReset={handleDescriptionReset}
                   onClean={handleDescriptionClean}
                   showPreview={showDescriptionPreview}
-                  primarySubcategoryId={newProduct.primary_subcategory_id}
+                  primarySubcategoryId={showFlavorPickerOnAdd ? newProduct.primary_subcategory_id : undefined}
                   subcategories={subcategories}
                   productVariations={productVariations}
                   baseWeight={newProduct.base_weight}
+                  isCakePricingForm={isNewCakeForm}
+                  formProfile={addFormProfile}
                 />
                 
                 {/* Visual Separator */}
@@ -2631,6 +2674,7 @@ export const Products: React.FC = () => {
                       </button>
                     </div>
                   </div>
+                  <ProductImageUploadHint />
                   <div className="flex flex-col h-full">
                     {selectedMainImage ? (
                       <div className="space-y-4 flex-1">
@@ -2704,6 +2748,7 @@ export const Products: React.FC = () => {
                       </button>
                     </div>
                   </div>
+                  <ProductGalleryUploadHint />
                   <div className="flex flex-col h-full">
                     {selectedGalleryImages.length > 0 ? (
                       <div className="space-y-4 flex-1">
@@ -2971,44 +3016,61 @@ export const Products: React.FC = () => {
               />
             </div>
 
-            {/* Third Box: Available Flavors Selection */}
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
-              <FlavorSelector
-                subcategories={subcategories}
-                selectedSubcategoryIds={editProduct.subcategory_ids}
-                selectedFlavorIds={editProduct.available_flavor_ids}
-                primaryFlavorId={editProduct.primary_flavor_id}
-                onFlavorsChange={(flavorIds) => setEditProduct(prev => ({ ...prev, available_flavor_ids: flavorIds }))}
-                onPrimaryFlavorChange={(flavorId) => setEditProduct(prev => ({ ...prev, primary_flavor_id: flavorId }))}
-              />
-            </div>
+            {/* Third Box: Available Flavors Selection (cake only) */}
+            {showFlavorPickerOnEdit ? (
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
+                <FlavorSelector
+                  subcategories={subcategories}
+                  selectedSubcategoryIds={editProduct.subcategory_ids}
+                  selectedFlavorIds={editProduct.available_flavor_ids}
+                  primaryFlavorId={editProduct.primary_flavor_id}
+                  onFlavorsChange={(flavorIds) => setEditProduct(prev => ({ ...prev, available_flavor_ids: flavorIds }))}
+                  onPrimaryFlavorChange={(flavorId) => setEditProduct(prev => ({ ...prev, primary_flavor_id: flavorId }))}
+                  description={
+                    editFormProfile === 'treats'
+                      ? 'Optional: choose which cake-style flavors apply to these bakery treats (same flavor list as cakes).'
+                      : undefined
+                  }
+                />
+              </div>
+            ) : (
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Flavors & cake options</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Not used for {getNonCakeProfileCopy(editFormProfile).title}. Use price options below for packs, units, or bouquet sizes.
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">{getNonCakeProfileCopy(editFormProfile).hint}</p>
+              </div>
+            )}
 
             {/* Fourth Box: Price Section */}
             <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Price Section</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                {isEditCakeForm ? 'Price Section' : 'Price & purchase options'}
+              </h3>
               <div className="space-y-4">
                 {/* Base Price Row */}
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
                   <div className="flex-1">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Base Weight
+                      {isEditCakeForm ? 'Base Weight' : 'Primary option label'}
                     </label>
               <Input 
                 value={editProduct.base_weight}
                 onChange={(e) => handleEditInputChange('base_weight', e.target.value)}
-                      placeholder="e.g., 500g, 1kg" 
+                      placeholder={isEditCakeForm ? 'e.g., 500g, 1kg' : 'e.g., Standard, 250g'} 
                     />
                   </div>
                   <div className="flex-1">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Servings
+                      {isEditCakeForm ? 'Servings' : 'Size / pack note (optional)'}
                     </label>
                     <Input 
                       value={editProduct.serving_size}
                       onChange={(e) => handleEditInputChange('serving_size', e.target.value)}
-                      placeholder={calculateServings(editProduct.base_weight)} 
+                      placeholder={isEditCakeForm ? calculateServings(editProduct.base_weight) : 'e.g., 12 pcs'} 
                     />
-                    {!editProduct.serving_size && (
+                    {isEditCakeForm && !editProduct.serving_size && (
                       <p className="text-xs text-gray-500 mt-1">
                         Auto-calculated: {calculateServings(editProduct.base_weight)}
                       </p>
@@ -3060,17 +3122,17 @@ export const Products: React.FC = () => {
                       <div key={index} className="mb-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 p-4 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-700">
                           <Input 
-                            label="Weight" 
-                            placeholder="e.g., 500g" 
+                            label={isEditCakeForm ? 'Weight' : 'Option label'} 
+                            placeholder={isEditCakeForm ? 'e.g., 500g' : 'e.g., 500g pack'} 
                             value={variation.weight}
                             onChange={(e) => handleEditVariationChange(index, 'weight', e.target.value)}
                           />
                           <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Servings
+                              {isEditCakeForm ? 'Servings' : 'Note'}
                             </label>
                             <div className="px-4 py-3 bg-gray-50 dark:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl text-sm font-semibold text-blue-600">
-                              {calculateServings(variation.weight)}
+                              {isEditCakeForm ? calculateServings(variation.weight) : (variation.weight ? '—' : 'Enter option label')}
                             </div>
                           </div>
                           <Input 
@@ -3123,7 +3185,7 @@ export const Products: React.FC = () => {
                               disabled={!canAddNewEditVariation()}
                               className="px-4 py-2"
                             >
-                              Add New Variation
+                              {isEditCakeForm ? 'Add New Variation' : 'Add another price option'}
                             </Button>
                           </div>
                         )}
@@ -3135,7 +3197,9 @@ export const Products: React.FC = () => {
                 {/* Add New Variation Button - Only show when no variations exist */}
                 {editProductVariations.length === 0 && (
                   <div className="mt-6">
-                    <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-4">Product Variations</h4>
+                    <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-4">
+                      {isEditCakeForm ? 'Product Variations' : 'Additional price options'}
+                    </h4>
                     <div className="text-center py-8 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl">
                       <p className="text-gray-500 dark:text-gray-400 mb-4">No variations added yet</p>
                       <Button 
@@ -3146,7 +3210,7 @@ export const Products: React.FC = () => {
                         disabled={!canAddNewEditVariation()}
                         className="px-4 py-2"
                       >
-                        Add First Variation
+                        {isEditCakeForm ? 'Add First Variation' : 'Add first price option'}
                       </Button>
                     </div>
                   </div>
@@ -3208,10 +3272,12 @@ export const Products: React.FC = () => {
                   onReset={handleEditDescriptionReset}
                   onClean={handleEditDescriptionClean}
                   showPreview={showEditDescriptionPreview}
-                  primarySubcategoryId={editProduct.primary_subcategory_id}
+                  primarySubcategoryId={showFlavorPickerOnEdit ? editProduct.primary_subcategory_id : undefined}
                   subcategories={subcategories}
                   productVariations={editProductVariations}
                   baseWeight={editProduct.base_weight}
+                  isCakePricingForm={isEditCakeForm}
+                  formProfile={editFormProfile}
                 />
                 
                 {/* Visual Separator */}
@@ -3293,6 +3359,7 @@ export const Products: React.FC = () => {
                         </button>
                       </div>
                     </div>
+                    <ProductImageUploadHint />
                     <div className="flex flex-col h-full">
                       {selectedMainImage ? (
                         <div className="space-y-4 flex-1">
@@ -3366,6 +3433,7 @@ export const Products: React.FC = () => {
                         </button>
                       </div>
                     </div>
+                    <ProductGalleryUploadHint />
                     <div className="flex flex-col h-full">
                       {selectedGalleryImages.length > 0 ? (
                         <div className="space-y-4 flex-1">
@@ -3593,6 +3661,7 @@ export const Products: React.FC = () => {
               </div>
             </div>
           )}
+          {galleryType === 'main' ? <ProductImageUploadHint /> : <ProductGalleryUploadHint />}
           
           <ProductFileUpload
             onFilesSelected={(files) => {

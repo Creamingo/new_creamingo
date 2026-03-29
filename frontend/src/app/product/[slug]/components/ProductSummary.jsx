@@ -28,6 +28,7 @@ import MakeItAComboModal from './MakeItAComboModal';
 import weightTierApi from '../../../../api/weightTierApi';
 import addOnApi from '../../../../api/addOnApi';
 import { formatPrice } from '../../../../utils/priceFormatter';
+import { resolveProductFormProfileFromProduct, isCakeProfile } from '../../../../utils/productFormProfile';
 
 const ProductSummary = ({ 
   product, 
@@ -45,6 +46,13 @@ const ProductSummary = ({
   selectedTier,
   onTierChange
 }) => {
+  const formProfile = useMemo(
+    () => resolveProductFormProfileFromProduct(product),
+    [product]
+  );
+  const isCake = isCakeProfile(formProfile);
+  const showStorefrontFlavorPicker = isCake || formProfile === 'treats';
+
   const router = useRouter();
   const { currentPinCode, isDeliveryAvailable, formatPinCode, getDeliveryLocality, getFormattedDeliveryCharge, validatePinCodeDebounced, tempValidationStatus, tempPinCode, checkPinCode } = usePinCode();
   const { isInWishlist, toggleWishlist } = useWishlist();
@@ -729,7 +737,9 @@ const ProductSummary = ({
             })() ? (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Weight</span>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    {isCake ? 'Weight' : 'Option'}
+                  </span>
                 </div>
                 <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2 lg:overflow-x-visible">
                   {/* Base weight option (if not duplicated in variants) */}
@@ -763,11 +773,14 @@ const ProductSummary = ({
               </div>
             ) : null}
             {/* Inline Weight & Servings Display - Always show */}
-            <div className="flex items-center gap-6 text-sm">
+            <div className="flex items-center gap-6 text-sm flex-wrap">
                 <div>
-                <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Weight: </span>
+                <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                  {isCake ? 'Weight: ' : 'Option: '}
+                </span>
                 <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{selectedVariant?.weight || product.base_weight || '—'}</span>
                 </div>
+              {isCake ? (
               <div>
                 <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Servings: </span>
                 <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
@@ -778,9 +791,18 @@ const ProductSummary = ({
                 })()}
               </span>
               </div>
+              ) : (product.serving_size_description || product.serving_size) ? (
+                <div>
+                  <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Pack / size: </span>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    {product.serving_size_description || product.serving_size}
+                  </span>
+                </div>
+              ) : null}
             </div>
 
             {/* Cake Tiers - Inline Radio Style */}
+            {isCake && (
             <div className="text-sm flex items-center">
               <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Cake Tiers:</span>
               <div className="flex items-center gap-4 ml-3">
@@ -799,6 +821,7 @@ const ProductSummary = ({
                 ))}
               </div>
             </div>
+            )}
           </div>
         </div>
       </div>
@@ -875,7 +898,8 @@ const ProductSummary = ({
         </div>
       </div>
 
-      {/* Message on Cake */}
+      {/* Message on Cake (cakes only) */}
+      {isCake && (
       <div className="mt-6">
         <div className="bg-gradient-to-br from-rose-50 to-pink-50 dark:from-rose-900/20 dark:to-pink-900/20 rounded-xl border border-rose-200 dark:border-rose-800 shadow-lg dark:shadow-xl dark:shadow-black/30 p-3 sm:p-4 lg:p-5 transition-all duration-300 hover:shadow-xl dark:hover:shadow-2xl dark:hover:shadow-black/40">
           {/* Header with Icon */}
@@ -911,6 +935,7 @@ const ProductSummary = ({
           </div>
         </div>
       </div>
+      )}
 
       {/* Delivery Slot Preview - Select at checkout */}
       <div className="mt-6">
@@ -920,13 +945,15 @@ const ProductSummary = ({
       {/* Divider */}
       <div className="h-px bg-gray-200 dark:bg-gray-700 my-6" />
 
-      {/* Flavor Selection */}
+      {/* Flavor selection: cakes + Small Treats Desserts (optional product_flavors) */}
+      {showStorefrontFlavorPicker && (
       <FlavorSelector
         product={product}
         selectedFlavor={selectedFlavor}
         onFlavorChange={onFlavorChange}
         onFlavorContentUpdate={handleFlavorContentUpdate}
       />
+      )}
 
 
 

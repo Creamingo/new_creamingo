@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ShoppingCart, Heart } from 'lucide-react';
 import { resolveImageUrl } from '../../../../utils/imageUrl';
+import { resolveProductFormProfileFromProduct, isCakeProfile } from '../../../../utils/productFormProfile';
 
 const StickyCartBar = ({ 
   product, 
@@ -14,6 +15,11 @@ const StickyCartBar = ({
 }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
+
+  const isCake = useMemo(
+    () => isCakeProfile(resolveProductFormProfileFromProduct(product)),
+    [product]
+  );
 
   // Show/hide sticky bar based on scroll position
   useEffect(() => {
@@ -124,7 +130,7 @@ const StickyCartBar = ({
             <div className="flex flex-wrap gap-2 text-xs text-gray-600 dark:text-gray-400">
               {selectedVariant && (
                 <span className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-                  {selectedVariant.weight}
+                  {isCake ? selectedVariant.weight : `Option: ${selectedVariant.weight}`}
                 </span>
               )}
               {customizations.flavor && (

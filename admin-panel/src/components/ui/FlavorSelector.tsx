@@ -10,6 +10,8 @@ export interface FlavorSelectorProps {
   primaryFlavorId?: number;
   onFlavorsChange: (flavorIds: number[]) => void;
   onPrimaryFlavorChange: (flavorId: number) => void;
+  /** Subtext under "Available Flavors" (e.g. optional copy for Small Treats). */
+  description?: string;
   error?: string;
   disabled?: boolean;
 }
@@ -35,6 +37,7 @@ export const FlavorSelector: React.FC<FlavorSelectorProps> = ({
   primaryFlavorId,
   onFlavorsChange,
   onPrimaryFlavorChange,
+  description = 'Select additional flavors this cake can be made in',
   error,
   disabled = false
 }) => {
@@ -71,7 +74,7 @@ export const FlavorSelector: React.FC<FlavorSelectorProps> = ({
             Available Flavors
           </h3>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Select additional flavors this cake can be made in
+            {description}
           </p>
         </div>
         <div className="flex items-center gap-2">
