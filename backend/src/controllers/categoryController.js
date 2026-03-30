@@ -44,6 +44,28 @@ const categorySlugToIdMap = {
   'sweets-dry-fruits': 28
 };
 
+const subcategorySlugFromName = (name) => (
+  name
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/\//g, '-')
+    .replace(/&/g, 'and')
+    .replace(/'/g, '')
+);
+
+/** URL slug matches DB slug or name-derived slug, including …-and-… vs …-… variants */
+const subcategoryMatchesSlug = (sub, requestedSlug) => {
+  if (!requestedSlug || typeof requestedSlug !== 'string') return false;
+  const req = requestedSlug.trim().toLowerCase();
+  const reqAlt = req.replace(/-and-/g, '-');
+  if (sub.slug && String(sub.slug).trim() !== '') {
+    const s = sub.slug.trim().toLowerCase();
+    if (s === req || s === reqAlt) return true;
+  }
+  const fromName = subcategorySlugFromName(sub.name);
+  return fromName === req || fromName === reqAlt;
+};
+
 // Get all categories
 const getCategories = async (req, res) => {
   try {
@@ -831,31 +853,13 @@ const getSubcategoryBySlugs = async (req, res) => {
 
     const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
     
-    // Find the subcategory that matches the slug
-    // First try to match using the slug column if it exists, otherwise generate from name
-    const subcategory = subcategories.find(sub => {
-      // If slug column exists and is not null, use it
-      if (sub.slug && sub.slug.trim() !== '') {
-        return sub.slug.toLowerCase() === subCategorySlug.toLowerCase();
-      }
-      // Otherwise, generate slug from name
-      const subSlug = sub.name
-        .toLowerCase()
-        .replace(/\s+/g, '-')
-        .replace(/\//g, '-') // ensure "1/2 Year" becomes "1-2-year"
-        .replace(/&/g, 'and')
-        .replace(/'/g, '');
-      return subSlug === subCategorySlug.toLowerCase();
-    });
+    const subcategory = subcategories.find((sub) => subcategoryMatchesSlug(sub, subCategorySlug));
 
     if (!subcategory) {
       // Return available subcategories for debugging
-      const availableSlugs = subcategories.map(sub => {
-        if (sub.slug && sub.slug.trim() !== '') {
-          return sub.slug;
-        }
-        return sub.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and').replace(/'/g, '');
-      });
+      const availableSlugs = subcategories.map((sub) => (
+        sub.slug && String(sub.slug).trim() !== '' ? sub.slug : subcategorySlugFromName(sub.name)
+      ));
       
       return res.status(404).json({
         success: false,

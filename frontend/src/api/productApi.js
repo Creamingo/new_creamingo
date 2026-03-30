@@ -20,103 +20,16 @@ class ProductAPI {
     try {
       const normalizedCategorySlug = normalizeCategorySlug(categorySlug);
 
-      // Map category slugs to category IDs
-      const categoryIdMap = {
-        'cakes-for-occasion': 20,
-        'cakes-by-flavor': 19,
-        'kids-cake-collection': 21,
-        'crowd-favorite-cakes': 22,
-        'love-relationship-cakes': 23,
-        'milestone-year-cakes': 24,
-        'small-treats-desserts': 26,
-        'flowers': 27,
-        'sweets-dry-fruits': 28
-      };
-
-      // Map subcategory slugs to subcategory IDs
-      const subcategoryIdMap = {
-        // Cakes for Any Occasion subcategories
-        'birthday': 19,
-        'anniversary': 20,
-        'engagement': 21,
-        'wedding': 22,
-        'new-beginning': 23,
-        'no-reason-cake': 24,
-        // Cakes by Flavor subcategories
-        'chocolate': 9,
-        'choco-truffle': 10,
-        'red-velvet': 12,
-        'black-forest': 14,
-        'pineapple': 11,
-        'butterscotch': 13,
-        'vanilla': 17,
-        'mixed-fruit': 16,
-        'mixed-fruits': 16,
-        'strawberry': 15,
-        'blueberry': 18,
-        // Kid's Cake Collection subcategories
-        'barbie-doll': 90,
-        'cartoon-cakes': 91,
-        'designer-cakes': 92,
-        'number-cakes': 93,
-        'super-hero-cakes': 94,
-        // Crowd-Favorite Cakes subcategories
-        'fondant-cakes': 33,
-        'multi-tier': 34,
-        'photo-cakes': 30,
-        'pinata-cakes': 31,
-        'unicorn-cakes': 32,
-        // Love and Relationship Cakes subcategories
-        'cake-for-brother': 37,
-        'cake-for-father': 35,
-        'cake-for-her': 40,
-        'cake-for-him': 39,
-        'cake-for-mother': 36,
-        'cake-for-sister': 38,
-        // Cakes for Every Milestone Year subcategories
-        '1-year': 42,
-        'half-year': 41,
-        '5-year': 43,
-        '5-years': 43,
-        '10-year': 44,
-        '10-years': 44,
-        '25-year': 45,
-        '25-years': 45,
-        '50-year': 46,
-        '50-years': 46,
-        // Flowers subcategories
-        'all-flowers-combos': 56,
-        'bridal-bouquet': 55,
-        'rose-bouquet': 54,
-        'mixed-flower-bouquet': 53,
-        // Sweets and Dry Fruits subcategories
-        'chocolates-and-combos': 57,
-        'sweets-and-combos': 58,
-        'dry-fruits-and-combos': 59,
-        // Small Treats Desserts subcategories
-        'pastries': 49,
-        'puddings': 50,
-        'brownies': 51,
-        'cookies': 52,
-        // Kid's Cake Collection subcategories
-        'barbie-doll-cakes': 90,
-        'cartoon-cakes': 91,
-        'designer-cakes': 92,
-        'number-cakes': 93,
-        'super-hero-cakes': 94
-      };
-
       let url = `${API_BASE_URL}/products`;
       const params = new URLSearchParams();
-      
-      // Add category ID if category slug is provided
-      if (normalizedCategorySlug && categoryIdMap[normalizedCategorySlug]) {
-        params.append('category_id', categoryIdMap[normalizedCategorySlug]);
+
+      // Resolve filters from URL slugs on the server (DB subcategory ids differ per environment;
+      // hardcoded maps were wrong for production Flowers / Sweets / Small Treats, etc.)
+      if (normalizedCategorySlug) {
+        params.append('category_slug', normalizedCategorySlug);
       }
-      
-      // Add subcategory ID if subcategory slug is provided
-      if (subCategorySlug && subcategoryIdMap[subCategorySlug]) {
-        params.append('subcategory_id', subcategoryIdMap[subCategorySlug]);
+      if (subCategorySlug) {
+        params.append('subcategory_slug', subCategorySlug);
       }
       
       // Add other query parameters

@@ -1234,6 +1234,7 @@ const ListingPage = () => {
                   product={product}
                   formatPrice={formatPrice}
                   currentSubcategoryName={isSubcategory ? currentData?.name : null}
+                  categorySlug={categorySlug}
                 />
               ))}
             </div>

@@ -28,6 +28,127 @@ const sqlNormalize = (column) => {
   return `REPLACE(REPLACE(REPLACE(LOWER(${column}), '''', ''), '-', ''), '.', '')`;
 };
 
+/**
+ * If junction tables have no rows but products.category_id / subcategory_id are set,
+ * copy legacy IDs into product_categories / product_subcategories so filters and admin stay aligned.
+ */
+const ensureProductJunctionFromLegacy = async (productId) => {
+  const rowResult = await query(
+    'SELECT category_id, subcategory_id FROM products WHERE id = ?',
+    [productId]
+  );
+  if (rowResult.rows.length === 0) return;
+  let { category_id: legacyCat, subcategory_id: legacySub } = rowResult.rows[0];
+
+  let resolvedCategoryId =
+    legacyCat != null && legacyCat !== '' ? Number(legacyCat) : null;
+  if (
+    (resolvedCategoryId == null || Number.isNaN(resolvedCategoryId)) &&
+    legacySub != null &&
+    legacySub !== ''
+  ) {
+    const scRow = await query(
+      'SELECT category_id FROM subcategories WHERE id = ? AND is_active = 1 LIMIT 1',
+      [legacySub]
+    );
+    if (scRow.rows.length > 0 && scRow.rows[0].category_id != null) {
+      resolvedCategoryId = Number(scRow.rows[0].category_id);
+      await query('UPDATE products SET category_id = ? WHERE id = ?', [
+        resolvedCategoryId,
+        productId
+      ]);
+    }
+  }
+
+  if (resolvedCategoryId != null && !Number.isNaN(resolvedCategoryId)) {
+    const cnt = await query(
+      'SELECT COUNT(*) as c FROM product_categories WHERE product_id = ?',
+      [productId]
+    );
+    if (parseInt(cnt.rows[0].c, 10) === 0) {
+      await assignProductToCategories(productId, [resolvedCategoryId], resolvedCategoryId);
+    }
+  }
+
+  if (legacySub != null && legacySub !== '') {
+    const cnt = await query(
+      'SELECT COUNT(*) as c FROM product_subcategories WHERE product_id = ?',
+      [productId]
+    );
+    if (parseInt(cnt.rows[0].c, 10) === 0) {
+      await assignProductToSubcategories(productId, [legacySub], legacySub);
+    }
+  }
+};
+
+const slugifySubcategoryName = (name) => {
+  if (!name || typeof name !== 'string') return '';
+  return name
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/\//g, '-')
+    .replace(/&/g, 'and')
+    .replace(/'/g, '');
+};
+
+const categorySlugToIdFallback = {
+  'cakes-for-occasion': 20,
+  'cakes-by-flavor': 19,
+  'kids-cake-collection': 21,
+  'crowd-favorite-cakes': 22,
+  'love-relationship-cakes': 23,
+  'milestone-year-cakes': 24,
+  'small-treats-desserts': 26,
+  'flowers': 27,
+  'sweets-dry-fruits': 28
+};
+
+/**
+ * Resolve category id from URL slug (DB categories.slug first, then static fallback).
+ */
+const resolveCategoryIdFromSlug = async (categorySlug) => {
+  if (!categorySlug || typeof categorySlug !== 'string') return null;
+  const trimmed = categorySlug.trim();
+  const bySlug = await query(
+    'SELECT id FROM categories WHERE LOWER(TRIM(slug)) = LOWER(?) AND is_active = 1 LIMIT 1',
+    [trimmed]
+  );
+  if (bySlug.rows && bySlug.rows.length > 0) {
+    return parseInt(bySlug.rows[0].id, 10);
+  }
+  const fallback = categorySlugToIdFallback[trimmed];
+  return fallback != null ? parseInt(fallback, 10) : null;
+};
+
+/**
+ * Resolve subcategory id under a category from URL slug (DB subcategories.slug or name-derived slug).
+ */
+const resolveSubcategoryIdFromSlugs = async (categoryId, subCategorySlug) => {
+  if (!categoryId || !subCategorySlug || typeof subCategorySlug !== 'string') return null;
+  const target = subCategorySlug.trim().toLowerCase();
+  const targetAlt = target.replace(/-and-/g, '-');
+  const slugMatches = (s) => {
+    if (!s || typeof s !== 'string') return false;
+    const t = s.trim().toLowerCase();
+    return t === target || t === targetAlt;
+  };
+  const subs = await query(
+    'SELECT id, name, slug FROM subcategories WHERE category_id = ? AND is_active = 1',
+    [categoryId]
+  );
+  for (const sub of subs.rows || []) {
+    if (sub.slug && String(sub.slug).trim() !== '') {
+      if (slugMatches(sub.slug)) {
+        return parseInt(sub.id, 10);
+      }
+    }
+    const fromName = slugifySubcategoryName(sub.name);
+    if (fromName === target || fromName === targetAlt) {
+      return parseInt(sub.id, 10);
+    }
+  }
+  return null;
+};
 
 // Get all products with pagination and filters
 const getProducts = async (req, res) => {
@@ -41,6 +162,8 @@ const getProducts = async (req, res) => {
       subcategory_ids, // New: support multiple subcategories
       category, // Slug-based category filtering
       subcategory, // Slug-based subcategory filtering
+      category_slug,
+      subcategory_slug,
       is_active,
       is_featured,
       search,
@@ -55,29 +178,91 @@ const getProducts = async (req, res) => {
     let whereConditions = [];
     let queryParams = [];
 
-    // Build WHERE conditions
-    // Use JOIN instead of subquery for MySQL prepared statement compatibility
-    if (category_id) {
-      const categoryIdInt = parseInt(category_id, 10);
-      if (!isNaN(categoryIdInt)) {
-        whereConditions.push(`EXISTS (
-          SELECT 1 
-          FROM product_categories pc 
+    const pushCombinedCategorySubcategory = (catId, subId) => {
+      whereConditions.push(`EXISTS (
+        SELECT 1 FROM subcategories sc
+        WHERE sc.id = ? AND sc.category_id = ?
+        AND (
+          p.subcategory_id = sc.id
+          OR EXISTS (
+            SELECT 1 FROM product_subcategories ps
+            WHERE ps.product_id = p.id AND ps.subcategory_id = sc.id
+          )
+        )
+      )`);
+      queryParams.push(subId, catId);
+    };
+
+    const pushCategoryOnly = (catId) => {
+      whereConditions.push(`(
+        EXISTS (
+          SELECT 1 FROM product_categories pc
           WHERE pc.product_id = p.id AND pc.category_id = ?
-        )`);
-        queryParams.push(categoryIdInt);
+        ) OR p.category_id = ?
+      )`);
+      queryParams.push(catId, catId);
+    };
+
+    const pushSubcategoryOnly = (subId) => {
+      whereConditions.push(`(
+        EXISTS (
+          SELECT 1 FROM product_subcategories ps
+          WHERE ps.product_id = p.id AND ps.subcategory_id = ?
+        ) OR p.subcategory_id = ?
+      )`);
+      queryParams.push(subId, subId);
+    };
+
+    // Prefer category_slug + subcategory_slug (storefront URLs): IDs come from DB, not hardcoded maps.
+    const hasCategorySlug = category_slug != null && String(category_slug).trim() !== '';
+    let slugResolvedCategoryId = null;
+    let slugResolvedSubcategoryId = null;
+    if (hasCategorySlug) {
+      slugResolvedCategoryId = await resolveCategoryIdFromSlug(String(category_slug).trim());
+      const subSlugRaw = subcategory_slug != null ? String(subcategory_slug).trim() : '';
+      if (slugResolvedCategoryId && subSlugRaw !== '') {
+        slugResolvedSubcategoryId = await resolveSubcategoryIdFromSlugs(
+          slugResolvedCategoryId,
+          subSlugRaw
+        );
       }
     }
 
-    if (subcategory_id) {
-      const subcategoryIdInt = parseInt(subcategory_id, 10);
-      if (!isNaN(subcategoryIdInt)) {
-        whereConditions.push(`EXISTS (
-          SELECT 1 
-          FROM product_subcategories ps 
-          WHERE ps.product_id = p.id AND ps.subcategory_id = ?
-        )`);
-        queryParams.push(subcategoryIdInt);
+    let appliedSlugFilters = false;
+    if (hasCategorySlug) {
+      if (!slugResolvedCategoryId) {
+        whereConditions.push('1 = 0');
+        appliedSlugFilters = true;
+      } else if (subcategory_slug != null && String(subcategory_slug).trim() !== '') {
+        if (slugResolvedSubcategoryId != null) {
+          pushCombinedCategorySubcategory(slugResolvedCategoryId, slugResolvedSubcategoryId);
+        } else {
+          whereConditions.push('1 = 0');
+        }
+        appliedSlugFilters = true;
+      } else {
+        pushCategoryOnly(slugResolvedCategoryId);
+        appliedSlugFilters = true;
+      }
+    }
+
+    if (!appliedSlugFilters) {
+      // When both category and subcategory are set, tie them via subcategories.category_id so
+      // products still list if legacy p.category_id is wrong but p.subcategory_id (or junction) is correct.
+      const categoryIdInt = category_id != null && category_id !== '' ? parseInt(category_id, 10) : NaN;
+      const subcategoryIdInt = subcategory_id != null && subcategory_id !== '' ? parseInt(subcategory_id, 10) : NaN;
+      const hasNumericCategory = !isNaN(categoryIdInt);
+      const hasNumericSubcategory = !isNaN(subcategoryIdInt);
+
+      if (hasNumericCategory && hasNumericSubcategory) {
+        pushCombinedCategorySubcategory(categoryIdInt, subcategoryIdInt);
+      } else {
+        if (hasNumericCategory) {
+          pushCategoryOnly(categoryIdInt);
+        }
+        if (hasNumericSubcategory) {
+          pushSubcategoryOnly(subcategoryIdInt);
+        }
       }
     }
 
@@ -88,12 +273,13 @@ const getProducts = async (req, res) => {
       const categoryIdInts = categoryIdArray.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
       if (categoryIdInts.length > 0) {
         const categoryPlaceholders = categoryIdInts.map(() => '?').join(',');
-        whereConditions.push(`EXISTS (
-          SELECT 1 
-          FROM product_categories pc 
-          WHERE pc.product_id = p.id AND pc.category_id IN (${categoryPlaceholders})
+        whereConditions.push(`(
+          EXISTS (
+            SELECT 1 FROM product_categories pc
+            WHERE pc.product_id = p.id AND pc.category_id IN (${categoryPlaceholders})
+          ) OR p.category_id IN (${categoryPlaceholders})
         )`);
-        queryParams.push(...categoryIdInts);
+        queryParams.push(...categoryIdInts, ...categoryIdInts);
       }
     }
 
@@ -104,12 +290,13 @@ const getProducts = async (req, res) => {
       const subcategoryIdInts = subcategoryIdArray.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
       if (subcategoryIdInts.length > 0) {
         const subcategoryPlaceholders = subcategoryIdInts.map(() => '?').join(',');
-        whereConditions.push(`EXISTS (
-          SELECT 1 
-          FROM product_subcategories ps 
-          WHERE ps.product_id = p.id AND ps.subcategory_id IN (${subcategoryPlaceholders})
+        whereConditions.push(`(
+          EXISTS (
+            SELECT 1 FROM product_subcategories ps
+            WHERE ps.product_id = p.id AND ps.subcategory_id IN (${subcategoryPlaceholders})
+          ) OR p.subcategory_id IN (${subcategoryPlaceholders})
         )`);
-        queryParams.push(...subcategoryIdInts);
+        queryParams.push(...subcategoryIdInts, ...subcategoryIdInts);
       }
     }
 
@@ -133,109 +320,85 @@ const getProducts = async (req, res) => {
       queryParams.push(`%${search}%`);
     }
 
-    // Handle slug-based category filtering
-    if (category) {
-      // Convert category slug to category ID
-      const categorySlugToIdMap = {
-        'cakes-for-occasion': 20,
-        'cakes-by-flavor': 19,
-        'kids-cake-collection': 21,
-        'crowd-favorite-cakes': 22,
-        'love-relationship-cakes': 23,
-        'milestone-year-cakes': 24,
-        'small-treats-desserts': 26,
-        'flowers': 27,
-        'sweets-dry-fruits': 28
-      };
-      
-      const categoryId = categorySlugToIdMap[category];
-      if (categoryId) {
-        whereConditions.push(`EXISTS (
-          SELECT 1 
-          FROM product_categories pc 
-          WHERE pc.product_id = p.id AND pc.category_id = ?
-        )`);
-        queryParams.push(categoryId);
-      }
-    }
+    // Slug-based category / subcategory (same parent-tie logic when both present)
+    const categorySlugToIdMap = {
+      'cakes-for-occasion': 20,
+      'cakes-by-flavor': 19,
+      'kids-cake-collection': 21,
+      'crowd-favorite-cakes': 22,
+      'love-relationship-cakes': 23,
+      'milestone-year-cakes': 24,
+      'small-treats-desserts': 26,
+      'flowers': 27,
+      'sweets-dry-fruits': 28
+    };
+    const subcategorySlugToIdMap = {
+      'birthday': 19,
+      'anniversary': 20,
+      'engagement': 21,
+      'wedding': 22,
+      'new-beginning': 23,
+      'no-reason-cake': 24,
+      'chocolate': 9,
+      'choco-truffle': 10,
+      'red-velvet': 12,
+      'black-forest': 14,
+      'pineapple': 11,
+      'butterscotch': 13,
+      'vanilla': 17,
+      'mixed-fruit': 16,
+      'mixed-fruits': 16,
+      'strawberry': 15,
+      'blueberry': 18,
+      'barbie-doll': 90,
+      'cartoon-cakes': 91,
+      'designer-cakes': 92,
+      'number-cakes': 93,
+      'super-hero-cakes': 94,
+      'fondant-cakes': 33,
+      'multi-tier': 34,
+      'photo-cakes': 30,
+      'pinata-cakes': 31,
+      'unicorn-cakes': 32,
+      'cake-for-brother': 37,
+      'cake-for-father': 35,
+      'cake-for-her': 40,
+      'cake-for-him': 39,
+      'cake-for-mother': 36,
+      'cake-for-sister': 38,
+      '1-year': 42,
+      'half-year': 41,
+      '5-year': 43,
+      '5-years': 43,
+      '10-year': 44,
+      '10-years': 44,
+      '25-year': 45,
+      '25-years': 45,
+      '50-year': 46,
+      '50-years': 46,
+      'all-flowers-combos': 56,
+      'bridal-bouquet': 55,
+      'rose-bouquet': 54,
+      'mixed-flower-bouquet': 53,
+      'chocolates-and-combos': 57,
+      'sweets-and-combos': 58,
+      'dry-fruits-and-combos': 59,
+      'pastries': 49,
+      'puddings': 50,
+      'brownies': 51,
+      'cookies': 52
+    };
 
-    // Handle slug-based subcategory filtering
-    if (subcategory) {
-      // Convert subcategory slug to subcategory ID
-      const subcategorySlugToIdMap = {
-        // Cakes for Any Occasion subcategories
-        'birthday': 19,
-        'anniversary': 20,
-        'engagement': 21,
-        'wedding': 22,
-        'new-beginning': 23,
-        'no-reason-cake': 24,
-        // Cakes by Flavor subcategories
-        'chocolate': 9,
-        'choco-truffle': 10,
-        'red-velvet': 12,
-        'black-forest': 14,
-        'pineapple': 11,
-        'butterscotch': 13,
-        'vanilla': 17,
-        'mixed-fruit': 16,
-        'mixed-fruits': 16,
-        'strawberry': 15,
-        'blueberry': 18,
-        // Kid's Cake Collection subcategories
-        'barbie-doll': 90,
-        'cartoon-cakes': 91,
-        'designer-cakes': 92,
-        'number-cakes': 93,
-        'super-hero-cakes': 94,
-        // Crowd-Favorite Cakes subcategories
-        'fondant-cakes': 33,
-        'multi-tier': 34,
-        'photo-cakes': 30,
-        'pinata-cakes': 31,
-        'unicorn-cakes': 32,
-        // Love and Relationship Cakes subcategories
-        'cake-for-brother': 37,
-        'cake-for-father': 35,
-        'cake-for-her': 40,
-        'cake-for-him': 39,
-        'cake-for-mother': 36,
-        'cake-for-sister': 38,
-        // Cakes for Every Milestone Year subcategories
-        '1-year': 42,
-        'half-year': 41,
-        '5-year': 43,
-        '5-years': 43,
-        '10-year': 44,
-        '10-years': 44,
-        '25-year': 45,
-        '25-years': 45,
-        '50-year': 46,
-        '50-years': 46,
-        // Flowers subcategories
-        'all-flowers-combos': 56,
-        'bridal-bouquet': 55,
-        'rose-bouquet': 54,
-        'mixed-flower-bouquet': 53,
-        // Sweets and Dry Fruits subcategories
-        'chocolates-and-combos': 57,
-        'sweets-and-combos': 58,
-        'dry-fruits-and-combos': 59,
-        // Small Treats Desserts subcategories
-        'pastries': 49,
-        'puddings': 50,
-        'brownies': 51,
-        'cookies': 52
-      };
-      
-      const subcategoryId = subcategorySlugToIdMap[subcategory];
-      if (subcategoryId) {
-        whereConditions.push(`EXISTS (
-          SELECT 1 
-          FROM product_subcategories ps 
-          WHERE ps.product_id = p.id AND ps.subcategory_id = ?
-        )`);
-        queryParams.push(subcategoryId);
+    if (!appliedSlugFilters && (category || subcategory)) {
+      const slugCategoryId = category ? categorySlugToIdMap[category] : null;
+      const slugSubcategoryId = subcategory ? subcategorySlugToIdMap[subcategory] : null;
+
+      if (slugCategoryId && slugSubcategoryId) {
+        pushCombinedCategorySubcategory(slugCategoryId, slugSubcategoryId);
+      } else if (slugCategoryId) {
+        pushCategoryOnly(slugCategoryId);
+      } else if (slugSubcategoryId) {
+        pushSubcategoryOnly(slugSubcategoryId);
       }
     }
 
@@ -1016,9 +1179,14 @@ const createProduct = async (req, res) => {
       });
     }
 
-    // Determine which categories to use (new multi-category or legacy single category)
-    const categoriesToUse = category_ids || (category_id ? [category_id] : []);
-    const subcategoriesToUse = subcategory_ids || (subcategory_id ? [subcategory_id] : []);
+    // Determine which categories to use (new multi-category or legacy single category).
+    // Treat empty arrays as "not provided" so legacy category_id / subcategory_id still apply.
+    const categoriesToUse = (Array.isArray(category_ids) && category_ids.length > 0)
+      ? category_ids
+      : (category_id ? [category_id] : []);
+    const subcategoriesToUse = (Array.isArray(subcategory_ids) && subcategory_ids.length > 0)
+      ? subcategory_ids
+      : (subcategory_id ? [subcategory_id] : []);
     const rawFlavorIds = available_flavor_ids || [];
     const flavorsToUse = Array.from(new Set([...rawFlavorIds]))
       .map((id) => Number(id))
@@ -1123,6 +1291,8 @@ const createProduct = async (req, res) => {
     if (flavorsToUse.length > 0) {
       await assignProductToFlavors(productId, flavorsToUse, resolvedPrimaryFlavorId);
     }
+
+    await ensureProductJunctionFromLegacy(productId);
 
     // Handle product variations if provided
     if (req.body.variations && Array.isArray(req.body.variations) && req.body.variations.length > 0) {
@@ -1362,6 +1532,16 @@ const updateProduct = async (req, res) => {
         if (categoriesToUse.length > 0) {
           await assignProductToCategories(id, categoriesToUse, primaryCategoryId);
         }
+
+        const numCats = categoriesToUse
+          .map((c) => parseInt(c, 10))
+          .filter((n) => !Number.isNaN(n));
+        let legacyCategoryId = null;
+        if (numCats.length > 0) {
+          const p = primaryCategoryId != null ? parseInt(primaryCategoryId, 10) : NaN;
+          legacyCategoryId = !Number.isNaN(p) && numCats.includes(p) ? p : numCats[0];
+        }
+        await query('UPDATE products SET category_id = ? WHERE id = ?', [legacyCategoryId, id]);
       }
 
       // Update subcategories if provided
@@ -1372,6 +1552,40 @@ const updateProduct = async (req, res) => {
         // Add new subcategory associations
         if (subcategoriesToUse.length > 0) {
           await assignProductToSubcategories(id, subcategoriesToUse, primarySubcategoryId);
+        }
+
+        const numSubs = subcategoriesToUse
+          .map((s) => parseInt(s, 10))
+          .filter((n) => !Number.isNaN(n));
+        let legacySubcategoryId = null;
+        if (numSubs.length > 0) {
+          const p = primarySubcategoryId != null ? parseInt(primarySubcategoryId, 10) : NaN;
+          legacySubcategoryId = !Number.isNaN(p) && numSubs.includes(p) ? p : numSubs[0];
+        }
+        await query('UPDATE products SET subcategory_id = ? WHERE id = ?', [legacySubcategoryId, id]);
+      }
+    }
+
+    // Legacy-only updates: keep product_subcategories / product_categories in sync when the client
+    // sends category_id / subcategory_id but not the *_ids arrays (avoids stale junction + listing drift).
+    if (req.body.subcategory_ids === undefined && updateData.subcategory_id !== undefined) {
+      await query('DELETE FROM product_subcategories WHERE product_id = ?', [id]);
+      const rawSub = updateData.subcategory_id;
+      if (rawSub != null && rawSub !== '') {
+        const n = parseInt(rawSub, 10);
+        if (!Number.isNaN(n)) {
+          await assignProductToSubcategories(id, [n], n);
+        }
+      }
+    }
+
+    if (req.body.category_ids === undefined && updateData.category_id !== undefined) {
+      await query('DELETE FROM product_categories WHERE product_id = ?', [id]);
+      const rawCat = updateData.category_id;
+      if (rawCat != null && rawCat !== '') {
+        const n = parseInt(rawCat, 10);
+        if (!Number.isNaN(n)) {
+          await assignProductToCategories(id, [n], n);
         }
       }
     }
@@ -1452,6 +1666,12 @@ const updateProduct = async (req, res) => {
       }
       // If gallery_images is an empty array, we don't delete existing gallery images
       // This preserves existing gallery images when frontend sends empty array
+    }
+
+    // Backfill junction tables from legacy columns when the client did not send
+    // category_ids / subcategory_ids (avoids empty storefront lists).
+    if (req.body.category_ids === undefined && req.body.subcategory_ids === undefined) {
+      await ensureProductJunctionFromLegacy(id);
     }
 
     const baseUrl = getBaseUrl(req);
@@ -2501,13 +2721,15 @@ const searchProducts = async (req, res) => {
     // If exact subcategory match, only show products from that subcategory
     // This ensures search results match the category page results
     if (exactSubcategoryMatch) {
-      // Only show products in the exact subcategory match
-      whereConditions.push(`EXISTS (
-        SELECT 1 FROM product_subcategories psc_exact 
-        WHERE psc_exact.product_id = p.id 
-        AND psc_exact.subcategory_id = ?
+      // Only show products in the exact subcategory match (junction or legacy column)
+      whereConditions.push(`(
+        EXISTS (
+          SELECT 1 FROM product_subcategories psc_exact
+          WHERE psc_exact.product_id = p.id
+          AND psc_exact.subcategory_id = ?
+        ) OR p.subcategory_id = ?
       )`);
-      queryParams.push(exactSubcategoryMatch);
+      queryParams.push(exactSubcategoryMatch, exactSubcategoryMatch);
     } else {
       // Text search condition with relevance ranking
       // Prioritize: Product name > Category name > Subcategory name > Description
@@ -2546,12 +2768,14 @@ const searchProducts = async (req, res) => {
       // Add subcategory matching if found (for partial matches like "Chocolate Cake")
       if (matchingSubcategoryIds.length > 0) {
         const placeholders = matchingSubcategoryIds.map(() => '?').join(',');
-        whereConditions.push(`EXISTS (
-          SELECT 1 FROM product_subcategories psc3 
-          WHERE psc3.product_id = p.id 
-          AND psc3.subcategory_id IN (${placeholders})
+        whereConditions.push(`(
+          EXISTS (
+            SELECT 1 FROM product_subcategories psc3
+            WHERE psc3.product_id = p.id
+            AND psc3.subcategory_id IN (${placeholders})
+          ) OR p.subcategory_id IN (${placeholders})
         )`);
-        queryParams.push(...matchingSubcategoryIds);
+        queryParams.push(...matchingSubcategoryIds, ...matchingSubcategoryIds);
       }
     }
 

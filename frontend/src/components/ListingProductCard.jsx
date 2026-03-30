@@ -3,14 +3,15 @@
 import React, { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { Heart, Star } from 'lucide-react'
-import { generateDynamicTitle } from '../utils/dynamicTitle'
+import { generateDynamicTitle, shouldUseDynamicListingTitle } from '../utils/dynamicTitle'
 import { useWishlist } from '../contexts/WishlistContext'
 import DeliveryBadge from './DeliveryBadge'
 
 const ListingProductCard = ({ 
   product, 
   formatPrice, 
-  currentSubcategoryName // New prop for dynamic title generation
+  currentSubcategoryName,
+  categorySlug
 }) => {
   const { isInWishlist, toggleWishlist } = useWishlist();
   const isProductInWishlist = isInWishlist(product.id);
@@ -18,8 +19,10 @@ const ListingProductCard = ({
   const [imageLoaded, setImageLoaded] = useState(false);
   const cardRef = useRef(null);
   
-  // Generate dynamic title based on current subcategory
-  const displayTitle = currentSubcategoryName 
+  const useFlavorStyleTitle =
+    Boolean(currentSubcategoryName) && shouldUseDynamicListingTitle(categorySlug);
+
+  const displayTitle = useFlavorStyleTitle
     ? generateDynamicTitle(product.name, currentSubcategoryName)
     : product.name;
     
