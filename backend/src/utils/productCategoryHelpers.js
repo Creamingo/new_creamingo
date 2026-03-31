@@ -259,6 +259,8 @@ const getProductsWithCategories = async (productIds, baseUrl = '') => {
       p.slug,
       p.description,
       p.short_description,
+      p.category_id,
+      p.subcategory_id,
       p.base_price,
       p.base_weight,
       p.discount_percent,
@@ -286,8 +288,10 @@ const getProductsWithCategories = async (productIds, baseUrl = '') => {
       p.meta_description,
       p.tags,
       p.created_at,
-      p.updated_at
+      p.updated_at,
+      sc_legacy.category_id AS subcategory_parent_category_id
     FROM products p
+    LEFT JOIN subcategories sc_legacy ON sc_legacy.id = p.subcategory_id
     WHERE p.id IN (${placeholders})
   `, productIds);
 
@@ -299,6 +303,7 @@ const getProductsWithCategories = async (productIds, baseUrl = '') => {
       pc.product_id,
       c.id,
       c.name,
+      c.slug,
       c.description,
       c.image_url,
       pc.is_primary,

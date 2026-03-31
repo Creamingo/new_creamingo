@@ -5,6 +5,32 @@ import { useRouter } from 'next/navigation'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
+/** Default Flowers main category id (categories.id); slug match is fallback if env differs. */
+const FLOWERS_CATEGORY_ID = 27;
+
+/**
+ * True if product belongs to Flowers: legacy columns, junction rows, or categories.slug === 'flowers'.
+ */
+const isFlowersBestsellerProduct = (product) => {
+  const fid = FLOWERS_CATEGORY_ID;
+  const cid = Number(product.category_id);
+  if (Number.isFinite(cid) && cid === fid) return true;
+  const parentFromSub = Number(product.subcategory_parent_category_id);
+  if (Number.isFinite(parentFromSub) && parentFromSub === fid) return true;
+
+  const cats = product.categories || [];
+  if (cats.some((c) => Number(c.id) === fid)) return true;
+  if (cats.some((c) => String(c.slug || '').toLowerCase() === 'flowers')) return true;
+
+  const subs = product.subcategories || [];
+  if (subs.some((s) => Number(s.category_id) === fid)) return true;
+
+  if (product.category_name && String(product.category_name).toLowerCase().includes('flower')) return true;
+  const primaryName = (cats.find((c) => c.is_primary) || cats[0])?.name;
+  if (primaryName && String(primaryName).toLowerCase().includes('flower')) return true;
+  return false;
+};
+
 const BestSeller = () => {
   const router = useRouter()
   const [activeCategory, setActiveCategory] = useState('Cakes')
@@ -122,7 +148,7 @@ const BestSeller = () => {
           const transformedProducts = data.data.products.map(product => ({
             id: product.id,
             name: product.name,
-            category: product.category_name === 'Flowers' ? 'Flowers' : 'Cakes', // Default to Cakes if not Flowers
+            category: isFlowersBestsellerProduct(product) ? 'Flowers' : 'Cakes',
             image: product.image_url || product.image || '/Design 1.webp',
             discount: product.discount_percent > 0 
               ? `${Math.round(product.discount_percent)}% OFF` 

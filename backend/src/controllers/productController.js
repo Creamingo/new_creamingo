@@ -2177,12 +2177,36 @@ const toggleTopProduct = async (req, res) => {
   }
 };
 
-// Get Bestsellers (products marked as is_bestseller = 1)
+// Flower membership (slug) — used to supplement homepage carousel when no flower bestsellers exist
+const sqlProductIsInFlowersCategory = `
+  (
+    EXISTS (SELECT 1 FROM categories c WHERE c.id = p.category_id AND c.slug = 'flowers')
+    OR EXISTS (
+      SELECT 1 FROM product_categories pc
+      JOIN categories c ON c.id = pc.category_id
+      WHERE pc.product_id = p.id AND c.slug = 'flowers'
+    )
+    OR EXISTS (
+      SELECT 1 FROM product_subcategories ps
+      JOIN subcategories sc ON sc.id = ps.subcategory_id
+      JOIN categories c ON c.id = sc.category_id
+      WHERE ps.product_id = p.id AND c.slug = 'flowers'
+    )
+    OR EXISTS (
+      SELECT 1 FROM subcategories sc
+      JOIN categories c ON c.id = sc.category_id
+      WHERE sc.id = p.subcategory_id AND c.slug = 'flowers'
+    )
+  )
+`;
+
+// Get Bestsellers (is_bestseller = 1) plus active Flowers-category picks for the homepage Flowers tab
 const getBestsellers = async (req, res) => {
   try {
-    const { limit = 10 } = req.query;
+    const rawLimit = parseInt(req.query.limit, 10);
+    const limit = Math.min(Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 50, 100);
+    const flowerSupplementLimit = 20;
 
-    // Get product IDs first
     const productIdsResult = await query(`
       SELECT p.id
       FROM products p
@@ -2191,9 +2215,42 @@ const getBestsellers = async (req, res) => {
       LIMIT ?
     `, [limit]);
 
-    const productIds = productIdsResult.rows.map(row => row.id);
+    const bestsellerIds = productIdsResult.rows.map((row) => row.id);
 
-    if (productIds.length === 0) {
+    let flowerIds = [];
+    if (bestsellerIds.length > 0) {
+      const notInPlaceholders = bestsellerIds.map(() => '?').join(',');
+      const flowerResult = await query(
+        `
+        SELECT DISTINCT p.id
+        FROM products p
+        WHERE p.is_active = 1
+          AND p.id NOT IN (${notInPlaceholders})
+          AND ${sqlProductIsInFlowersCategory}
+        ORDER BY p.id ASC
+        LIMIT ?
+        `,
+        [...bestsellerIds, flowerSupplementLimit]
+      );
+      flowerIds = flowerResult.rows.map((r) => r.id);
+    } else {
+      const flowerResult = await query(
+        `
+        SELECT DISTINCT p.id
+        FROM products p
+        WHERE p.is_active = 1
+          AND ${sqlProductIsInFlowersCategory}
+        ORDER BY p.id ASC
+        LIMIT ?
+        `,
+        [flowerSupplementLimit]
+      );
+      flowerIds = flowerResult.rows.map((r) => r.id);
+    }
+
+    const mergedIds = [...bestsellerIds, ...flowerIds];
+
+    if (mergedIds.length === 0) {
       return res.json({
         success: true,
         data: {
@@ -2203,13 +2260,14 @@ const getBestsellers = async (req, res) => {
       });
     }
 
-    // Use getProductsWithCategories to get full product data with variants, ratings, etc.
-    const products = await getProductsWithCategories(productIds, getBaseUrl(req));
+    let products = await getProductsWithCategories(mergedIds, getBaseUrl(req));
+    const byId = new Map(products.map((p) => [p.id, p]));
+    products = mergedIds.map((id) => byId.get(id)).filter(Boolean);
 
     res.json({
       success: true,
       data: {
-        products: products,
+        products,
         count: products.length
       }
     });
