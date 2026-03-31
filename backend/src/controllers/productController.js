@@ -2206,14 +2206,17 @@ const getBestsellers = async (req, res) => {
     const rawLimit = parseInt(req.query.limit, 10);
     const limit = Math.min(Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 50, 100);
     const flowerSupplementLimit = 20;
+    // mysql2 prepared statements reject bound LIMIT in some MySQL builds (ER_WRONG_ARGUMENTS); use safe integer literals.
+    const safeLimit = Math.floor(limit);
+    const safeFlowerLimit = Math.floor(flowerSupplementLimit);
 
     const productIdsResult = await query(`
       SELECT p.id
       FROM products p
       WHERE p.is_bestseller = 1 AND p.is_active = 1
       ORDER BY p.id ASC
-      LIMIT ?
-    `, [limit]);
+      LIMIT ${safeLimit}
+    `, []);
 
     const bestsellerIds = productIdsResult.rows.map((row) => row.id);
 
@@ -2228,9 +2231,9 @@ const getBestsellers = async (req, res) => {
           AND p.id NOT IN (${notInPlaceholders})
           AND ${sqlProductIsInFlowersCategory}
         ORDER BY p.id ASC
-        LIMIT ?
+        LIMIT ${safeFlowerLimit}
         `,
-        [...bestsellerIds, flowerSupplementLimit]
+        [...bestsellerIds]
       );
       flowerIds = flowerResult.rows.map((r) => r.id);
     } else {
@@ -2241,9 +2244,9 @@ const getBestsellers = async (req, res) => {
         WHERE p.is_active = 1
           AND ${sqlProductIsInFlowersCategory}
         ORDER BY p.id ASC
-        LIMIT ?
+        LIMIT ${safeFlowerLimit}
         `,
-        [flowerSupplementLimit]
+        []
       );
       flowerIds = flowerResult.rows.map((r) => r.id);
     }
@@ -2261,8 +2264,8 @@ const getBestsellers = async (req, res) => {
     }
 
     let products = await getProductsWithCategories(mergedIds, getBaseUrl(req));
-    const byId = new Map(products.map((p) => [p.id, p]));
-    products = mergedIds.map((id) => byId.get(id)).filter(Boolean);
+    const byId = new Map(products.map((p) => [Number(p.id), p]));
+    products = mergedIds.map((id) => byId.get(Number(id))).filter(Boolean);
 
     res.json({
       success: true,
