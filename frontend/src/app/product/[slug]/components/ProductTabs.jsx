@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { resolveProductFormProfileFromProduct, isCakeProfile } from '../../../../utils/productFormProfile';
+import { resolveProductFormProfileFromProduct, isCakeProfile, FLOWERS_PDP_LABELS } from '../../../../utils/productFormProfile';
 import { 
   Info,
   Shield,
@@ -62,9 +62,35 @@ const ProductTabs = ({ product, selectedVariant, customizations = {}, dynamicCon
         else if (trimmedLine.includes('Cake Tiers:')) {
           details.cakeTiers = trimmedLine.replace('Cake Tiers:', '').trim();
         }
-        // Parse Shape
+        // Parse Shape (ignore for flowers — Arrangement Style holds florist layout; legacy Shape was cake-era)
         else if (trimmedLine.includes('Shape:')) {
-          details.shape = trimmedLine.replace('Shape:', '').trim();
+          if (formProfile !== 'flowers') {
+            details.shape = trimmedLine.replace('Shape:', '').trim();
+          }
+        }
+        else if (trimmedLine.includes('Flower Type / Variety:')) {
+          details.flowerVariety = trimmedLine.replace('Flower Type / Variety:', '').trim();
+        }
+        else if (trimmedLine.includes('Arrangement Style:')) {
+          details.shape = trimmedLine.replace('Arrangement Style:', '').trim();
+        }
+        else if (trimmedLine.includes('Color Theme:')) {
+          details.colorTheme = trimmedLine.replace('Color Theme:', '').trim();
+        }
+        else if (trimmedLine.includes('Number of Stems:')) {
+          details.numberOfStems = trimmedLine.replace('Number of Stems:', '').trim();
+        }
+        else if (trimmedLine.includes('Stems, Blooms & Presentation:')) {
+          details.stemsPresentation = trimmedLine.replace('Stems, Blooms & Presentation:', '').trim();
+        }
+        else if (trimmedLine.includes('Packaging Type:')) {
+          details.packagingType = trimmedLine.replace('Packaging Type:', '').trim();
+        }
+        else if (trimmedLine.includes('Add-ons:')) {
+          details.addOns = trimmedLine.replace('Add-ons:', '').trim();
+        }
+        else if (trimmedLine.includes('Occasion Tags:')) {
+          details.occasionTags = trimmedLine.replace('Occasion Tags:', '').trim();
         }
         // Parse Servings
         else if (trimmedLine.includes('Servings:')) {
@@ -101,21 +127,64 @@ const ProductTabs = ({ product, selectedVariant, customizations = {}, dynamicCon
       const purchaseOption = selectedVariant
         ? selectedVariant.weight
         : (product.base_weight || '—');
+      const stemsBlock =
+        parsedDetails.stemsPresentation ||
+        parsedDetails.weight ||
+        '';
+      const flowerVariety =
+        parsedDetails.flowerVariety ||
+        parsedDetails.cakeFlavour ||
+        '';
+      const addOnsLine =
+        parsedDetails.addOns ||
+        parsedDetails.toppings ||
+        '';
+
+      if (isFlowers) {
+        const cakeEraShapes = new Set(['Round', 'Square', 'Rectangular', 'Heart']);
+        const rawShape = (parsedDetails.shape || product.shape || '').trim();
+        const arrangementDisplay = cakeEraShapes.has(rawShape) ? '—' : (rawShape || '—');
+        return {
+          cakeFlavour: '—',
+          flowerVariety: flowerVariety || '—',
+          version: customizations.isEggless ? 'Eggless' : (parsedDetails.version || (product.is_eggless ? 'Eggless' : 'Egg')),
+          shape: arrangementDisplay,
+          arrangementStyle: arrangementDisplay,
+          colorTheme: parsedDetails.colorTheme || '—',
+          numberOfStems: parsedDetails.numberOfStems || '—',
+          packagingType: parsedDetails.packagingType || '—',
+          cakeTiers: '—',
+          servings: null,
+          purchaseOption,
+          bouquetContents: '',
+          stemsPresentation: '',
+          weight: purchaseOption,
+          toppings: addOnsLine || '—',
+          addOns: addOnsLine || '—',
+          countryOfOrigin: parsedDetails.countryOfOrigin || product.country_of_origin || '',
+          occasionTags: parsedDetails.occasionTags || ''
+        };
+      }
+
       return {
         cakeFlavour: '—',
+        flowerVariety: flowerVariety || '—',
         version: customizations.isEggless ? 'Eggless' : (parsedDetails.version || (product.is_eggless ? 'Eggless' : 'Egg')),
         shape: customizations.shape || parsedDetails.shape || product.shape || '—',
+        arrangementStyle: parsedDetails.shape || product.shape || '—',
+        colorTheme: parsedDetails.colorTheme || '—',
+        numberOfStems: parsedDetails.numberOfStems || '—',
+        packagingType: parsedDetails.packagingType || '—',
         cakeTiers: '—',
-        servings: isFlowers
-          ? null
-          : (product.serving_size_description || product.serving_size || parsedDetails.servings || '—'),
+        servings: product.serving_size_description || product.serving_size || parsedDetails.servings || '—',
         purchaseOption,
-        bouquetContents: isFlowers ? (parsedDetails.weight || '') : '',
-        weight: isFlowers
-          ? purchaseOption
-          : (selectedVariant ? selectedVariant.weight : (parsedDetails.weight || product.base_weight || '—')),
-        toppings: parsedDetails.toppings || '—',
-        countryOfOrigin: parsedDetails.countryOfOrigin || product.country_of_origin || 'India'
+        bouquetContents: stemsBlock,
+        stemsPresentation: stemsBlock,
+        weight: selectedVariant ? selectedVariant.weight : (parsedDetails.weight || product.base_weight || '—'),
+        toppings: addOnsLine || '—',
+        addOns: addOnsLine || '—',
+        countryOfOrigin: parsedDetails.countryOfOrigin || product.country_of_origin || 'India',
+        occasionTags: ''
       };
     }
 
@@ -207,6 +276,7 @@ const ProductTabs = ({ product, selectedVariant, customizations = {}, dynamicCon
                   </div>
                 </div>
                 )}
+                {(isCake || formProfile === 'treats' || formProfile === 'sweets') && (
                 <div className="flex items-center gap-2">
                   <Circle className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0" />
                   <div className="flex items-center gap-1.5 flex-1 min-w-0">
@@ -215,7 +285,8 @@ const ProductTabs = ({ product, selectedVariant, customizations = {}, dynamicCon
                     <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate">{dynamicDetails.version}</span>
                   </div>
                 </div>
-                {showShapeInOverview && (
+                )}
+                {showShapeInOverview && formProfile !== 'flowers' && (
                 <div className="flex items-center gap-2">
                   <Circle className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0" />
                   <div className="flex items-center gap-1.5 flex-1 min-w-0">
@@ -250,20 +321,25 @@ const ProductTabs = ({ product, selectedVariant, customizations = {}, dynamicCon
                     <div className="flex items-center gap-2">
                       <Package className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0" />
                       <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">Option</span>
+                        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">{FLOWERS_PDP_LABELS.stemTier}</span>
                         <span className="text-gray-400 dark:text-gray-500">-</span>
                         <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate">{dynamicDetails.purchaseOption}</span>
                       </div>
                     </div>
-                    {dynamicDetails.bouquetContents ? (
+                    <div className="flex items-center gap-2 sm:col-span-2">
+                      <Package className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0" />
+                      <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">Packaging type</span>
+                        <span className="text-gray-400 dark:text-gray-500">-</span>
+                        <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate">{dynamicDetails.packagingType}</span>
+                      </div>
+                    </div>
+                    {dynamicDetails.occasionTags ? (
                       <div className="flex items-start gap-2 sm:col-span-2">
-                        <Package className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" />
-                        <div className="flex flex-col gap-1 flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">Bouquet contents</span>
-                            <span className="text-gray-400 dark:text-gray-500">-</span>
-                          </div>
-                          <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 leading-relaxed break-words">{dynamicDetails.bouquetContents}</span>
+                        <Calendar className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" />
+                        <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                          <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Occasion tags</span>
+                          <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 leading-relaxed break-words">{dynamicDetails.occasionTags}</span>
                         </div>
                       </div>
                     ) : null}
@@ -278,16 +354,23 @@ const ProductTabs = ({ product, selectedVariant, customizations = {}, dynamicCon
                   </div>
                 </div>
                 )}
+                {formProfile !== 'flowers' && (
                 <div className="flex items-start gap-2 sm:col-span-2">
                   <Sparkles className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" />
                   <div className="flex flex-col gap-1 flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">Toppings</span>
+                      <span className="text-xs font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                        Toppings
+                      </span>
                       <span className="text-gray-400 dark:text-gray-500">-</span>
                     </div>
-                    <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 leading-relaxed break-words">{dynamicDetails.toppings}</span>
+                    <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 leading-relaxed break-words">
+                      {dynamicDetails.toppings}
+                    </span>
                   </div>
                 </div>
+                )}
+                {dynamicDetails.countryOfOrigin ? (
                 <div className="flex items-center gap-2 sm:col-span-2">
                   <Globe className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0" />
                   <div className="flex items-center gap-1.5 flex-1 min-w-0">
@@ -296,6 +379,7 @@ const ProductTabs = ({ product, selectedVariant, customizations = {}, dynamicCon
                     <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate">{dynamicDetails.countryOfOrigin}</span>
                   </div>
                 </div>
+                ) : null}
               </div>
 
               {/* Desktop: Row Layout with Icons */}
@@ -310,13 +394,15 @@ const ProductTabs = ({ product, selectedVariant, customizations = {}, dynamicCon
                   <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{dynamicDetails.cakeFlavour}</span>
                 </div>
                 )}
+                {(isCake || formProfile === 'treats' || formProfile === 'sweets') && (
                 <div className="flex items-center gap-3 py-1.5">
                   <Circle className="w-4 h-4 text-rose-500 dark:text-rose-400 flex-shrink-0" />
                   <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Version</span>
                   <span className="text-gray-400 dark:text-gray-500">-</span>
                   <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{dynamicDetails.version}</span>
                 </div>
-                {showShapeInOverview && (
+                )}
+                {showShapeInOverview && formProfile !== 'flowers' && (
                 <div className="flex items-center gap-3 py-1.5">
                   <Circle className="w-4 h-4 text-rose-500 dark:text-rose-400 flex-shrink-0" />
                   <span className="text-sm font-medium text-gray-600 dark:text-gray-400">{shapeOverviewLabel}</span>
@@ -344,16 +430,22 @@ const ProductTabs = ({ product, selectedVariant, customizations = {}, dynamicCon
                   <>
                     <div className="flex items-center gap-3 py-1.5">
                       <Package className="w-4 h-4 text-rose-500 dark:text-rose-400 flex-shrink-0" />
-                      <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Option</span>
+                      <span className="text-sm font-medium text-gray-600 dark:text-gray-400">{FLOWERS_PDP_LABELS.stemTier}</span>
                       <span className="text-gray-400 dark:text-gray-500">-</span>
                       <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{dynamicDetails.purchaseOption}</span>
                     </div>
-                    {dynamicDetails.bouquetContents ? (
+                    <div className="flex items-center gap-3 py-1.5">
+                      <Package className="w-4 h-4 text-rose-500 dark:text-rose-400 flex-shrink-0" />
+                      <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Packaging type</span>
+                      <span className="text-gray-400 dark:text-gray-500">-</span>
+                      <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{dynamicDetails.packagingType}</span>
+                    </div>
+                    {dynamicDetails.occasionTags ? (
                       <div className="flex items-start gap-3 py-1.5">
-                        <Package className="w-4 h-4 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" />
+                        <Calendar className="w-4 h-4 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" />
                         <div className="flex flex-col gap-0.5 min-w-0">
-                          <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Bouquet contents</span>
-                          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 leading-relaxed">{dynamicDetails.bouquetContents}</span>
+                          <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Occasion tags</span>
+                          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 leading-relaxed">{dynamicDetails.occasionTags}</span>
                         </div>
                       </div>
                     ) : null}
@@ -366,18 +458,24 @@ const ProductTabs = ({ product, selectedVariant, customizations = {}, dynamicCon
                   <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{dynamicDetails.weight}</span>
                 </div>
                 )}
+                {formProfile !== 'flowers' && (
                 <div className="flex items-center gap-3 py-1.5">
                   <Sparkles className="w-4 h-4 text-rose-500 dark:text-rose-400 flex-shrink-0" />
                   <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Toppings</span>
                   <span className="text-gray-400 dark:text-gray-500">-</span>
-                  <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{dynamicDetails.toppings}</span>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    {dynamicDetails.toppings}
+                  </span>
                 </div>
+                )}
+                {dynamicDetails.countryOfOrigin ? (
                 <div className="flex items-center gap-3 py-1.5">
                   <Globe className="w-4 h-4 text-rose-500 dark:text-rose-400 flex-shrink-0" />
                   <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Country of Origin</span>
                   <span className="text-gray-400 dark:text-gray-500">-</span>
                   <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{dynamicDetails.countryOfOrigin}</span>
                 </div>
+                ) : null}
               </div>
             </div>
           </div>

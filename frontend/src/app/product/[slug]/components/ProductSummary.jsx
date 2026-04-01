@@ -12,7 +12,10 @@ import {
   Layers,
   MapPin,
   Calendar,
-  ChevronRight
+  ChevronRight,
+  Flower2,
+  Palette,
+  Leaf
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { usePinCode } from '../../../../contexts/PinCodeContext';
@@ -28,7 +31,7 @@ import MakeItAComboModal from './MakeItAComboModal';
 import weightTierApi from '../../../../api/weightTierApi';
 import addOnApi from '../../../../api/addOnApi';
 import { formatPrice } from '../../../../utils/priceFormatter';
-import { resolveProductFormProfileFromProduct, isCakeProfile } from '../../../../utils/productFormProfile';
+import { resolveProductFormProfileFromProduct, isCakeProfile, FLOWERS_PDP_LABELS } from '../../../../utils/productFormProfile';
 
 const ProductSummary = ({ 
   product, 
@@ -146,6 +149,35 @@ const ProductSummary = ({
   // Check if all required fields are completed for Add to Cart
   const isAddToCartEnabled = !!currentPinCode;
   const [dynamicContent, setDynamicContent] = useState(null);
+  const flowerPdpHighlights = useMemo(() => {
+    if (formProfile !== 'flowers') return null;
+    const desc =
+      (dynamicContent && dynamicContent.description) ||
+      product?.description ||
+      '';
+    if (!desc || typeof desc !== 'string') return null;
+    const cakeEraShapes = new Set(['Round', 'Square', 'Rectangular', 'Heart']);
+    const h = {};
+    for (const line of desc.split('\n')) {
+      const trimmedLine = line.trim();
+      if (trimmedLine.includes('Arrangement Style:')) {
+        const v = trimmedLine.replace('Arrangement Style:', '').trim();
+        h.arrangement = cakeEraShapes.has(v) ? '' : v;
+      } else if (trimmedLine.includes('Flower Type / Variety:')) {
+        h.flowers = trimmedLine.replace('Flower Type / Variety:', '').trim();
+      } else if (trimmedLine.includes('Color Theme:')) {
+        h.color = trimmedLine.replace('Color Theme:', '').trim();
+      } else if (trimmedLine.includes('Number of Stems:')) {
+        h.stems = trimmedLine.replace('Number of Stems:', '').trim();
+      } else if (trimmedLine.includes('Add-ons:')) {
+        h.addOns = trimmedLine.replace('Add-ons:', '').trim();
+      } else if (trimmedLine.includes('Occasion Tags:')) {
+        h.occasions = trimmedLine.replace('Occasion Tags:', '').trim();
+      }
+    }
+    const hasAny = Object.values(h).some((v) => v && String(v).trim());
+    return hasAny ? h : null;
+  }, [formProfile, dynamicContent, product?.description]);
   const [isPriceSectionVisible, setIsPriceSectionVisible] = useState(true);
   const priceSectionRef = useRef(null);
   const [weightTierMappings, setWeightTierMappings] = useState({});
@@ -531,7 +563,7 @@ const ProductSummary = ({
         <div className="flex items-start justify-between gap-3 w-full min-w-0 overflow-visible max-w-full">
           <div className="flex-1 min-w-0 pr-2 overflow-visible max-w-full">
             <h1 className="text-[17px] sm:text-lg lg:text-[22px] font-semibold text-gray-900 dark:text-gray-100 leading-snug flex items-center gap-2 overflow-visible">
-              {/* Veg/Non-Veg icon sized to text using em units for perfect alignment */}
+              {formProfile !== 'flowers' && (
             <span
                 className={`inline-flex items-center justify-center align-middle w-[0.95em] h-[0.95em] border-2 ${product.is_eggless ? 'border-green-600 dark:border-green-500' : 'border-red-600 dark:border-red-500'} rounded-[3px] flex-shrink-0`}
             aria-label={product.is_eggless ? 'Eggless (Vegetarian)' : 'Contains Egg (Non‑Vegetarian)'}
@@ -540,6 +572,7 @@ const ProductSummary = ({
                 <span className={`block rounded-full ${product.is_eggless ? 'bg-green-600 dark:bg-green-500' : 'bg-red-600 dark:bg-red-500'}`}
                   style={{ width: '0.5em', height: '0.5em' }} />
           </span>
+              )}
               <span className="leading-snug line-clamp-2">
                 {dynamicContent ? dynamicContent.name : (displayTitle || product.name)}
               </span>
@@ -557,6 +590,73 @@ const ProductSummary = ({
                 {product.review_count || 0} reviews
               </a>
             </div>
+            {flowerPdpHighlights && (
+              <div
+                className="mt-2.5 rounded-lg border border-rose-200/60 dark:border-rose-800/45 bg-gradient-to-br from-rose-50/90 to-white dark:from-rose-950/30 dark:to-gray-900/40 px-3 py-2.5 space-y-1.5"
+                aria-label="Product highlights"
+              >
+                {flowerPdpHighlights.arrangement ? (
+                  <div className="flex items-start gap-2 text-xs text-gray-800 dark:text-gray-100">
+                    <Flower2 className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" aria-hidden />
+                    <span>
+                      <span className="text-gray-500 dark:text-gray-400">Arrangement</span>
+                      <span className="mx-1 text-gray-300 dark:text-gray-600">·</span>
+                      <span className="font-semibold">{flowerPdpHighlights.arrangement}</span>
+                    </span>
+                  </div>
+                ) : null}
+                {flowerPdpHighlights.flowers ? (
+                  <div className="flex items-start gap-2 text-xs text-gray-800 dark:text-gray-100">
+                    <Layers className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" aria-hidden />
+                    <span>
+                      <span className="text-gray-500 dark:text-gray-400">Flowers</span>
+                      <span className="mx-1 text-gray-300 dark:text-gray-600">·</span>
+                      <span className="font-semibold">{flowerPdpHighlights.flowers}</span>
+                    </span>
+                  </div>
+                ) : null}
+                {flowerPdpHighlights.color ? (
+                  <div className="flex items-start gap-2 text-xs text-gray-800 dark:text-gray-100">
+                    <Palette className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" aria-hidden />
+                    <span>
+                      <span className="text-gray-500 dark:text-gray-400">Color</span>
+                      <span className="mx-1 text-gray-300 dark:text-gray-600">·</span>
+                      <span className="font-semibold">{flowerPdpHighlights.color}</span>
+                    </span>
+                  </div>
+                ) : null}
+                {flowerPdpHighlights.stems ? (
+                  <div className="flex items-start gap-2 text-xs text-gray-800 dark:text-gray-100">
+                    <Leaf className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" aria-hidden />
+                    <span>
+                      <span className="text-gray-500 dark:text-gray-400">Stems</span>
+                      <span className="mx-1 text-gray-300 dark:text-gray-600">·</span>
+                      <span className="font-semibold">{flowerPdpHighlights.stems}</span>
+                    </span>
+                  </div>
+                ) : null}
+                {flowerPdpHighlights.addOns ? (
+                  <div className="flex items-start gap-2 text-xs text-gray-800 dark:text-gray-100">
+                    <Gift className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" aria-hidden />
+                    <span>
+                      <span className="text-gray-500 dark:text-gray-400">Add-ons</span>
+                      <span className="mx-1 text-gray-300 dark:text-gray-600">·</span>
+                      <span className="font-semibold">{flowerPdpHighlights.addOns}</span>
+                    </span>
+                  </div>
+                ) : null}
+                {flowerPdpHighlights.occasions ? (
+                  <div className="flex items-start gap-2 text-xs text-gray-800 dark:text-gray-100">
+                    <Calendar className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" aria-hidden />
+                    <span>
+                      <span className="text-gray-500 dark:text-gray-400">Occasions</span>
+                      <span className="mx-1 text-gray-300 dark:text-gray-600">·</span>
+                      <span className="font-semibold">{flowerPdpHighlights.occasions}</span>
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+            )}
       </div>
 
           {/* Desktop actions next to title - flex-shrink-0 prevents cutting */}
@@ -738,7 +838,7 @@ const ProductSummary = ({
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                    {isCake ? 'Weight' : 'Option'}
+                    {isCake ? 'Weight' : formProfile === 'flowers' ? FLOWERS_PDP_LABELS.stemTier : 'Option'}
                   </span>
                 </div>
                 <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2 lg:overflow-x-visible">
@@ -776,7 +876,7 @@ const ProductSummary = ({
             <div className="flex items-center gap-6 text-sm flex-wrap">
                 <div>
                 <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                  {isCake ? 'Weight: ' : 'Option: '}
+                  {isCake ? 'Weight: ' : formProfile === 'flowers' ? `${FLOWERS_PDP_LABELS.stemTier}: ` : 'Option: '}
                 </span>
                 <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{selectedVariant?.weight || product.base_weight || '—'}</span>
                 </div>
@@ -793,7 +893,9 @@ const ProductSummary = ({
               </div>
               ) : (product.serving_size_description || product.serving_size) ? (
                 <div>
-                  <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Pack / size: </span>
+                  <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                    {formProfile === 'flowers' ? `${FLOWERS_PDP_LABELS.presentationNote}: ` : 'Pack / size: '}
+                  </span>
                   <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                     {product.serving_size_description || product.serving_size}
                   </span>

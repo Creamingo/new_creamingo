@@ -14,6 +14,16 @@ interface ProductDetails {
   toppings: string;
   weight: string;
   countryOfOrigin: string;
+  /** Flowers-only: comma-separated varieties */
+  flowerVariety: string;
+  colorTheme: string;
+  numberOfStems: string;
+  stemsPresentation: string;
+  packagingType: string;
+  /** Flowers: comma-separated add-on labels */
+  addOns: string;
+  /** Flowers: comma-separated occasion labels */
+  occasionTags: string;
 }
 
 interface StructuredDescriptionEditorProps {
@@ -67,19 +77,87 @@ const CAKE_SHAPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'Heart', label: 'Heart' },
 ];
 
-/** Florist-facing arrangement / presentation styles (stored as Shape: … in the description). */
+/** Arrangement styles for Flowers category (stored under Arrangement Style in description). */
 const FLOWER_ARRANGEMENT_OPTIONS: { value: string; label: string }[] = [
-  { value: 'Round bouquet', label: 'Round / dome bouquet' },
-  { value: 'Vertical / tall', label: 'Vertical / tall' },
-  { value: 'Cascading', label: 'Cascading' },
-  { value: 'Hand-tied', label: 'Hand-tied' },
-  { value: 'Vase arrangement', label: 'Vase arrangement' },
-  { value: 'Basket', label: 'Basket' },
-  { value: 'Box / hatbox', label: 'Box / hatbox' },
-  { value: 'Heart', label: 'Heart-shaped' },
-  { value: 'Wreath', label: 'Wreath' },
-  { value: 'Other', label: 'Other' },
+  { value: 'Bouquet', label: 'Bouquet' },
+  { value: 'Basket Arrangement', label: 'Basket Arrangement' },
+  { value: 'Vase Arrangement', label: 'Vase Arrangement' },
+  { value: 'Box Arrangement', label: 'Box Arrangement' },
+  { value: 'Hand Bunch', label: 'Hand Bunch' },
+  { value: 'Heart Arrangement', label: 'Heart Arrangement' },
+  { value: 'Standing Arrangement', label: 'Standing Arrangement' },
 ];
+
+const FLOWER_VARIETY_OPTIONS: string[] = [
+  'Roses',
+  'Lilies',
+  'Orchids',
+  'Carnations',
+  'Gerberas',
+  'Tulips',
+  'Mixed Seasonal Flowers',
+];
+
+const FLOWER_COLOR_THEME_OPTIONS: { value: string; label: string }[] = [
+  { value: 'Red', label: 'Red' },
+  { value: 'Pink', label: 'Pink' },
+  { value: 'White', label: 'White' },
+  { value: 'Yellow', label: 'Yellow' },
+  { value: 'Orange', label: 'Orange' },
+  { value: 'Purple', label: 'Purple' },
+  { value: 'Mixed', label: 'Mixed' },
+];
+
+const FLOWER_PACKAGING_OPTIONS: { value: string; label: string }[] = [
+  { value: 'Paper Wrap', label: 'Paper Wrap' },
+  { value: 'Premium Wrap', label: 'Premium Wrap' },
+  { value: 'Net Wrap', label: 'Net Wrap' },
+  { value: 'Box Packaging', label: 'Box Packaging' },
+  { value: 'Basket', label: 'Basket' },
+  { value: 'Vase', label: 'Vase' },
+];
+
+const FLOWER_ADDON_OPTIONS: string[] = [
+  'Ribbon',
+  'Greeting Card',
+  'Foliage',
+  'Decorative Wrap',
+  'Chocolate',
+  'Teddy Bear',
+];
+
+const FLOWER_COUNTRY_OPTIONS: { value: string; label: string }[] = [
+  { value: 'India', label: 'India' },
+  { value: 'Netherlands', label: 'Netherlands' },
+  { value: 'Kenya', label: 'Kenya' },
+  { value: 'Thailand', label: 'Thailand' },
+  { value: 'Colombia', label: 'Colombia' },
+];
+
+const FLOWER_OCCASION_OPTIONS: string[] = [
+  'Birthday',
+  'Anniversary',
+  'Love & Romance',
+  'Congratulations',
+  'Sympathy',
+  'Thank You',
+];
+
+const FLOWER_STEM_QUICK_PICKS = [6, 10, 12, 20, 50];
+
+/** Valid arrangement-style values only (no cake shapes). */
+const FLOWER_ARRANGEMENT_VALUE_SET = new Set(FLOWER_ARRANGEMENT_OPTIONS.map((o) => o.value));
+
+function toggleCsvItem(csv: string, item: string): string {
+  const parts = csv
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const idx = parts.indexOf(item);
+  if (idx >= 0) parts.splice(idx, 1);
+  else parts.push(item);
+  return parts.join(', ');
+}
 
 const TREATS_SHAPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'Round', label: 'Round' },
@@ -158,14 +236,6 @@ function productDetailsFlavourPlaceholder(profile: ProductFormProfile): string {
     default:
       return '';
   }
-}
-
-function productDetailsFlowersBouquetLabel(): string {
-  return 'Stems, blooms & presentation';
-}
-
-function productDetailsFlowersBouquetPlaceholder(): string {
-  return 'e.g., 4 pink Oriental lilies, white premium paper wrap';
 }
 
 function productDetailsToppingsPlaceholder(profile: ProductFormProfile): string {
@@ -249,7 +319,14 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
     servings: '',
     toppings: '',
     weight: '',
-    countryOfOrigin: 'India',
+    countryOfOrigin: formProfile === 'flowers' ? '' : 'India',
+    flowerVariety: '',
+    colorTheme: '',
+    numberOfStems: '',
+    stemsPresentation: '',
+    packagingType: '',
+    addOns: '',
+    occasionTags: '',
     ...productDetails
   });
 
@@ -264,6 +341,8 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
     details: true,
     pleaseNote: true
   });
+  const [flowerAdditionalOpen, setFlowerAdditionalOpen] = useState(false);
+  const [flowerVarietyDraft, setFlowerVarietyDraft] = useState('');
 
   const isCakeDetailsLayout = formProfile === 'cake';
   const showTreatsEggVersion = formProfile === 'treats';
@@ -272,11 +351,12 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
   const shapeFieldLabel = productDetailsShapeLabel(formProfile);
   const flavourPlaceholder = productDetailsFlavourPlaceholder(formProfile);
   const toppingsPlaceholder = productDetailsToppingsPlaceholder(formProfile);
-  const flowersBouquetLabel = productDetailsFlowersBouquetLabel();
-  const flowersBouquetPlaceholder = productDetailsFlowersBouquetPlaceholder();
-
   const shapeSelectOptions = useMemo(() => {
     const base = getShapeOptionsForProfile(formProfile);
+    if (formProfile === 'flowers') {
+      // Never inject cake-era "Round (saved value)" — only valid florist arrangement labels
+      return base;
+    }
     const v = details.shape?.trim();
     if (v && !base.some((o) => o.value === v)) {
       return [{ value: v, label: `${v} (saved value)` }, ...base];
@@ -287,14 +367,14 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
   const shapeSelectClassName =
     'w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent';
 
-  // Auto-population logic based on primary subcategory and variations
+  // Auto-population logic based on primary subcategory and variations (cakes / treats — not flowers)
   useEffect(() => {
+    if (formProfile === 'flowers') return;
     if (primarySubcategoryId && subcategories.length > 0 && !details.cakeFlavour) {
       const primarySubcategory = subcategories.find(sub => 
         sub.id === primarySubcategoryId || sub.id === primarySubcategoryId.toString()
       );
       if (primarySubcategory) {
-        // Auto-populate flavor based on subcategory name
         const flavorName = primarySubcategory.name;
         setDetails(prev => ({
           ...prev,
@@ -302,7 +382,38 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
         }));
       }
     }
-  }, [primarySubcategoryId, subcategories, details.cakeFlavour]);
+  }, [primarySubcategoryId, subcategories, details.cakeFlavour, formProfile]);
+
+  const wasFlowersProfileRef = useRef(false);
+
+  /** Flowers: defaults & clear cake-shape when user switches category to Flowers */
+  useEffect(() => {
+    if (formProfile !== 'flowers') {
+      wasFlowersProfileRef.current = false;
+      return;
+    }
+    const entering = !wasFlowersProfileRef.current;
+    wasFlowersProfileRef.current = true;
+    if (!entering) return;
+    setDetails((prev) => ({
+      ...prev,
+      shape: prev.shape?.trim() && FLOWER_ARRANGEMENT_VALUE_SET.has(prev.shape.trim()) ? prev.shape : '',
+      colorTheme: prev.colorTheme?.trim() || 'Mixed',
+      packagingType: prev.packagingType?.trim() || 'Paper Wrap',
+    }));
+  }, [formProfile]);
+
+  /** After description parse: strip cake-era Shape values (Round, etc.) from arrangement */
+  useEffect(() => {
+    if (formProfile !== 'flowers') return;
+    setDetails((prev) => {
+      const s = prev.shape?.trim();
+      if (s && !FLOWER_ARRANGEMENT_VALUE_SET.has(s)) {
+        return { ...prev, shape: '' };
+      }
+      return prev;
+    });
+  }, [formProfile, value]);
 
   // Auto-populate weight from base_weight or product variations
   useEffect(() => {
@@ -379,7 +490,8 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
         const lines = value.split('\n');
         let currentOverview = '';
         let currentDetails = { ...details };
-        let currentPleaseNote = pleaseNote;
+        let currentPleaseNote = '';
+        let sawPleaseNoteHeader = false;
         let inDetails = false;
         let inPleaseNote = false;
 
@@ -393,27 +505,58 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
           } else if (trimmedLine.includes('Please Note:')) {
             inDetails = false;
             inPleaseNote = true;
+            sawPleaseNoteHeader = true;
             currentPleaseNote = '';
             continue;
           }
           
           if (inDetails && trimmedLine) {
             // Parse product details
-            if (trimmedLine.includes('Cake Flavour:')) {
-              currentDetails.cakeFlavour = stripHtmlTags(trimmedLine.replace('Cake Flavour:', '').trim());
+            if (trimmedLine.includes('Flower Type / Variety:')) {
+              const v = stripHtmlTags(trimmedLine.replace('Flower Type / Variety:', '').trim());
+              currentDetails.flowerVariety = v;
+              currentDetails.cakeFlavour = currentDetails.cakeFlavour || v;
+            } else if (trimmedLine.includes('Arrangement Style:')) {
+              currentDetails.shape = stripHtmlTags(trimmedLine.replace('Arrangement Style:', '').trim());
+            } else if (trimmedLine.includes('Color Theme:')) {
+              currentDetails.colorTheme = stripHtmlTags(trimmedLine.replace('Color Theme:', '').trim());
+            } else if (trimmedLine.includes('Number of Stems:')) {
+              currentDetails.numberOfStems = stripHtmlTags(trimmedLine.replace('Number of Stems:', '').trim());
+            } else if (trimmedLine.includes('Stems, Blooms & Presentation:')) {
+              const v = stripHtmlTags(trimmedLine.replace('Stems, Blooms & Presentation:', '').trim());
+              currentDetails.stemsPresentation = v;
+              currentDetails.weight = currentDetails.weight || v;
+            } else if (trimmedLine.includes('Packaging Type:')) {
+              currentDetails.packagingType = stripHtmlTags(trimmedLine.replace('Packaging Type:', '').trim());
+            } else if (trimmedLine.includes('Add-ons:')) {
+              const v = stripHtmlTags(trimmedLine.replace('Add-ons:', '').trim());
+              currentDetails.addOns = v;
+              currentDetails.toppings = currentDetails.toppings || v;
+            } else if (trimmedLine.includes('Occasion Tags:')) {
+              currentDetails.occasionTags = stripHtmlTags(trimmedLine.replace('Occasion Tags:', '').trim());
+            } else if (trimmedLine.includes('Cake Flavour:')) {
+              const v = stripHtmlTags(trimmedLine.replace('Cake Flavour:', '').trim());
+              currentDetails.cakeFlavour = v;
+              currentDetails.flowerVariety = currentDetails.flowerVariety || v;
             } else if (trimmedLine.includes('Bouquet contents:')) {
-              currentDetails.weight = stripHtmlTags(trimmedLine.replace('Bouquet contents:', '').trim());
+              const v = stripHtmlTags(trimmedLine.replace('Bouquet contents:', '').trim());
+              currentDetails.stemsPresentation = currentDetails.stemsPresentation || v;
+              currentDetails.weight = v;
             } else if (trimmedLine.includes('Weight:')) {
               currentDetails.weight = stripHtmlTags(trimmedLine.replace('Weight:', '').trim());
             } else if (trimmedLine.includes('Servings:')) {
               currentDetails.servings = stripHtmlTags(trimmedLine.replace('Servings:', '').trim());
             } else if (trimmedLine.includes('Shape:')) {
-              currentDetails.shape = stripHtmlTags(trimmedLine.replace('Shape:', '').trim());
+              if (formProfile !== 'flowers') {
+                currentDetails.shape = stripHtmlTags(trimmedLine.replace('Shape:', '').trim());
+              }
             } else if (trimmedLine.includes('Version:')) {
               const version = stripHtmlTags(trimmedLine.replace('Version:', '').trim());
               currentDetails.version = version === 'Egg' || version === 'Eggless' ? version : '';
             } else if (trimmedLine.includes('Toppings:')) {
-              currentDetails.toppings = stripHtmlTags(trimmedLine.replace('Toppings:', '').trim());
+              const v = stripHtmlTags(trimmedLine.replace('Toppings:', '').trim());
+              currentDetails.toppings = v;
+              currentDetails.addOns = currentDetails.addOns || v;
             } else if (trimmedLine.includes('Country of Origin:')) {
               currentDetails.countryOfOrigin = stripHtmlTags(trimmedLine.replace('Country of Origin:', '').trim());
             }
@@ -433,16 +576,30 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
           setOverviewText(currentOverview.trim());
         }
         
-        if (currentDetails.cakeFlavour || currentDetails.weight || currentDetails.servings || currentDetails.toppings) {
-          setDetails(currentDetails);
+        if (
+          currentDetails.cakeFlavour ||
+          currentDetails.weight ||
+          currentDetails.servings ||
+          currentDetails.toppings ||
+          currentDetails.shape ||
+          currentDetails.flowerVariety ||
+          currentDetails.colorTheme ||
+          currentDetails.numberOfStems ||
+          currentDetails.stemsPresentation ||
+          currentDetails.packagingType ||
+          currentDetails.addOns ||
+          currentDetails.occasionTags
+        ) {
+          setDetails((prev) => ({ ...prev, ...currentDetails }));
         }
         
-        if (currentPleaseNote !== pleaseNote) {
-          setPleaseNote(currentPleaseNote);
-        }
+        setPleaseNote((prev) => {
+          if (!sawPleaseNoteHeader) return prev;
+          return currentPleaseNote === prev ? prev : currentPleaseNote;
+        });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]); // details and pleaseNote are intentionally excluded to avoid infinite loops
+  }, [value, formProfile]); // details and pleaseNote are intentionally excluded to avoid infinite loops
 
   const pleaseNoteProfileRef = useRef<ProductFormProfile | undefined>(undefined);
   useEffect(() => {
@@ -479,6 +636,7 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
   // Expose reset and clean methods to parent component
   useImperativeHandle(ref, () => ({
     reset: () => {
+      setFlowerVarietyDraft('');
       setOverviewText('');
       setDetails({
         cakeFlavour: '',
@@ -487,7 +645,14 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
         servings: '',
         toppings: '',
         weight: '',
-        countryOfOrigin: ''
+        countryOfOrigin: '',
+        flowerVariety: '',
+        colorTheme: '',
+        numberOfStems: '',
+        stemsPresentation: '',
+        packagingType: '',
+        addOns: '',
+        occasionTags: ''
       });
       setPleaseNote(getDefaultPleaseNoteBullets(formProfile));
       onChange(''); // Clear the main description value
@@ -509,7 +674,14 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
         servings: prev.servings === '()' ? '' : prev.servings,
         toppings: prev.toppings === '()' ? '' : prev.toppings,
         weight: prev.weight === '()' ? '' : prev.weight,
-        countryOfOrigin: prev.countryOfOrigin === '()' ? '' : prev.countryOfOrigin
+        countryOfOrigin: prev.countryOfOrigin === '()' ? '' : prev.countryOfOrigin,
+        flowerVariety: prev.flowerVariety === '()' ? '' : prev.flowerVariety,
+        colorTheme: prev.colorTheme === '()' ? '' : prev.colorTheme,
+        numberOfStems: prev.numberOfStems === '()' ? '' : prev.numberOfStems,
+        stemsPresentation: prev.stemsPresentation === '()' ? '' : prev.stemsPresentation,
+        packagingType: prev.packagingType === '()' ? '' : prev.packagingType,
+        addOns: prev.addOns === '()' ? '' : prev.addOns,
+        occasionTags: prev.occasionTags === '()' ? '' : prev.occasionTags
       }));
       
       // Clean up main description value
@@ -565,22 +737,51 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
       description += overviewText.trim() + '\n\n';
     }
     
-    // Add product details
-    const hasDetails = Object.values(details).some(val => val && val.trim());
+    const hasFlowerDetails =
+      formProfile === 'flowers' &&
+      [
+        details.flowerVariety,
+        details.cakeFlavour,
+        details.shape,
+        details.colorTheme,
+        details.numberOfStems,
+        details.addOns,
+        details.toppings,
+        details.packagingType,
+        details.countryOfOrigin,
+        details.occasionTags
+      ].some((val) => val && String(val).trim());
+
+    const hasDetails =
+      formProfile === 'flowers'
+        ? hasFlowerDetails
+        : Object.values(details).some((val) => val && String(val).trim());
+
     if (hasDetails) {
       description += 'Product Details:\n';
-      if (details.cakeFlavour) description += `Cake Flavour: ${details.cakeFlavour}\n`;
-      if (details.version) description += `Version: ${details.version}\n`;
-      if (details.shape) description += `Shape: ${details.shape}\n`;
       if (formProfile === 'flowers') {
-        if (details.weight) description += `Bouquet contents: ${details.weight}\n`;
-        if (details.toppings) description += `Toppings: ${details.toppings}\n`;
+        const variety = (details.flowerVariety || details.cakeFlavour).trim();
+        if (variety) description += `Flower Type / Variety: ${variety}\n`;
+        if (details.shape) description += `Arrangement Style: ${details.shape}\n`;
+        const colorOut = (details.colorTheme || 'Mixed').trim();
+        if (colorOut) description += `Color Theme: ${colorOut}\n`;
+        if (details.numberOfStems) description += `Number of Stems: ${details.numberOfStems}\n`;
+        const addons = (details.addOns || details.toppings).trim();
+        if (addons) description += `Add-ons: ${addons}\n`;
+        const packOut = (details.packagingType || 'Paper Wrap').trim();
+        if (packOut) description += `Packaging Type: ${packOut}\n`;
+        const occasions = (details.occasionTags || '').trim();
+        if (occasions) description += `Occasion Tags: ${occasions}\n`;
+        if (details.countryOfOrigin?.trim()) description += `Country of Origin: ${details.countryOfOrigin.trim()}\n`;
       } else {
+        if (details.cakeFlavour) description += `Cake Flavour: ${details.cakeFlavour}\n`;
+        if (details.version) description += `Version: ${details.version}\n`;
+        if (details.shape) description += `Shape: ${details.shape}\n`;
         if (details.servings) description += `Servings: ${details.servings}\n`;
         if (details.toppings) description += `Toppings: ${details.toppings}\n`;
         if (details.weight) description += `Weight: ${details.weight}\n`;
+        if (details.countryOfOrigin) description += `Country of Origin: ${details.countryOfOrigin}\n`;
       }
-      if (details.countryOfOrigin) description += `Country of Origin: ${details.countryOfOrigin}\n`;
       description += '\n';
     }
     
@@ -626,7 +827,7 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
 
 
   const wordCount = overviewText.trim() === '' ? 0 : overviewText.trim().split(/\s+/).filter(word => word.length > 0).length;
-  const maxWords = 50;
+  const maxWords = isFlowersProfile ? 80 : 50;
 
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections(prev => ({
@@ -647,6 +848,23 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
     }
   };
 
+  const appendFlowerVarietyToken = (raw: string) => {
+    const s = raw.trim();
+    if (!s) return;
+    setDetails((prev) => {
+      const tokens = prev.flowerVariety.split(',').map((x) => x.trim()).filter(Boolean);
+      if (tokens.includes(s)) return prev;
+      return { ...prev, flowerVariety: [...tokens, s].join(', ') };
+    });
+  };
+
+  const removeFlowerVarietyToken = (tag: string) => {
+    setDetails((prev) => {
+      const tokens = prev.flowerVariety.split(',').map((x) => x.trim()).filter(Boolean);
+      return { ...prev, flowerVariety: tokens.filter((t) => t !== tag).join(', ') };
+    });
+  };
+
   const savePleaseNote = () => {
     setPleaseNote(tempPleaseNote);
     setIsEditingPleaseNote(false);
@@ -662,6 +880,7 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
     if (onReset) {
       onReset();
     } else {
+      setFlowerVarietyDraft('');
       setOverviewText('');
       setDetails({
         cakeFlavour: '',
@@ -670,7 +889,14 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
         servings: '',
         toppings: '',
         weight: '',
-        countryOfOrigin: ''
+        countryOfOrigin: '',
+        flowerVariety: '',
+        colorTheme: '',
+        numberOfStems: '',
+        stemsPresentation: '',
+        packagingType: '',
+        addOns: '',
+        occasionTags: ''
       });
       setPleaseNote(getDefaultPleaseNoteBullets(formProfile));
     }
@@ -698,7 +924,14 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
         servings: prev.servings === '()' ? '' : prev.servings,
         toppings: prev.toppings === '()' ? '' : prev.toppings,
         weight: prev.weight === '()' ? '' : prev.weight,
-        countryOfOrigin: prev.countryOfOrigin === '()' ? '' : prev.countryOfOrigin
+        countryOfOrigin: prev.countryOfOrigin === '()' ? '' : prev.countryOfOrigin,
+        flowerVariety: prev.flowerVariety === '()' ? '' : prev.flowerVariety,
+        colorTheme: prev.colorTheme === '()' ? '' : prev.colorTheme,
+        numberOfStems: prev.numberOfStems === '()' ? '' : prev.numberOfStems,
+        stemsPresentation: prev.stemsPresentation === '()' ? '' : prev.stemsPresentation,
+        packagingType: prev.packagingType === '()' ? '' : prev.packagingType,
+        addOns: prev.addOns === '()' ? '' : prev.addOns,
+        occasionTags: prev.occasionTags === '()' ? '' : prev.occasionTags
       }));
     }
   };
@@ -732,7 +965,9 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
         <div className="flex items-center justify-between p-3">
           <div>
             <h3 className="text-sm font-medium text-gray-900 dark:text-white">Product Overview</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Brief description (up to 50 words)</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {isFlowersProfile ? 'Short intro for shoppers (up to 80 words)' : 'Brief description (up to 50 words)'}
+            </p>
           </div>
           <button
             type="button"
@@ -898,6 +1133,302 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
                   </div>
                 </div>
               </>
+            ) : isFlowersProfile ? (
+              <div className="space-y-7">
+                <p className="text-xs text-emerald-800 dark:text-emerald-200/90 rounded-md bg-emerald-50 dark:bg-emerald-900/25 px-2.5 py-2 border border-emerald-200/70 dark:border-emerald-800/50">
+                  <span className="font-medium">Flowers category:</span> use only the fields below. Cake-style fields (cake flavour, weight in kg, servings, cake shape) are not shown here.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-baseline gap-2">
+                      <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 tracking-tight">
+                        Arrangement style
+                      </span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/35 px-1.5 py-0.5 rounded">Required</span>
+                    </div>
+                    <select
+                      value={details.shape}
+                      onChange={(e) => handleDetailChange('shape', e.target.value)}
+                      className={shapeSelectClassName}
+                    >
+                      <option value="">Select arrangement style</option>
+                      {shapeSelectOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">
+                      Color theme
+                    </label>
+                    <select
+                      value={details.colorTheme || 'Mixed'}
+                      onChange={(e) => handleDetailChange('colorTheme', e.target.value)}
+                      className={shapeSelectClassName}
+                    >
+                      {FLOWER_COLOR_THEME_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 tracking-tight">
+                      Flower type / variety
+                    </span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/35 px-1.5 py-0.5 rounded">Required</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
+                    Tap a suggestion to add; type in the box and press Enter or comma to add more. Remove with ✕ on each tag.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {FLOWER_VARIETY_OPTIONS.map((opt) => {
+                      const selected = details.flowerVariety
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter(Boolean)
+                        .includes(opt);
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() =>
+                            handleDetailChange('flowerVariety', toggleCsvItem(details.flowerVariety, opt))
+                          }
+                          className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                            selected
+                              ? 'bg-rose-100 dark:bg-rose-900/40 border-rose-400 dark:border-rose-600 text-rose-900 dark:text-rose-100'
+                              : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                          }`}
+                        >
+                          {opt}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div
+                    className={`flex flex-wrap items-center gap-1.5 min-h-[44px] px-2.5 py-2 rounded-xl border bg-white/90 dark:bg-gray-800/90 transition-all duration-200 backdrop-blur-sm focus-within:border-rose-400 focus-within:ring-2 focus-within:ring-rose-400/20 dark:focus-within:border-rose-500 ${
+                      details.flowerVariety.trim() || flowerVarietyDraft
+                        ? 'border-rose-200 dark:border-rose-800/60'
+                        : 'border-gray-200 dark:border-gray-600'
+                    }`}
+                  >
+                    {details.flowerVariety
+                      .split(',')
+                      .map((s) => s.trim())
+                      .filter(Boolean)
+                      .map((tag, idx) => (
+                        <span
+                          key={`${tag}-${idx}`}
+                          className="inline-flex items-center gap-0.5 pl-2 pr-1 py-0.5 text-xs rounded-md bg-rose-50 dark:bg-rose-900/35 border border-rose-200/90 dark:border-rose-700/50 text-rose-900 dark:text-rose-100"
+                        >
+                          <span className="max-w-[200px] truncate">{tag}</span>
+                          <button
+                            type="button"
+                            className="p-0.5 rounded hover:bg-rose-200/80 dark:hover:bg-rose-800/50 text-rose-700 dark:text-rose-200"
+                            aria-label={`Remove ${tag}`}
+                            onClick={() => removeFlowerVarietyToken(tag)}
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </span>
+                      ))}
+                    <input
+                      type="text"
+                      className="flex-1 min-w-[10rem] text-sm py-1 px-0.5 border-0 bg-transparent text-gray-900 dark:text-gray-100 placeholder:text-amber-400/90 dark:placeholder:text-gray-500 focus:outline-none focus:ring-0"
+                      placeholder="Type and select flowers (e.g., Roses, Lilies)"
+                      value={flowerVarietyDraft}
+                      onChange={(e) => setFlowerVarietyDraft(e.target.value)}
+                      onBlur={() => {
+                        if (flowerVarietyDraft.trim()) {
+                          appendFlowerVarietyToken(flowerVarietyDraft);
+                          setFlowerVarietyDraft('');
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ',') {
+                          e.preventDefault();
+                          if (flowerVarietyDraft.trim()) {
+                            appendFlowerVarietyToken(flowerVarietyDraft);
+                            setFlowerVarietyDraft('');
+                          }
+                        } else if (e.key === 'Backspace' && !flowerVarietyDraft) {
+                          const tokens = details.flowerVariety
+                            .split(',')
+                            .map((s) => s.trim())
+                            .filter(Boolean);
+                          if (tokens.length > 0) {
+                            removeFlowerVarietyToken(tokens[tokens.length - 1]);
+                          }
+                        }
+                      }}
+                      onPaste={(e) => {
+                        const text = e.clipboardData.getData('text');
+                        if (text.includes(',') || text.includes(';') || text.includes('\n')) {
+                          e.preventDefault();
+                          text
+                            .split(/[,;\n]+/)
+                            .map((s) => s.trim())
+                            .filter(Boolean)
+                            .forEach((t) => appendFlowerVarietyToken(t));
+                          setFlowerVarietyDraft('');
+                        }
+                      }}
+                      aria-label="Add flower types"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5 items-start">
+                  <div className="space-y-2.5">
+                    <div className="flex flex-wrap items-baseline gap-2">
+                      <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 tracking-tight">
+                        Number of stems
+                      </span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/35 px-1.5 py-0.5 rounded">Required</span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400">Digits only — use quick picks for common counts.</p>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      value={details.numberOfStems}
+                      onChange={(e) =>
+                        handleDetailChange('numberOfStems', e.target.value.replace(/\D/g, ''))
+                      }
+                      placeholder="e.g. 10"
+                      className="text-sm border-rose-200/90 dark:border-rose-800/50 focus:border-rose-400 focus:ring-rose-400/20"
+                    />
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      <span className="text-[11px] text-gray-500 dark:text-gray-400 self-center mr-1">Quick:</span>
+                      {FLOWER_STEM_QUICK_PICKS.map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => handleDetailChange('numberOfStems', String(n))}
+                          className="px-2 py-0.5 text-xs rounded-md border border-rose-200/70 dark:border-rose-800/50 text-gray-700 dark:text-gray-300 hover:bg-rose-50 dark:hover:bg-rose-900/40"
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-2 md:pt-[1.875rem]">
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">
+                      Packaging type
+                    </label>
+                    <select
+                      value={details.packagingType || 'Paper Wrap'}
+                      onChange={(e) => handleDetailChange('packagingType', e.target.value)}
+                      className={shapeSelectClassName}
+                    >
+                      {FLOWER_PACKAGING_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="space-y-2 pt-1">
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">
+                    Add-ons
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {FLOWER_ADDON_OPTIONS.map((opt) => {
+                      const selected = details.addOns
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter(Boolean)
+                        .includes(opt);
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() =>
+                            handleDetailChange('addOns', toggleCsvItem(details.addOns, opt))
+                          }
+                          className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                            selected
+                              ? 'bg-amber-100 dark:bg-amber-900/40 border-amber-400 dark:border-amber-600 text-amber-900 dark:text-amber-100'
+                              : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                          }`}
+                        >
+                          {opt}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">
+                    Occasion tags
+                    <span className="ml-1 font-normal text-gray-400 dark:text-gray-500">(optional — homepage &amp; discovery)</span>
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {FLOWER_OCCASION_OPTIONS.map((opt) => {
+                      const selected = details.occasionTags
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter(Boolean)
+                        .includes(opt);
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() =>
+                            handleDetailChange('occasionTags', toggleCsvItem(details.occasionTags, opt))
+                          }
+                          className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                            selected
+                              ? 'bg-violet-100 dark:bg-violet-900/40 border-violet-400 dark:border-violet-600 text-violet-900 dark:text-violet-100'
+                              : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                          }`}
+                        >
+                          {opt}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setFlowerAdditionalOpen((o) => !o)}
+                    className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-50/80 dark:bg-gray-800/50 hover:bg-gray-100/80 dark:hover:bg-gray-700/50"
+                  >
+                    Additional information (optional)
+                    {flowerAdditionalOpen ? (
+                      <ChevronUp className="w-4 h-4 flex-shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 flex-shrink-0" />
+                    )}
+                  </button>
+                  {flowerAdditionalOpen && (
+                    <div className="px-3 pb-3 pt-1 border-t border-gray-200 dark:border-gray-600">
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Country of origin
+                      </label>
+                      <Input
+                        list="flower-country-suggestions"
+                        value={details.countryOfOrigin}
+                        onChange={(e) => handleDetailChange('countryOfOrigin', e.target.value)}
+                        placeholder="Optional — e.g. Netherlands"
+                        className="text-sm"
+                      />
+                      <datalist id="flower-country-suggestions">
+                        {FLOWER_COUNTRY_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value} />
+                        ))}
+                      </datalist>
+                    </div>
+                  )}
+                </div>
+              </div>
             ) : (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -910,9 +1441,7 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
                       onChange={(e) => handleDetailChange('shape', e.target.value)}
                       className={shapeSelectClassName}
                     >
-                      <option value="">
-                        {formProfile === 'flowers' ? 'Select arrangement style' : 'Select shape'}
-                      </option>
+                      <option value="">Select shape</option>
                       {shapeSelectOptions.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                           {opt.label}
@@ -951,48 +1480,26 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      {isFlowersProfile ? (
-                        <>
-                          {flowersBouquetLabel}
-                          <span className="ml-1 text-xs font-normal text-gray-500 dark:text-gray-400">
-                            (stem counts, varieties, wrap, vase — not synced from price options)
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          Weight
-                          {isCakePricingForm && (baseWeight || productVariations.length > 0) && (
-                            <span className="ml-1 text-xs text-blue-600 dark:text-blue-400">
-                              {baseWeight ? '(From base weight)' : '(Auto-filled)'}
-                            </span>
-                          )}
-                          {!isCakePricingForm && (
-                            <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
-                              (Not synced from primary option label unless it includes kg, g, ml, etc.)
-                            </span>
-                          )}
-                        </>
+                      Weight
+                      {isCakePricingForm && (baseWeight || productVariations.length > 0) && (
+                        <span className="ml-1 text-xs text-blue-600 dark:text-blue-400">
+                          {baseWeight ? '(From base weight)' : '(Auto-filled)'}
+                        </span>
+                      )}
+                      {!isCakePricingForm && (
+                        <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
+                          (Not synced from primary option label unless it includes kg, g, ml, etc.)
+                        </span>
                       )}
                     </label>
-                    {isFlowersProfile ? (
-                      <textarea
-                        value={details.weight}
-                        onChange={(e) => handleDetailChange('weight', e.target.value)}
-                        rows={3}
-                        placeholder={flowersBouquetPlaceholder}
-                        className={`${shapeSelectClassName} min-h-[4.5rem] resize-y font-sans`}
-                      />
-                    ) : (
-                      <Input
-                        value={details.weight}
-                        onChange={(e) => handleDetailChange('weight', e.target.value)}
-                        placeholder="e.g., 1 kg, 500g, 2 lbs"
-                        className="text-sm"
-                      />
-                    )}
+                    <Input
+                      value={details.weight}
+                      onChange={(e) => handleDetailChange('weight', e.target.value)}
+                      placeholder="e.g., 1 kg, 500g, 2 lbs"
+                      className="text-sm"
+                    />
                   </div>
                 </div>
-                {!isFlowersProfile && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className={showTreatsEggVersion ? '' : 'md:col-span-2'}>
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -1026,20 +1533,19 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
                     </div>
                   )}
                 </div>
-                )}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Toppings
+                  </label>
+                  <Input
+                    value={details.toppings}
+                    onChange={(e) => handleDetailChange('toppings', e.target.value)}
+                    placeholder={toppingsPlaceholder}
+                    className="text-sm"
+                  />
+                </div>
               </>
             )}
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                {formProfile === 'flowers' ? 'Add-ons (ribbon, foliage, etc.)' : 'Toppings'}
-              </label>
-              <Input
-                value={details.toppings}
-                onChange={(e) => handleDetailChange('toppings', e.target.value)}
-                placeholder={toppingsPlaceholder}
-                className="text-sm"
-              />
-            </div>
           </div>
         )}
       </div>

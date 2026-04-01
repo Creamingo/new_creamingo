@@ -9,9 +9,9 @@ const DOT = `<span style="color: #6b7280;">•</span>`;
 /** Plain-text bullets for Product Description → Please Note (StructuredDescriptionEditor). */
 export function getDefaultPleaseNoteBullets(profile: ProductFormProfile): string {
   if (profile === 'flowers') {
-    return `• Vases, baskets, and props in photos are for styling only unless explicitly included in your order.
-• Fresh flowers are natural products; colour shade and bloom stage may vary slightly by season and supply.
-• Your arrangement is hand-prepared for delivery — handle gently, keep upright when unboxing, and place stems in fresh water soon after receipt.`;
+    return `• Vases, baskets, and props are for display only unless mentioned.
+• Flower color and bloom may vary slightly due to season and availability.
+• Handle gently, keep upright, and place in fresh water after delivery.`;
   }
   if (profile === 'sweets') {
     return `• Photos are indicative; piece shape, colour, garnish, or silver leaf may vary slightly by batch and season.
@@ -37,13 +37,13 @@ const CAKE_CARE_HTML = `<p style="${P_STYLE}"><strong ${STRONG}>1). Refrigerate:
 
 <p style="${P_STYLE} font-weight: 500; color: #1f2937; margin-top: 16px;">Enjoy your Creamingo cake! 🎂</p>`;
 
-const FLOWERS_CARE_HTML = `<p style="${P_STYLE}"><strong ${STRONG}>1). Water:</strong> <span ${SPAN}>Trim stem ends at a slight angle and place in a clean vase with fresh, cool water. Change the water daily for best vase life.</span></p>
+const FLOWERS_CARE_HTML = `<p style="${P_STYLE}"><strong ${STRONG}>1). Water:</strong> <span ${SPAN}>Trim stems and place in fresh, cool water. Change water daily.</span></p>
 
-<p style="${P_STYLE}"><strong ${STRONG}>2). Placement:</strong> <span ${SPAN}>Keep away from direct sunlight, heat, air-conditioning vents, and ripening fruit (ethylene can shorten bloom life).</span></p>
+<p style="${P_STYLE}"><strong ${STRONG}>2). Placement:</strong> <span ${SPAN}>Keep away from sunlight, heat, AC vents, and fruits.</span></p>
 
-<p style="${P_STYLE}"><strong ${STRONG}>3). Enjoyment:</strong> <span ${SPAN}>Most bouquets look their best within 2–4 days; longevity varies by flower type and season.</span></p>
+<p style="${P_STYLE}"><strong ${STRONG}>3). Enjoyment:</strong> <span ${SPAN}>Best enjoyed within 2–4 days (varies by flowers).</span></p>
 
-<p style="${P_STYLE}"><strong ${STRONG}>4). Pets:</strong> <span ${SPAN}>Some flowers and foliage can be harmful to pets — keep arrangements out of reach of animals and small children.</span></p>
+<p style="${P_STYLE}"><strong ${STRONG}>4). Pets:</strong> <span ${SPAN}>Keep away from pets and small children.</span></p>
 
 <p style="${P_STYLE} font-weight: 500; color: #1f2937; margin-top: 16px;">Enjoy your Creamingo flowers! 🌸</p>`;
 
@@ -81,15 +81,15 @@ const CAKE_DELIVERY_HTML = `<p style="${P_STYLE}">${DOT} <strong ${STRONG}>Packa
 
 <p style="margin-bottom: 20px;"></p>`;
 
-const FLOWERS_DELIVERY_HTML = `<p style="${P_STYLE}">${DOT} <strong ${STRONG}>Packaging:</strong> <span ${SPAN}>Arrangements are hand-delivered with protective wrap to help stems and blooms stay fresh in transit.</span></p>
+const FLOWERS_DELIVERY_HTML = `<p style="${P_STYLE}">${DOT} <strong ${STRONG}>Packaging:</strong> <span ${SPAN}>Arrangements are safely packed to keep flowers fresh during delivery.</span></p>
 
-<p style="${P_STYLE}">${DOT} <strong ${STRONG}>Recipient:</strong> <span ${SPAN}>Please ensure someone is available to receive the bouquet, unwrap carefully, and place stems in water promptly.</span></p>
+<p style="${P_STYLE}">${DOT} <strong ${STRONG}>Recipient:</strong> <span ${SPAN}>Ensure someone is available to receive and place them in water quickly.</span></p>
 
-<p style="${P_STYLE}">${DOT} <strong ${STRONG}>Timing:</strong> <span ${SPAN}>Delivery slots are estimates and may vary by location, weather, and traffic.</span></p>
+<p style="${P_STYLE}">${DOT} <strong ${STRONG}>Timing:</strong> <span ${SPAN}>Delivery time is an estimate and may vary due to external factors.</span></p>
 
-<p style="${P_STYLE}">${DOT} <strong ${STRONG}>Fresh product:</strong> <span ${SPAN}>Flowers are perishable; we typically complete delivery in one attempt at the agreed time.</span></p>
+<p style="${P_STYLE}">${DOT} <strong ${STRONG}>Fresh product:</strong> <span ${SPAN}>Flowers are perishable, so delivery is usually attempted once.</span></p>
 
-<p style="${P_STYLE}">${DOT} <strong ${STRONG}>Substitutions:</strong> <span ${SPAN}>Seasonal availability may require thoughtful swaps of equal or greater value while keeping the style and colour story of the design.</span></p>
+<p style="${P_STYLE}">${DOT} <strong ${STRONG}>Substitutions:</strong> <span ${SPAN}>Substitutions may occur based on availability while maintaining style and value.</span></p>
 
 <p style="margin-bottom: 20px;"></p>`;
 

@@ -65,3 +65,17 @@ export function getNonCakeProfileCopy(profile: ProductFormProfile): { title: str
       return { title: 'this category', hint: '' };
   }
 }
+
+/** Admin: Price & purchase options — Flowers profile (maps to variant `weight` on API; PDP shows as stem tier). */
+export const FLOWERS_ADMIN_PRICE_COPY = {
+  primaryLabel: 'Option',
+  primaryPlaceholder: 'Small, 12 stems, With vase…',
+  primaryHelper: 'Buyers pick this on the product page.',
+  servingLabel: 'Note (optional)',
+  servingPlaceholder: 'Hand tied · Same-day · One line for all prices',
+  servingHelper: 'Optional extra line under the options. Same for every price.',
+  variationLabel: 'Option',
+  variationPlaceholder: 'Large, 24 stems…',
+  variationTipTitle: 'Tip',
+  variationTipBody: 'Keep text short. Match stems in Product Details if you can.',
+} as const;

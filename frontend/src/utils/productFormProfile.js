@@ -42,3 +42,9 @@ export function resolveProductFormProfileFromProduct(product) {
     : [];
   return getProductFormProfile(resolvePrimaryCategoryId(product), ids);
 }
+
+/** PDP copy for flower products (variant label = stem tier; product serving = optional presentation line). */
+export const FLOWERS_PDP_LABELS = {
+  stemTier: 'Stem tier',
+  presentationNote: 'Presentation note',
+};

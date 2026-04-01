@@ -21,6 +21,7 @@ import {
   getProductFormProfile,
   isCakeFormProfile,
   getNonCakeProfileCopy,
+  FLOWERS_ADMIN_PRICE_COPY,
 } from '../utils/productFormProfile';
 import {
   getDefaultCareStorageHtml,
@@ -282,6 +283,8 @@ export const Products: React.FC = () => {
   );
   const isNewCakeForm = isCakeFormProfile(addFormProfile);
   const isEditCakeForm = isCakeFormProfile(editFormProfile);
+  const isAddFlowers = addFormProfile === 'flowers';
+  const isEditFlowers = editFormProfile === 'flowers';
   /** Cakes + Small Treats Desserts (same optional flavor grid as cakes). */
   const showFlavorPickerOnAdd = isNewCakeForm || addFormProfile === 'treats';
   const showFlavorPickerOnEdit = isEditCakeForm || editFormProfile === 'treats';
@@ -2367,24 +2370,58 @@ export const Products: React.FC = () => {
             
             {/* Base Price Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-                <Input 
-                  label={isNewCakeForm ? 'Base Weight' : 'Primary option label'}
-                  placeholder={isNewCakeForm ? 'e.g., 1kg' : 'e.g., Standard, 250g, Box of 6'}
-                  value={newProduct.base_weight}
-                  onChange={(e) => handleInputChange('base_weight', e.target.value)}
-                />
+                <div className="space-y-1">
+                  <Input 
+                    label={
+                      isNewCakeForm
+                        ? 'Base Weight'
+                        : isAddFlowers
+                          ? FLOWERS_ADMIN_PRICE_COPY.primaryLabel
+                          : 'Primary option label'
+                    }
+                    placeholder={
+                      isNewCakeForm
+                        ? 'e.g., 1kg'
+                        : isAddFlowers
+                          ? FLOWERS_ADMIN_PRICE_COPY.primaryPlaceholder
+                          : 'e.g., Standard, 250g, Box of 6'
+                    }
+                    value={newProduct.base_weight}
+                    onChange={(e) => handleInputChange('base_weight', e.target.value)}
+                  />
+                  {!isNewCakeForm && isAddFlowers && (
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
+                      {FLOWERS_ADMIN_PRICE_COPY.primaryHelper}
+                    </p>
+                  )}
+                </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  {isNewCakeForm ? 'Servings' : 'Size / pack note (optional)'}
+                  {isNewCakeForm
+                    ? 'Servings'
+                    : isAddFlowers
+                      ? FLOWERS_ADMIN_PRICE_COPY.servingLabel
+                      : 'Size / pack note (optional)'}
                 </label>
                 <Input 
-                  placeholder={isNewCakeForm ? calculateServings(newProduct.base_weight) : 'e.g., Serves 2, 12 pieces'}
+                  placeholder={
+                    isNewCakeForm
+                      ? calculateServings(newProduct.base_weight)
+                      : isAddFlowers
+                        ? FLOWERS_ADMIN_PRICE_COPY.servingPlaceholder
+                        : 'e.g., Serves 2, 12 pieces'
+                  }
                   value={newProduct.serving_size}
                   onChange={(e) => handleInputChange('serving_size', e.target.value)}
                 />
                 {isNewCakeForm && !newProduct.serving_size && (
                   <p className="text-xs text-gray-500 mt-1">
                     Auto-calculated: {calculateServings(newProduct.base_weight)}
+                  </p>
+                )}
+                {!isNewCakeForm && isAddFlowers && (
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 leading-snug">
+                    {FLOWERS_ADMIN_PRICE_COPY.servingHelper}
                   </p>
                 )}
               </div>
@@ -2426,7 +2463,7 @@ export const Products: React.FC = () => {
                   disabled={!canAddNewVariation()}
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  {isNewCakeForm ? 'Add New Variation' : 'Add another price option'}
+                  {isNewCakeForm ? 'Add New Variation' : isAddFlowers ? 'Add another stem tier' : 'Add another price option'}
                 </Button>
               </div>
             )}
@@ -2436,18 +2473,40 @@ export const Products: React.FC = () => {
               <div key={`variation-${index}`} className="mb-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 p-4 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-700">
                   <Input 
-                    label={isNewCakeForm ? 'Base Weight' : 'Option label'}
-                    placeholder={isNewCakeForm ? 'e.g., 500g' : 'e.g., 500g pack, Large bouquet'}
+                    label={
+                      isNewCakeForm
+                        ? 'Base Weight'
+                        : isAddFlowers
+                          ? FLOWERS_ADMIN_PRICE_COPY.variationLabel
+                          : 'Option label'
+                    }
+                    placeholder={
+                      isNewCakeForm
+                        ? 'e.g., 500g'
+                        : isAddFlowers
+                          ? FLOWERS_ADMIN_PRICE_COPY.variationPlaceholder
+                          : 'e.g., 500g pack, Large bouquet'
+                    }
                             value={variation.weight}
                             onChange={(e) => handleVariationChange(index, 'weight', e.target.value)}
                           />
                         <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      {isNewCakeForm ? 'Servings' : 'Note'}
+                      {isNewCakeForm ? 'Servings' : isAddFlowers ? FLOWERS_ADMIN_PRICE_COPY.variationTipTitle : 'Note'}
                           </label>
+                    {isNewCakeForm ? (
                     <div className="px-4 py-3 bg-gray-50 dark:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl text-sm font-semibold text-blue-600">
-                      {isNewCakeForm ? calculateServings(variation.weight) : (variation.weight ? '—' : 'Enter option label')}
+                      {calculateServings(variation.weight)}
                     </div>
+                    ) : isAddFlowers ? (
+                    <div className="px-3 py-2.5 bg-emerald-50/90 dark:bg-emerald-900/25 border border-emerald-200/80 dark:border-emerald-800/50 rounded-xl text-[11px] text-emerald-900 dark:text-emerald-100/95 leading-snug">
+                      {FLOWERS_ADMIN_PRICE_COPY.variationTipBody}
+                    </div>
+                    ) : (
+                    <div className="px-4 py-3 bg-gray-50 dark:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl text-sm font-semibold text-blue-600">
+                      {variation.weight ? '—' : 'Enter option label'}
+                    </div>
+                    )}
                   </div>
                   <Input 
                     label="Base Price" 
@@ -2524,7 +2583,7 @@ export const Products: React.FC = () => {
                       disabled={!canAddNewVariation()}
                     >
                       <Plus className="h-4 w-4 mr-2" />
-                      {isNewCakeForm ? 'Add New Variation' : 'Add another price option'}
+                      {isNewCakeForm ? 'Add New Variation' : isAddFlowers ? 'Add another stem tier' : 'Add another price option'}
                     </Button>
                 </div>
               )}
@@ -3051,28 +3110,58 @@ export const Products: React.FC = () => {
               <div className="space-y-4">
                 {/* Base Price Row */}
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                  <div className="flex-1">
+                  <div className="flex-1 space-y-1">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      {isEditCakeForm ? 'Base Weight' : 'Primary option label'}
+                      {isEditCakeForm
+                        ? 'Base Weight'
+                        : isEditFlowers
+                          ? FLOWERS_ADMIN_PRICE_COPY.primaryLabel
+                          : 'Primary option label'}
                     </label>
               <Input 
                 value={editProduct.base_weight}
                 onChange={(e) => handleEditInputChange('base_weight', e.target.value)}
-                      placeholder={isEditCakeForm ? 'e.g., 500g, 1kg' : 'e.g., Standard, 250g'} 
+                      placeholder={
+                        isEditCakeForm
+                          ? 'e.g., 500g, 1kg'
+                          : isEditFlowers
+                            ? FLOWERS_ADMIN_PRICE_COPY.primaryPlaceholder
+                            : 'e.g., Standard, 250g'
+                      } 
                     />
+                    {!isEditCakeForm && isEditFlowers && (
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
+                        {FLOWERS_ADMIN_PRICE_COPY.primaryHelper}
+                      </p>
+                    )}
                   </div>
                   <div className="flex-1">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      {isEditCakeForm ? 'Servings' : 'Size / pack note (optional)'}
+                      {isEditCakeForm
+                        ? 'Servings'
+                        : isEditFlowers
+                          ? FLOWERS_ADMIN_PRICE_COPY.servingLabel
+                          : 'Size / pack note (optional)'}
                     </label>
                     <Input 
                       value={editProduct.serving_size}
                       onChange={(e) => handleEditInputChange('serving_size', e.target.value)}
-                      placeholder={isEditCakeForm ? calculateServings(editProduct.base_weight) : 'e.g., 12 pcs'} 
+                      placeholder={
+                        isEditCakeForm
+                          ? calculateServings(editProduct.base_weight)
+                          : isEditFlowers
+                            ? FLOWERS_ADMIN_PRICE_COPY.servingPlaceholder
+                            : 'e.g., 12 pcs'
+                      } 
                     />
                     {isEditCakeForm && !editProduct.serving_size && (
                       <p className="text-xs text-gray-500 mt-1">
                         Auto-calculated: {calculateServings(editProduct.base_weight)}
+                      </p>
+                    )}
+                    {!isEditCakeForm && isEditFlowers && (
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 leading-snug">
+                        {FLOWERS_ADMIN_PRICE_COPY.servingHelper}
                       </p>
                     )}
                   </div>
@@ -3122,18 +3211,40 @@ export const Products: React.FC = () => {
                       <div key={index} className="mb-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 p-4 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-700">
                           <Input 
-                            label={isEditCakeForm ? 'Weight' : 'Option label'} 
-                            placeholder={isEditCakeForm ? 'e.g., 500g' : 'e.g., 500g pack'} 
+                            label={
+                              isEditCakeForm
+                                ? 'Weight'
+                                : isEditFlowers
+                                  ? FLOWERS_ADMIN_PRICE_COPY.variationLabel
+                                  : 'Option label'
+                            } 
+                            placeholder={
+                              isEditCakeForm
+                                ? 'e.g., 500g'
+                                : isEditFlowers
+                                  ? FLOWERS_ADMIN_PRICE_COPY.variationPlaceholder
+                                  : 'e.g., 500g pack'
+                            } 
                             value={variation.weight}
                             onChange={(e) => handleEditVariationChange(index, 'weight', e.target.value)}
                           />
                           <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              {isEditCakeForm ? 'Servings' : 'Note'}
+                              {isEditCakeForm ? 'Servings' : isEditFlowers ? FLOWERS_ADMIN_PRICE_COPY.variationTipTitle : 'Note'}
                             </label>
+                            {isEditCakeForm ? (
                             <div className="px-4 py-3 bg-gray-50 dark:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl text-sm font-semibold text-blue-600">
-                              {isEditCakeForm ? calculateServings(variation.weight) : (variation.weight ? '—' : 'Enter option label')}
+                              {calculateServings(variation.weight)}
                             </div>
+                            ) : isEditFlowers ? (
+                            <div className="px-3 py-2.5 bg-emerald-50/90 dark:bg-emerald-900/25 border border-emerald-200/80 dark:border-emerald-800/50 rounded-xl text-[11px] text-emerald-900 dark:text-emerald-100/95 leading-snug">
+                              {FLOWERS_ADMIN_PRICE_COPY.variationTipBody}
+                            </div>
+                            ) : (
+                            <div className="px-4 py-3 bg-gray-50 dark:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl text-sm font-semibold text-blue-600">
+                              {variation.weight ? '—' : 'Enter option label'}
+                            </div>
+                            )}
                           </div>
                           <Input 
                             label="Price" 
@@ -3185,7 +3296,7 @@ export const Products: React.FC = () => {
                               disabled={!canAddNewEditVariation()}
                               className="px-4 py-2"
                             >
-                              {isEditCakeForm ? 'Add New Variation' : 'Add another price option'}
+                              {isEditCakeForm ? 'Add New Variation' : isEditFlowers ? 'Add another stem tier' : 'Add another price option'}
                             </Button>
                           </div>
                         )}
@@ -3198,7 +3309,7 @@ export const Products: React.FC = () => {
                 {editProductVariations.length === 0 && (
                   <div className="mt-6">
                     <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-4">
-                      {isEditCakeForm ? 'Product Variations' : 'Additional price options'}
+                      {isEditCakeForm ? 'Product Variations' : isEditFlowers ? 'Stem tier options' : 'Additional price options'}
                     </h4>
                     <div className="text-center py-8 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl">
                       <p className="text-gray-500 dark:text-gray-400 mb-4">No variations added yet</p>
@@ -3210,7 +3321,7 @@ export const Products: React.FC = () => {
                         disabled={!canAddNewEditVariation()}
                         className="px-4 py-2"
                       >
-                        {isEditCakeForm ? 'Add First Variation' : 'Add first price option'}
+                        {isEditCakeForm ? 'Add First Variation' : isEditFlowers ? 'Add first stem tier' : 'Add first price option'}
                       </Button>
                     </div>
                   </div>

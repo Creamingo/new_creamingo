@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ShoppingCart, Heart } from 'lucide-react';
 import { resolveImageUrl } from '../../../../utils/imageUrl';
-import { resolveProductFormProfileFromProduct, isCakeProfile } from '../../../../utils/productFormProfile';
+import { resolveProductFormProfileFromProduct, isCakeProfile, FLOWERS_PDP_LABELS } from '../../../../utils/productFormProfile';
 
 const StickyCartBar = ({ 
   product, 
@@ -16,10 +16,11 @@ const StickyCartBar = ({
   const [isVisible, setIsVisible] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
 
-  const isCake = useMemo(
-    () => isCakeProfile(resolveProductFormProfileFromProduct(product)),
+  const formProfile = useMemo(
+    () => resolveProductFormProfileFromProduct(product),
     [product]
   );
+  const isCake = useMemo(() => isCakeProfile(formProfile), [formProfile]);
 
   // Show/hide sticky bar based on scroll position
   useEffect(() => {
@@ -130,7 +131,9 @@ const StickyCartBar = ({
             <div className="flex flex-wrap gap-2 text-xs text-gray-600 dark:text-gray-400">
               {selectedVariant && (
                 <span className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-                  {isCake ? selectedVariant.weight : `Option: ${selectedVariant.weight}`}
+                  {isCake
+                    ? selectedVariant.weight
+                    : `${formProfile === 'flowers' ? FLOWERS_PDP_LABELS.stemTier : 'Option'}: ${selectedVariant.weight}`}
                 </span>
               )}
               {customizations.flavor && (
