@@ -48,6 +48,8 @@ interface StructuredDescriptionEditorProps {
   isCakePricingForm?: boolean;
   /** Drives shape dropdown options and Product Details field order (cake vs treats / flowers / sweets). */
   formProfile?: ProductFormProfile;
+  /** Small Treats: sync Product Details → Flavor / style from admin Primary Flavor name */
+  primaryFlavorDisplayName?: string;
   // New prop for short description sync
   onShortDescriptionChange?: (shortDescription: string) => void;
   initialShortDescription?: string;
@@ -303,6 +305,7 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
   baseWeight,
   isCakePricingForm = true,
   formProfile = 'cake',
+  primaryFlavorDisplayName,
   onShortDescriptionChange,
   initialShortDescription
 }, ref) => {
@@ -343,6 +346,13 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
   });
   const [flowerAdditionalOpen, setFlowerAdditionalOpen] = useState(false);
   const [flowerVarietyDraft, setFlowerVarietyDraft] = useState('');
+
+  /** Small Treats: keep Flavor / style aligned with Primary Flavor in admin */
+  useEffect(() => {
+    if (formProfile !== 'treats' || !primaryFlavorDisplayName?.trim()) return;
+    const next = primaryFlavorDisplayName.trim();
+    setDetails((prev) => (prev.cakeFlavour === next ? prev : { ...prev, cakeFlavour: next }));
+  }, [formProfile, primaryFlavorDisplayName]);
 
   const isCakeDetailsLayout = formProfile === 'cake';
   const showTreatsEggVersion = formProfile === 'treats';

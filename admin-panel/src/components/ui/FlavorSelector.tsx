@@ -12,6 +12,8 @@ export interface FlavorSelectorProps {
   onPrimaryFlavorChange: (flavorId: number) => void;
   /** Subtext under "Available Flavors" (e.g. optional copy for Small Treats). */
   description?: string;
+  /** Small Treats: flavors + primary are required — adjusts labels and default copy. */
+  requireFlavorSelection?: boolean;
   error?: string;
   disabled?: boolean;
 }
@@ -38,10 +40,25 @@ export const FlavorSelector: React.FC<FlavorSelectorProps> = ({
   onFlavorsChange,
   onPrimaryFlavorChange,
   description = 'Select additional flavors this cake can be made in',
+  requireFlavorSelection = false,
   error,
   disabled = false
 }) => {
   const [availableFlavors, setAvailableFlavors] = useState<Subcategory[]>([]);
+
+  const defaultDescription = requireFlavorSelection
+    ? 'Required: select at least one flavor, then choose a Primary Flavor. The Primary Flavor fills Product Details → Flavor / style.'
+    : description;
+
+  // Single selected flavor is always primary
+  useEffect(() => {
+    if (selectedFlavorIds.length !== 1) return;
+    const only = Number(selectedFlavorIds[0]);
+    if (!Number.isFinite(only)) return;
+    if (primaryFlavorId !== only) {
+      onPrimaryFlavorChange(only);
+    }
+  }, [selectedFlavorIds, primaryFlavorId, onPrimaryFlavorChange]);
 
   // Filter subcategories to only show flavor-related ones
   useEffect(() => {
@@ -72,9 +89,12 @@ export const FlavorSelector: React.FC<FlavorSelectorProps> = ({
         <div>
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
             Available Flavors
+            {requireFlavorSelection ? (
+              <span className="ml-1 text-red-600 dark:text-red-400 text-sm font-semibold">*</span>
+            ) : null}
           </h3>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            {description}
+            {defaultDescription}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -185,6 +205,9 @@ export const FlavorSelector: React.FC<FlavorSelectorProps> = ({
         <div className="space-y-3">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Primary Flavor
+            {requireFlavorSelection ? (
+              <span className="text-red-600 dark:text-red-400 ml-0.5">*</span>
+            ) : null}
             <span className="text-xs text-gray-500 ml-1">(default flavor for display)</span>
           </label>
           
@@ -219,7 +242,10 @@ export const FlavorSelector: React.FC<FlavorSelectorProps> = ({
       {selectedFlavors.length === 1 && (
         <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 bg-rose-50 dark:bg-rose-900/20 px-3 py-2 rounded-lg">
           <Star className="w-4 h-4 fill-current text-rose-500" />
-          <span>Primary Flavor: {selectedFlavors[0].name}</span>
+          <span>
+            Primary Flavor{requireFlavorSelection ? <span className="text-red-600 dark:text-red-400"> *</span> : null}:{' '}
+            {selectedFlavors[0].name}
+          </span>
         </div>
       )}
 

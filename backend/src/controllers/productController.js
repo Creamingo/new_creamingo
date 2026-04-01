@@ -1,4 +1,4 @@
-const { query } = require('../config/db');
+const { query, transaction } = require('../config/db');
 const {
   assignProductToCategories,
   assignProductToSubcategories,
@@ -1779,15 +1779,64 @@ const updateProduct = async (req, res) => {
   }
 };
 
+/**
+ * Remove rows in other tables that reference products.id. Without this, MySQL returns
+ * foreign key constraint errors (common when junction / reviews / featured rows exist).
+ */
+const deleteProductDependentRows = async (connection, productId) => {
+  const run = (sql, params = []) => connection.execute(sql, params);
+
+  await run(
+    `DELETE pri FROM product_review_images pri
+     INNER JOIN product_reviews pr ON pr.id = pri.review_id
+     WHERE pr.product_id = ?`,
+    [productId]
+  );
+  await run('DELETE FROM product_reviews WHERE product_id = ?', [productId]);
+  await run('DELETE FROM product_gallery_images WHERE product_id = ?', [productId]);
+  await run('DELETE FROM product_attributes WHERE product_id = ?', [productId]);
+  await run('DELETE FROM featured_products WHERE product_id = ?', [productId]);
+  await run('DELETE FROM wishlist WHERE product_id = ?', [productId]);
+  await run('DELETE FROM product_flavors WHERE product_id = ?', [productId]);
+  await run('DELETE FROM product_categories WHERE product_id = ?', [productId]);
+  await run('DELETE FROM product_subcategories WHERE product_id = ?', [productId]);
+  await run('DELETE FROM one_rupee_deals WHERE product_id = ?', [productId]);
+  try {
+    await run('DELETE FROM midnight_wish_items WHERE product_id = ?', [productId]);
+  } catch (e) {
+    if (e.code !== 'ER_NO_SUCH_TABLE') throw e;
+  }
+  await run('DELETE FROM product_variants WHERE product_id = ?', [productId]);
+
+  const optionalDeletes = [
+    'DELETE FROM collection_products WHERE product_id = ?',
+    'DELETE FROM product_weight_tier_config WHERE product_id = ?',
+  ];
+  for (const sql of optionalDeletes) {
+    try {
+      await run(sql, [productId]);
+    } catch (e) {
+      if (e.code !== 'ER_NO_SUCH_TABLE') throw e;
+    }
+  }
+};
+
 // Delete product
 const deleteProduct = async (req, res) => {
   try {
     const { id } = req.params;
+    const productId = parseInt(id, 10);
+    if (Number.isNaN(productId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid product id'
+      });
+    }
 
     // Check if product exists
     const existingProduct = await query(
       'SELECT id FROM products WHERE id = ?',
-      [id]
+      [productId]
     );
 
     if (existingProduct.rows.length === 0) {
@@ -1800,21 +1849,20 @@ const deleteProduct = async (req, res) => {
     // Check if product has any orders
     const orderCheck = await query(
       'SELECT COUNT(*) as count FROM order_items WHERE product_id = ?',
-      [id]
+      [productId]
     );
 
-    if (parseInt(orderCheck.rows[0].count) > 0) {
+    if (parseInt(orderCheck.rows[0].count, 10) > 0) {
       return res.status(400).json({
         success: false,
         message: 'Cannot delete product that has been ordered. Consider deactivating it instead.'
       });
     }
 
-    // Delete product variants first
-    await query('DELETE FROM product_variants WHERE product_id = ?', [id]);
-
-    // Delete product
-    await query('DELETE FROM products WHERE id = ?', [id]);
+    await transaction(async (connection) => {
+      await deleteProductDependentRows(connection, productId);
+      await connection.execute('DELETE FROM products WHERE id = ?', [productId]);
+    });
 
     res.json({
       success: true,
@@ -1822,9 +1870,13 @@ const deleteProduct = async (req, res) => {
     });
   } catch (error) {
     console.error('Delete product error:', error);
+    const isDev = process.env.NODE_ENV !== 'production';
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Internal server error',
+      ...(isDev && error.sqlMessage
+        ? { details: error.sqlMessage, code: error.code }
+        : {})
     });
   }
 };

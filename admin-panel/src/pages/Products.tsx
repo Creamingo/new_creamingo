@@ -289,6 +289,20 @@ export const Products: React.FC = () => {
   const showFlavorPickerOnAdd = isNewCakeForm || addFormProfile === 'treats';
   const showFlavorPickerOnEdit = isEditCakeForm || editFormProfile === 'treats';
 
+  const treatsPrimaryFlavorNameAdd = useMemo(() => {
+    if (addFormProfile !== 'treats') return undefined;
+    const id = newProduct.primary_flavor_id;
+    if (id == null) return undefined;
+    return subcategories.find((s) => Number(s.id) === Number(id))?.name;
+  }, [addFormProfile, newProduct.primary_flavor_id, subcategories]);
+
+  const treatsPrimaryFlavorNameEdit = useMemo(() => {
+    if (editFormProfile !== 'treats') return undefined;
+    const id = editProduct.primary_flavor_id;
+    if (id == null) return undefined;
+    return subcategories.find((s) => Number(s.id) === Number(id))?.name;
+  }, [editFormProfile, editProduct.primary_flavor_id, subcategories]);
+
   /** When primary category (profile) changes while adding a product, refresh care & delivery defaults. */
   const addFormProfileTransitionRef = React.useRef(addFormProfile);
   React.useEffect(() => {
@@ -882,6 +896,37 @@ export const Products: React.FC = () => {
           return;
         }
       }
+
+      if (addFormProfile === 'treats') {
+        if (!newProduct.primary_subcategory_id) {
+          showError(
+            'Validation Error',
+            'Please select a primary subcategory (e.g. Pastries, Puddings) for Small Treats Desserts.'
+          );
+          setActionLoading(null);
+          return;
+        }
+        const flavorIds = newProduct.available_flavor_ids || [];
+        if (flavorIds.length < 1) {
+          showError('Validation Error', 'Please select at least one available flavor.');
+          setActionLoading(null);
+          return;
+        }
+        const pfv = newProduct.primary_flavor_id;
+        if (pfv == null) {
+          showError('Validation Error', 'Please select a Primary Flavor.');
+          setActionLoading(null);
+          return;
+        }
+        if (!flavorIds.map(Number).includes(Number(pfv))) {
+          showError(
+            'Validation Error',
+            'Primary flavor must be one of the selected available flavors.'
+          );
+          setActionLoading(null);
+          return;
+        }
+      }
       
       const legacyCategoryId = newProduct.primary_category_id
         || (newProduct.category_ids.length > 0 ? newProduct.category_ids[0] : parseInt(newProduct.category_id));
@@ -1141,6 +1186,30 @@ export const Products: React.FC = () => {
     }));
   }, [editProduct.primary_subcategory_id, editProduct.available_flavor_ids]);
 
+  /** Small Treats: primary flavor must stay in the selected flavor list */
+  React.useEffect(() => {
+    if (addFormProfile !== 'treats') return;
+    const ids = newProduct.available_flavor_ids;
+    if (ids.length === 0) return;
+    const p = newProduct.primary_flavor_id;
+    const pNum = p != null ? Number(p) : NaN;
+    const idSet = new Set(ids.map(Number));
+    if (!Number.isFinite(pNum) || !idSet.has(pNum)) {
+      setNewProduct((prev) => ({ ...prev, primary_flavor_id: ids[0] }));
+    }
+  }, [addFormProfile, newProduct.available_flavor_ids, newProduct.primary_flavor_id]);
+
+  React.useEffect(() => {
+    if (editFormProfile !== 'treats') return;
+    const ids = editProduct.available_flavor_ids;
+    if (ids.length === 0) return;
+    const p = editProduct.primary_flavor_id;
+    const pNum = p != null ? Number(p) : NaN;
+    const idSet = new Set(ids.map(Number));
+    if (!Number.isFinite(pNum) || !idSet.has(pNum)) {
+      setEditProduct((prev) => ({ ...prev, primary_flavor_id: ids[0] }));
+    }
+  }, [editFormProfile, editProduct.available_flavor_ids, editProduct.primary_flavor_id]);
 
   const handleAddVariation = () => {
     // Check if we're adding the first variation (no variations exist yet)
@@ -1685,6 +1754,37 @@ export const Products: React.FC = () => {
           showError(
             'Validation Error',
             'Please select at least one subcategory. Subcategories are required for Treats, Flowers, and Sweets.'
+          );
+          setActionLoading(null);
+          return;
+        }
+      }
+
+      if (editFormProfile === 'treats') {
+        if (!editProduct.primary_subcategory_id) {
+          showError(
+            'Validation Error',
+            'Please select a primary subcategory (e.g. Pastries, Puddings) for Small Treats Desserts.'
+          );
+          setActionLoading(null);
+          return;
+        }
+        const flavorIds = editProduct.available_flavor_ids || [];
+        if (flavorIds.length < 1) {
+          showError('Validation Error', 'Please select at least one available flavor.');
+          setActionLoading(null);
+          return;
+        }
+        const pfv = editProduct.primary_flavor_id;
+        if (pfv == null) {
+          showError('Validation Error', 'Please select a Primary Flavor.');
+          setActionLoading(null);
+          return;
+        }
+        if (!flavorIds.map(Number).includes(Number(pfv))) {
+          showError(
+            'Validation Error',
+            'Primary flavor must be one of the selected available flavors.'
           );
           setActionLoading(null);
           return;
@@ -2345,11 +2445,7 @@ export const Products: React.FC = () => {
                 primaryFlavorId={newProduct.primary_flavor_id}
                 onFlavorsChange={(flavorIds) => setNewProduct(prev => ({ ...prev, available_flavor_ids: flavorIds }))}
                 onPrimaryFlavorChange={(flavorId) => setNewProduct(prev => ({ ...prev, primary_flavor_id: flavorId }))}
-                description={
-                  addFormProfile === 'treats'
-                    ? 'Optional: choose which cake-style flavors apply to these bakery treats (same flavor list as cakes).'
-                    : undefined
-                }
+                requireFlavorSelection={addFormProfile === 'treats'}
               />
             </div>
           ) : (
@@ -2651,6 +2747,7 @@ export const Products: React.FC = () => {
                   baseWeight={newProduct.base_weight}
                   isCakePricingForm={isNewCakeForm}
                   formProfile={addFormProfile}
+                  primaryFlavorDisplayName={treatsPrimaryFlavorNameAdd}
                 />
                 
                 {/* Visual Separator */}
@@ -3085,11 +3182,7 @@ export const Products: React.FC = () => {
                   primaryFlavorId={editProduct.primary_flavor_id}
                   onFlavorsChange={(flavorIds) => setEditProduct(prev => ({ ...prev, available_flavor_ids: flavorIds }))}
                   onPrimaryFlavorChange={(flavorId) => setEditProduct(prev => ({ ...prev, primary_flavor_id: flavorId }))}
-                  description={
-                    editFormProfile === 'treats'
-                      ? 'Optional: choose which cake-style flavors apply to these bakery treats (same flavor list as cakes).'
-                      : undefined
-                  }
+                  requireFlavorSelection={editFormProfile === 'treats'}
                 />
               </div>
             ) : (
@@ -3389,6 +3482,7 @@ export const Products: React.FC = () => {
                   baseWeight={editProduct.base_weight}
                   isCakePricingForm={isEditCakeForm}
                   formProfile={editFormProfile}
+                  primaryFlavorDisplayName={treatsPrimaryFlavorNameEdit}
                 />
                 
                 {/* Visual Separator */}
