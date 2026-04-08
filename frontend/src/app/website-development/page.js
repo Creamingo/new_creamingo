@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   ArrowRight,
@@ -20,7 +20,6 @@ import {
 } from 'lucide-react';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
-import MobileFooter from '../../components/MobileFooter';
 
 const websiteTypes = [
   { id: 'ecommerce', title: 'E-commerce Website', subtitle: 'Sell products online' },
@@ -62,9 +61,9 @@ const packagePlans = [
 
 const requirementOptions = {
   pages: [
-    { label: '1-5 pages', value: 0 },
-    { label: '6-10 pages', value: 8000 },
-    { label: '11-20 pages', value: 17000 }
+    { label: '1-5 pages', shortLabel: '1-5 pages', value: 0 },
+    { label: '6-10 pages', shortLabel: '6-10 pages', value: 8000 },
+    { label: '11-20 pages', shortLabel: '11-20 pages', value: 17000 }
   ],
   features: [
     { label: 'Contact Form + WhatsApp', value: 2000 },
@@ -126,6 +125,23 @@ export default function WebsiteDevelopmentPage() {
   const [openFaq, setOpenFaq] = useState(0);
   const [isMobileEstimateVisible, setIsMobileEstimateVisible] = useState(true);
   const [isMobileEstimateOpen, setIsMobileEstimateOpen] = useState(false);
+  const [hasUserCustomized, setHasUserCustomized] = useState(false);
+  const [leadFormData, setLeadFormData] = useState({
+    name: '',
+    phone: '',
+    businessType: '',
+    requirement: ''
+  });
+  const [leadSubmitMessage, setLeadSubmitMessage] = useState('');
+  const pageOptionRefs = useRef({});
+  const styleOptionRefs = useRef({});
+  const requirementBuilderRef = useRef(null);
+  const fadeUp = {
+    initial: { opacity: 0, y: 18 },
+    whileInView: { opacity: 1, y: 0 },
+    viewport: { once: true, margin: '-80px' },
+    transition: { duration: 0.45 }
+  };
 
   const estimatedPrice = useMemo(() => {
     const pageCost = requirementOptions.pages.find((item) => item.label === selectedPages)?.value || 0;
@@ -141,17 +157,41 @@ export default function WebsiteDevelopmentPage() {
     return Math.max(9999, computedPrice, selectedPlanMinimum);
   }, [selectedPlan, selectedType, selectedPages, selectedFeatures, selectedStyle]);
 
+  useEffect(() => {
+    if (!requirementBuilderRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        const isMobileViewport = typeof window !== 'undefined' && window.innerWidth < 1024;
+        if (!isMobileViewport || !isMobileEstimateVisible) return;
+
+        if (entry.isIntersecting) {
+          setIsMobileEstimateOpen(true);
+        } else {
+          setIsMobileEstimateOpen(false);
+        }
+      },
+      { threshold: 0.2 }
+    );
+
+    observer.observe(requirementBuilderRef.current);
+    return () => observer.disconnect();
+  }, [isMobileEstimateVisible]);
+
   const toggleFeature = (feature) => {
+    setHasUserCustomized(true);
     setIsMobileEstimateVisible(true);
-    setIsMobileEstimateOpen(false);
+    setIsMobileEstimateOpen(true);
     setSelectedFeatures((prev) =>
       prev.includes(feature) ? prev.filter((item) => item !== feature) : [...prev, feature]
     );
   };
 
   const applyPlanPreset = (planId) => {
+    setHasUserCustomized(true);
     setIsMobileEstimateVisible(true);
-    setIsMobileEstimateOpen(false);
+    setIsMobileEstimateOpen(true);
     setSelectedPlan(planId);
 
     if (planId === 'starter') {
@@ -177,6 +217,54 @@ export default function WebsiteDevelopmentPage() {
     setSelectedFeatures(['Contact Form + WhatsApp', 'Booking System', 'Payment Integration', 'Blog / CMS']);
     setSelectedStyle('Bold & Premium');
     setSelectedBudget('₹60k+');
+  };
+
+  const handleLeadInputChange = (key, value) => {
+    setLeadFormData((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleLeadSubmit = (e) => {
+    e.preventDefault();
+
+    if (!leadFormData.name.trim() || !leadFormData.phone.trim()) {
+      setLeadSubmitMessage('Please add your name and phone number.');
+      return;
+    }
+
+    const waText = `Hi Creamingo, I need website development support.
+Name: ${leadFormData.name}
+Phone: ${leadFormData.phone}
+Business Type: ${leadFormData.businessType || 'Not specified'}
+Requirement: ${leadFormData.requirement || 'Not specified'}
+Selected Plan: ${selectedPlan}
+Current Estimate: ₹${estimatedPrice.toLocaleString('en-IN')}`;
+
+    setLeadSubmitMessage('Opening WhatsApp to submit your requirement...');
+    window.open(`https://wa.me/917570030333?text=${encodeURIComponent(waText)}`, '_blank', 'noopener,noreferrer');
+  };
+
+  const handlePagesSelect = (optionLabel) => {
+    setSelectedPages(optionLabel);
+    setHasUserCustomized(true);
+    setIsMobileEstimateVisible(true);
+    setIsMobileEstimateOpen(true);
+    pageOptionRefs.current[optionLabel]?.scrollIntoView({
+      behavior: 'smooth',
+      inline: 'center',
+      block: 'nearest'
+    });
+  };
+
+  const handleStyleSelect = (styleLabel) => {
+    setSelectedStyle(styleLabel);
+    setHasUserCustomized(true);
+    setIsMobileEstimateVisible(true);
+    setIsMobileEstimateOpen(true);
+    styleOptionRefs.current[styleLabel]?.scrollIntoView({
+      behavior: 'smooth',
+      inline: 'center',
+      block: 'nearest'
+    });
   };
 
   return (
@@ -211,33 +299,61 @@ export default function WebsiteDevelopmentPage() {
       />
       <Header />
 
-      <section className="relative overflow-hidden bg-gradient-to-b from-[#FFF5F2] to-white pt-14 sm:pt-20 pb-14 sm:pb-16 lg:pt-32">
+      <section className="relative overflow-hidden bg-gradient-to-b from-[#FFE8E4] to-white pt-14 sm:pt-20 pb-14 sm:pb-16 lg:pt-32">
         <div className="absolute -top-20 left-1/4 h-72 w-72 rounded-full bg-[#E53935]/20 blur-3xl" />
         <div className="absolute top-20 right-1/4 h-72 w-72 rounded-full bg-[#D4AF37]/20 blur-3xl" />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
             className="rounded-3xl border border-white/70 bg-white/75 p-5 sm:p-7 lg:p-8 shadow-[0_10px_30px_rgba(0,0,0,0.08)] backdrop-blur-xl"
           >
-            <span className="inline-flex items-center gap-2 rounded-full border border-[#E53935]/30 bg-[#FFE8E4] px-4 py-1 text-sm font-semibold text-[#C62828]">
-              <Sparkles className="w-4 h-4" />
-              Trendy websites that convert
-            </span>
-            <h1 className="mt-5 text-[28px] sm:text-4xl md:text-6xl font-extrabold leading-[1.08] text-slate-900 break-words">
-              Get your website designed in days, not weeks.
-            </h1>
-            <p className="mt-4 max-w-2xl text-base sm:text-lg leading-relaxed text-[#555]">
-              Custom, fast, and <span className="font-semibold text-[#C62828]">conversion-focused</span> websites for businesses that want clarity, speed, and real growth.
-            </p>
-            <div className="mt-7 flex flex-wrap gap-3 sm:gap-4">
-              <a href="#requirement-builder" className="inline-flex items-center gap-2 rounded-full bg-[#C62828] px-5 py-2.5 sm:px-6 sm:py-3 text-sm sm:text-base font-semibold text-white shadow-lg shadow-red-200 hover:bg-[#E53935] transition-all">
-                Start Your Website <ArrowRight className="w-4 h-4" />
-              </a>
-              <a href="#pricing" className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-2.5 sm:px-6 sm:py-3 text-sm sm:text-base font-semibold text-slate-700 hover:border-slate-400 transition-colors">
-                View Pricing
-              </a>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+              <div>
+                <span className="inline-flex items-center gap-2 rounded-full border border-[#E53935]/30 bg-[#FFE8E4] px-4 py-1 text-sm font-semibold text-[#C62828]">
+                  <Sparkles className="w-4 h-4" />
+                  Trendy websites that convert
+                </span>
+                <h1 className="mt-5 text-[28px] sm:text-4xl md:text-6xl font-extrabold leading-[1.08] text-slate-900 break-words">
+                  Get your website designed in days, not weeks.
+                </h1>
+                <p className="mt-4 max-w-2xl text-base sm:text-lg leading-relaxed text-[#555]">
+                  Custom, fast, and <span className="font-semibold text-[#C62828]">conversion-focused</span> websites for businesses that want clarity, speed, and real growth.
+                </p>
+                <div className="mt-7 flex flex-wrap gap-3 sm:gap-4">
+                  <a href="#requirement-builder" className="inline-flex items-center gap-2 rounded-full bg-[#C62828] px-5 py-2.5 sm:px-6 sm:py-3 text-sm sm:text-base font-semibold text-white shadow-lg shadow-red-200 hover:bg-[#E53935] transition-all">
+                    Start Your Website <ArrowRight className="w-4 h-4" />
+                  </a>
+                  <a href="#pricing" className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-2.5 sm:px-6 sm:py-3 text-sm sm:text-base font-semibold text-slate-700 hover:border-slate-400 transition-colors">
+                    View Pricing
+                  </a>
+                </div>
+              </div>
+
+              <motion.div
+                {...fadeUp}
+                className="hidden lg:block rounded-2xl border border-[#E53935]/20 bg-white p-5 shadow-lg"
+              >
+                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                  <div className="flex items-center gap-2 px-3 py-2 bg-slate-100">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-green-400" />
+                  </div>
+                  <div className="p-4 bg-gradient-to-br from-[#FFF5F2] to-white">
+                    <div className="h-6 w-1/2 rounded-md bg-[#FFE8E4] mb-3" />
+                    <div className="h-3 w-5/6 rounded bg-slate-200 mb-2" />
+                    <div className="h-3 w-4/6 rounded bg-slate-200 mb-4" />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="h-16 rounded-lg bg-white border border-slate-200" />
+                      <div className="h-16 rounded-lg bg-white border border-slate-200" />
+                    </div>
+                    <div className="mt-4 h-9 rounded-lg bg-[#C62828]" />
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500 mt-3">Preview concept: clean UI, conversion-first layout.</p>
+              </motion.div>
             </div>
             <div className="mt-6 flex flex-wrap gap-2.5 sm:gap-4 text-xs sm:text-sm text-slate-600">
               <span className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1"><Clock3 className="w-4 h-4 text-[#C62828]" /> Delivery in 5-30 days</span>
@@ -248,8 +364,8 @@ export default function WebsiteDevelopmentPage() {
         </div>
       </section>
 
-      <section className="py-14 sm:py-16 lg:py-20 border-y border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="py-14 sm:py-16 lg:py-20 bg-white">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-xl sm:text-2xl md:text-3xl font-bold mb-3">What do you need?</h2>
           <p className="text-slate-600 mb-10">Choose one to get a more accurate recommendation.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -271,8 +387,8 @@ export default function WebsiteDevelopmentPage() {
         </div>
       </section>
 
-      <section id="pricing" className="py-10 sm:py-14 lg:py-20 bg-gradient-to-b from-[#FFF5F2] to-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section id="pricing" className="py-10 sm:py-14 lg:py-20 bg-[#FFF5F2] border-y border-[#f1d6d2]">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-5 sm:mb-8">
             <div>
               <h2 className="text-2xl sm:text-3xl font-bold leading-tight">Simple, transparent pricing</h2>
@@ -291,10 +407,23 @@ export default function WebsiteDevelopmentPage() {
               We choose the right technology based on your budget and requirements to deliver the best performance and value.
             </p>
           </div>
+          <motion.div {...fadeUp} className="mb-5 sm:mb-8 grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              '50+ projects launched',
+              'Avg response < 15 min',
+              'Conversion-first UX',
+              'Support after launch'
+            ].map((badge) => (
+              <div key={badge} className="rounded-xl border border-[#E53935]/20 bg-white px-3 py-2 text-sm text-slate-700">
+                {badge}
+              </div>
+            ))}
+          </motion.div>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
             {packagePlans.map((plan) => (
-              <div
+              <motion.div
                 key={plan.id}
+                {...fadeUp}
                 className={`rounded-2xl border p-4 sm:p-6 transition-all hover:-translate-y-1 hover:shadow-xl ${
                   selectedPlan === plan.id
                     ? 'border-[#E53935] ring-2 ring-[#E53935]/30 bg-gradient-to-br from-[#FFF5F2] to-[#FFE8E4] shadow-lg shadow-red-100'
@@ -331,24 +460,54 @@ export default function WebsiteDevelopmentPage() {
                 >
                   {selectedPlan === plan.id ? 'Selected' : 'Choose this'} <ArrowRight className="w-4 h-4" />
                 </button>
-              </div>
+              </motion.div>
             ))}
           </div>
+          <motion.div {...fadeUp} className="mt-6 rounded-2xl border border-[#E53935]/20 bg-white overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            <div className="md:hidden text-xs text-slate-500 px-3 pt-2">Swipe to compare</div>
+            <div className="grid text-sm min-w-[700px] grid-cols-[140px_185px_185px_185px] md:grid-cols-4 md:min-w-[640px]">
+              <div className="px-4 py-3 font-semibold bg-[#FFF5F2]">Compare</div>
+              <div className="px-4 py-3 font-semibold text-center bg-[#FFF5F2] whitespace-nowrap">Starter</div>
+              <div className="px-4 py-3 font-semibold text-center bg-[#FFF5F2] whitespace-nowrap">Professional</div>
+              <div className="px-4 py-3 font-semibold text-center bg-[#FFF5F2] whitespace-nowrap">Premium</div>
+              <div className="px-4 py-3 border-t whitespace-nowrap">Timeline</div>
+              <div className="px-4 py-3 border-t text-center whitespace-nowrap">7-12d</div>
+              <div className="px-4 py-3 border-t text-center whitespace-nowrap">12-18d</div>
+              <div className="px-4 py-3 border-t text-center whitespace-nowrap">18-30d</div>
+              <div className="px-4 py-3 border-t whitespace-nowrap">Revisions</div>
+              <div className="px-4 py-3 border-t text-center whitespace-nowrap">2</div>
+              <div className="px-4 py-3 border-t text-center whitespace-nowrap">4</div>
+              <div className="px-4 py-3 border-t text-center whitespace-nowrap">Unlimited*</div>
+              <div className="px-4 py-3 border-t whitespace-nowrap">Support</div>
+              <div className="px-4 py-3 border-t text-center whitespace-nowrap">Basic</div>
+              <div className="px-4 py-3 border-t text-center whitespace-nowrap">Priority</div>
+              <div className="px-4 py-3 border-t text-center whitespace-nowrap">Dedicated</div>
+            </div>
+          </motion.div>
         </div>
       </section>
 
-      <section id="requirement-builder" className="py-14 sm:py-16 lg:py-20 border-y border-slate-200 bg-gradient-to-b from-white to-[#FFF5F2]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section ref={requirementBuilderRef} id="requirement-builder" className="py-14 sm:py-16 lg:py-20 border-y border-[#f1d6d2] bg-gradient-to-b from-white to-[#FFF0ED]">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-2xl sm:text-3xl font-bold">Live requirement builder</h2>
           <p className="text-slate-600 mt-2 mb-8">Select options and get an instant estimated range.</p>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
             <div className="lg:col-span-2 space-y-4 sm:space-y-6">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
                 <p className="font-semibold mb-3">1) Number of pages</p>
-                <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                <div className="flex flex-nowrap sm:flex-wrap gap-1.5 sm:gap-2 overflow-x-auto sm:overflow-visible [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                   {requirementOptions.pages.map((option) => (
-                    <button key={option.label} onClick={() => { setSelectedPages(option.label); setIsMobileEstimateVisible(true); setIsMobileEstimateOpen(false); }} className={`rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 border ${selectedPages === option.label ? 'border-[#E53935] bg-[#FFE8E4]' : 'border-slate-300 bg-white'}`}>
-                      {option.label}
+                    <button
+                      key={option.label}
+                      ref={(el) => {
+                        if (el) pageOptionRefs.current[option.label] = el;
+                      }}
+                      onClick={() => handlePagesSelect(option.label)}
+                      className={`shrink-0 rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 border transition-all ${
+                        selectedPages === option.label ? 'border-[#E53935] bg-[#FFE8E4]' : 'border-slate-300 bg-white'
+                      }`}
+                    >
+                      {option.shortLabel}
                     </button>
                   ))}
                 </div>
@@ -356,20 +515,54 @@ export default function WebsiteDevelopmentPage() {
 
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
                 <p className="font-semibold mb-3">2) Required features</p>
-                <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                  {requirementOptions.features.map((feature) => (
-                    <button key={feature.label} onClick={() => toggleFeature(feature.label)} className={`rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 border ${selectedFeatures.includes(feature.label) ? 'border-[#E53935] bg-[#FFE8E4]' : 'border-slate-300 bg-white'}`}>
-                      {feature.label}
-                    </button>
-                  ))}
+                <div className="space-y-1.5 sm:space-y-0">
+                  <div className="flex flex-nowrap sm:flex-wrap gap-1.5 sm:gap-2 overflow-x-auto sm:overflow-visible [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                    {['Contact Form + WhatsApp', 'Blog / CMS'].map((label) => {
+                      const feature = requirementOptions.features.find((item) => item.label === label);
+                      if (!feature) return null;
+                      return (
+                        <button
+                          key={feature.label}
+                          onClick={() => toggleFeature(feature.label)}
+                          className={`shrink-0 rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 border ${selectedFeatures.includes(feature.label) ? 'border-[#E53935] bg-[#FFE8E4]' : 'border-slate-300 bg-white'}`}
+                        >
+                          {feature.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex flex-nowrap sm:flex-wrap gap-1.5 sm:gap-2 overflow-x-auto sm:overflow-visible [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                    {['Booking System', 'Payment Integration'].map((label) => {
+                      const feature = requirementOptions.features.find((item) => item.label === label);
+                      if (!feature) return null;
+                      return (
+                        <button
+                          key={feature.label}
+                          onClick={() => toggleFeature(feature.label)}
+                          className={`shrink-0 rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 border ${selectedFeatures.includes(feature.label) ? 'border-[#E53935] bg-[#FFE8E4]' : 'border-slate-300 bg-white'}`}
+                        >
+                          {feature.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
                 <p className="font-semibold mb-3">3) Design style</p>
-                <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                <div className="flex flex-nowrap sm:flex-wrap gap-1.5 sm:gap-2 overflow-x-auto sm:overflow-visible [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                   {requirementOptions.style.map((option) => (
-                    <button key={option.label} onClick={() => { setSelectedStyle(option.label); setIsMobileEstimateVisible(true); setIsMobileEstimateOpen(false); }} className={`rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 border ${selectedStyle === option.label ? 'border-[#E53935] bg-[#FFE8E4]' : 'border-slate-300 bg-white'}`}>
+                    <button
+                      key={option.label}
+                      ref={(el) => {
+                        if (el) styleOptionRefs.current[option.label] = el;
+                      }}
+                      onClick={() => handleStyleSelect(option.label)}
+                      className={`shrink-0 rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 border transition-all ${
+                        selectedStyle === option.label ? 'border-[#E53935] bg-[#FFE8E4]' : 'border-slate-300 bg-white'
+                      }`}
+                    >
                       {option.label}
                     </button>
                   ))}
@@ -380,7 +573,7 @@ export default function WebsiteDevelopmentPage() {
                 <p className="font-semibold mb-3">4) Budget range</p>
                 <div className="flex flex-wrap gap-1.5 sm:gap-2">
                   {requirementOptions.budget.map((option) => (
-                    <button key={option} onClick={() => { setSelectedBudget(option); setIsMobileEstimateVisible(true); setIsMobileEstimateOpen(false); }} className={`rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 border ${selectedBudget === option ? 'border-[#E53935] bg-[#FFE8E4]' : 'border-slate-300 bg-white'}`}>
+                    <button key={option} onClick={() => { setSelectedBudget(option); setHasUserCustomized(true); setIsMobileEstimateVisible(true); setIsMobileEstimateOpen(true); }} className={`rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 border ${selectedBudget === option ? 'border-[#E53935] bg-[#FFE8E4]' : 'border-slate-300 bg-white'}`}>
                       {option}
                     </button>
                   ))}
@@ -389,9 +582,11 @@ export default function WebsiteDevelopmentPage() {
             </div>
 
             <div className="hidden lg:block rounded-2xl border border-[#E53935]/20 bg-gradient-to-br from-[#C62828] to-[#E53935] p-5 sm:p-6 h-fit lg:sticky lg:top-28 text-white shadow-xl shadow-red-200">
-              <p className="text-sm text-red-50">Estimated project cost</p>
+              <p className="text-sm text-red-50">{hasUserCustomized ? 'Estimated project cost' : 'Starting price'}</p>
               <p className="mt-2 text-4xl font-bold inline-flex items-center"><IndianRupee className="w-7 h-7" />{estimatedPrice.toLocaleString('en-IN')}</p>
-              <p className="mt-2 text-sm text-cyan-50">Based on your selected requirements.</p>
+              <p className="mt-2 text-sm text-cyan-50">
+                {hasUserCustomized ? 'Based on your selected requirements.' : 'Customize options to get your estimated project cost.'}
+              </p>
               <ul className="mt-5 space-y-2 text-sm text-white">
                 <li className="inline-flex items-center gap-2"><Layers3 className="w-4 h-4 text-red-50" />{selectedPages}</li>
                 <li className="inline-flex items-center gap-2"><Star className="w-4 h-4 text-red-50" />{selectedStyle} design</li>
@@ -410,45 +605,53 @@ export default function WebsiteDevelopmentPage() {
         </div>
       </section>
 
-      <section className="py-14 sm:py-16 lg:py-20 bg-slate-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="py-14 sm:py-16 lg:py-20 bg-white">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-2xl sm:text-3xl font-bold mb-8">Portfolio highlights</h2>
-          <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-2 -mx-1 px-1 md:grid md:grid-cols-3 md:gap-5 md:overflow-visible md:snap-none md:pb-0 md:mx-0 md:px-0">
-            {portfolioItems.map((item) => (
-              <div
-                key={item.name}
-                className="min-w-[86%] sm:min-w-[70%] snap-start rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-[#FFF5F2] to-[#FFE8E4] p-5 transition-all hover:-translate-y-1 hover:shadow-lg md:min-w-0"
-              >
-                <div className="mb-3 h-1.5 w-14 rounded-full bg-gradient-to-r from-[#C62828] to-[#E53935]" />
-                <p className="text-sm text-[#C62828]">{item.type}</p>
-                <h3 className="text-xl font-semibold leading-tight mt-2">{item.name}</h3>
-                <p className="text-slate-600 leading-snug mt-3">{item.result}</p>
-              </div>
-            ))}
+          <div className="relative">
+            <div className="md:hidden text-xs text-slate-500 mb-2">Swipe to explore</div>
+            <div className="md:hidden pointer-events-none absolute right-0 top-6 bottom-0 w-12 bg-gradient-to-l from-slate-50 to-transparent z-10" />
+            <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-2 -mx-1 px-1 md:grid md:grid-cols-3 md:gap-5 md:overflow-visible md:snap-none md:pb-0 md:mx-0 md:px-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+              {portfolioItems.map((item) => (
+                <div
+                  key={item.name}
+                  className="min-w-[86%] sm:min-w-[70%] snap-start rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-[#FFF5F2] to-[#FFE8E4] p-5 transition-all hover:-translate-y-1 hover:shadow-lg md:min-w-0"
+                >
+                  <div className="mb-3 h-1.5 w-14 rounded-full bg-gradient-to-r from-[#C62828] to-[#E53935]" />
+                  <p className="text-sm text-[#C62828]">{item.type}</p>
+                  <h3 className="text-xl font-semibold leading-tight mt-2">{item.name}</h3>
+                  <p className="text-slate-600 leading-snug mt-3">{item.result}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="py-14 sm:py-16 lg:py-20 border-y border-slate-200 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="py-14 sm:py-16 lg:py-20 border-y border-[#f1d6d2] bg-[#FFF5F2]">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-2xl sm:text-3xl font-bold mb-8">What clients say</h2>
-          <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-2 -mx-1 px-1 md:grid md:grid-cols-3 md:gap-5 md:overflow-visible md:snap-none md:pb-0 md:mx-0 md:px-0">
-            {testimonials.map((item) => (
-              <div
-                key={item.name}
-                className="min-w-[86%] sm:min-w-[70%] snap-start rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-[#FFF5F2] to-[#FFE8E4] p-5 shadow-sm md:min-w-0"
-              >
-                <div className="mb-3 h-1.5 w-14 rounded-full bg-gradient-to-r from-[#C62828] to-[#E53935]" />
-                <p className="text-slate-700 leading-relaxed">"{item.quote}"</p>
-                <p className="mt-4 font-semibold text-[#C62828]">{item.name}</p>
-              </div>
-            ))}
+          <div className="relative">
+            <div className="md:hidden text-xs text-slate-500 mb-2">Swipe to explore</div>
+            <div className="md:hidden pointer-events-none absolute right-0 top-6 bottom-0 w-12 bg-gradient-to-l from-white to-transparent z-10" />
+            <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-2 -mx-1 px-1 md:grid md:grid-cols-3 md:gap-5 md:overflow-visible md:snap-none md:pb-0 md:mx-0 md:px-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+              {testimonials.map((item) => (
+                <div
+                  key={item.name}
+                  className="min-w-[86%] sm:min-w-[70%] snap-start rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-[#FFF5F2] to-[#FFE8E4] p-5 shadow-sm md:min-w-0"
+                >
+                  <div className="mb-3 h-1.5 w-14 rounded-full bg-gradient-to-r from-[#C62828] to-[#E53935]" />
+                  <p className="text-slate-700 leading-relaxed">"{item.quote}"</p>
+                  <p className="mt-4 font-semibold text-[#C62828]">{item.name}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="py-14 sm:py-16 lg:py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="py-14 sm:py-16 lg:py-20 bg-white">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-2xl sm:text-3xl font-bold mb-8">How we work</h2>
           <div className="relative grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="absolute left-7 top-2 bottom-2 w-0.5 bg-gradient-to-b from-[#E53935] via-[#D4AF37] to-[#E53935] md:hidden" />
@@ -465,8 +668,8 @@ export default function WebsiteDevelopmentPage() {
         </div>
       </section>
 
-      <section className="py-14 sm:py-16 lg:py-20 border-y border-slate-200 bg-slate-50">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="py-14 sm:py-16 lg:py-20 border-y border-[#f1d6d2] bg-[#FFF8F6]">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-2xl sm:text-3xl font-bold mb-8 text-center">Frequently asked questions</h2>
           <div className="space-y-3">
             {faqs.map((item, index) => (
@@ -482,20 +685,25 @@ export default function WebsiteDevelopmentPage() {
         </div>
       </section>
 
-      <section id="final-cta" className="py-14 sm:py-16 lg:py-20">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="rounded-3xl border border-[#E53935]/20 bg-gradient-to-br from-[#C62828] via-[#E53935] to-[#B71C1C] p-8 text-white shadow-xl shadow-red-200">
+      <section id="final-cta" className="py-14 sm:py-16 lg:py-20 bg-gradient-to-r from-[#C62828] to-[#E53935]">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="rounded-3xl border border-white/20 bg-white/10 p-8 text-white shadow-xl backdrop-blur-sm">
             <p className="text-red-50 font-semibold">Limited slots this week</p>
             <h2 className="mt-2 text-2xl sm:text-3xl md:text-4xl font-bold leading-tight">Start your website today</h2>
             <p className="mt-3 text-cyan-50">Share your requirement and get a tailored proposal quickly.</p>
-            <form className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input type="text" placeholder="Your name" className="rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-cyan-400" />
-              <input type="tel" placeholder="Phone number" className="rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-cyan-400" />
-              <input type="text" placeholder="Business type" className="rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-cyan-400 md:col-span-2" />
-              <textarea placeholder="Tell us your requirement" rows={4} className="rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-cyan-400 md:col-span-2" />
-              <button type="button" className="md:col-span-2 inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-2.5 sm:px-6 sm:py-3 text-sm sm:text-base font-semibold text-[#C62828] hover:bg-red-50">
+            <form onSubmit={handleLeadSubmit} className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <label className="sr-only" htmlFor="wd-name">Your name</label>
+              <input id="wd-name" type="text" value={leadFormData.name} onChange={(e) => handleLeadInputChange('name', e.target.value)} placeholder="Your name" className="rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-cyan-400" />
+              <label className="sr-only" htmlFor="wd-phone">Phone number</label>
+              <input id="wd-phone" type="tel" value={leadFormData.phone} onChange={(e) => handleLeadInputChange('phone', e.target.value)} placeholder="Phone number" className="rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-cyan-400" />
+              <label className="sr-only" htmlFor="wd-business">Business type</label>
+              <input id="wd-business" type="text" value={leadFormData.businessType} onChange={(e) => handleLeadInputChange('businessType', e.target.value)} placeholder="Business type" className="rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-cyan-400 md:col-span-2" />
+              <label className="sr-only" htmlFor="wd-requirement">Tell us your requirement</label>
+              <textarea id="wd-requirement" value={leadFormData.requirement} onChange={(e) => handleLeadInputChange('requirement', e.target.value)} placeholder="Tell us your requirement" rows={4} className="rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-cyan-400 md:col-span-2" />
+              <button type="submit" className="md:col-span-2 inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-2.5 sm:px-6 sm:py-3 text-sm sm:text-base font-semibold text-[#C62828] hover:bg-red-50">
                 Submit Requirement <ArrowRight className="w-4 h-4" />
               </button>
+              {leadSubmitMessage ? <p className="md:col-span-2 text-sm text-red-50">{leadSubmitMessage}</p> : null}
             </form>
           </div>
         </div>
@@ -509,53 +717,49 @@ export default function WebsiteDevelopmentPage() {
       </a>
 
       {/* Mobile slide-up estimated cost panel */}
-      {isMobileEstimateVisible && <div className="lg:hidden fixed left-0 right-0 bottom-16 z-50 px-3">
-        <div className="rounded-2xl border border-[#E53935]/20 bg-white shadow-xl">
-          <button
-            type="button"
-            onClick={() => setIsMobileEstimateOpen((prev) => !prev)}
-            className="w-full px-4 py-3 flex items-center justify-between"
-          >
-            <div className="text-left">
-              <p className="text-xs text-slate-500">Estimated project cost</p>
-              <p className="text-2xl font-bold text-[#C62828] inline-flex items-center"><IndianRupee className="w-5 h-5" />{estimatedPrice.toLocaleString('en-IN')}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              {isMobileEstimateOpen ? <ChevronDown className="w-5 h-5 text-[#C62828]" /> : <ChevronUp className="w-5 h-5 text-[#C62828]" />}
-              <span
-                role="button"
-                tabIndex={0}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsMobileEstimateVisible(false);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setIsMobileEstimateVisible(false);
-                  }
-                }}
+      {isMobileEstimateVisible && <div className="lg:hidden fixed left-0 right-0 bottom-0 z-50" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div className="border-t border-[#E53935]/20 bg-white shadow-xl">
+          <div className="w-full px-4 py-2 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setIsMobileEstimateOpen((prev) => !prev)}
+              className="flex-1 text-left"
+            >
+              <p className="text-xs text-slate-500">{hasUserCustomized ? 'Estimated project cost' : 'Starting price'}</p>
+              <p className="text-xl font-bold text-[#C62828] inline-flex items-center"><IndianRupee className="w-4 h-4" />{estimatedPrice.toLocaleString('en-IN')}</p>
+            </button>
+            <div className="flex items-center gap-2 ml-3">
+              <button
+                type="button"
+                onClick={() => setIsMobileEstimateOpen((prev) => !prev)}
+                className="inline-flex items-center justify-center rounded-md p-1 text-[#C62828] hover:bg-red-50"
+                aria-label={isMobileEstimateOpen ? 'Collapse estimated project cost panel' : 'Expand estimated project cost panel'}
+              >
+                {isMobileEstimateOpen ? <ChevronDown className="w-5 h-5 text-[#C62828]" /> : <ChevronUp className="w-5 h-5 text-[#C62828]" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsMobileEstimateVisible(false)}
                 className="inline-flex items-center justify-center rounded-md p-1 text-[#C62828] hover:bg-red-50"
                 aria-label="Close estimated project cost panel"
               >
                 <X className="w-4 h-4" />
-              </span>
+              </button>
             </div>
-          </button>
+          </div>
 
           {isMobileEstimateOpen && (
-            <div className="px-4 pb-4 border-t border-slate-200">
-              <ul className="mt-3 space-y-1 text-sm text-slate-700">
-                <li className="inline-flex items-center gap-2"><Layers3 className="w-4 h-4 text-[#C62828]" />{selectedPages}</li>
-                <li className="inline-flex items-center gap-2"><Star className="w-4 h-4 text-[#C62828]" />{selectedStyle} design</li>
-                <li className="inline-flex items-center gap-2"><Rocket className="w-4 h-4 text-[#C62828]" />{selectedFeatures.length} feature(s) selected</li>
+            <div className="px-4 pb-3 border-t border-slate-200">
+              <ul className="mt-2 space-y-0.5 text-sm text-slate-700">
+                <li className="inline-flex items-center gap-1.5"><Layers3 className="w-3.5 h-3.5 text-[#C62828]" />{selectedPages}</li>
+                <li className="inline-flex items-center gap-1.5"><Star className="w-3.5 h-3.5 text-[#C62828]" />{selectedStyle} design</li>
+                <li className="inline-flex items-center gap-1.5"><Rocket className="w-3.5 h-3.5 text-[#C62828]" />{selectedFeatures.length} feature(s) selected</li>
               </ul>
               <a
                 href={`https://wa.me/917570030333?text=${encodeURIComponent(`Hi Creamingo, I need a ${selectedType} website. Estimated budget ${selectedBudget}.`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#C62828] px-4 py-2.5 font-semibold text-white hover:bg-[#E53935]"
+                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#C62828] px-4 py-2 font-semibold text-white hover:bg-[#E53935]"
               >
                 Discuss on WhatsApp <MessageCircle className="w-4 h-4" />
               </a>
@@ -564,8 +768,9 @@ export default function WebsiteDevelopmentPage() {
         </div>
       </div>}
 
+      <div className="lg:hidden h-24" />
+
       <Footer />
-      <MobileFooter />
     </div>
   );
 }
