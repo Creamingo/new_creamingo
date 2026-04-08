@@ -487,14 +487,14 @@ Current Estimate: ₹${estimatedPrice.toLocaleString('en-IN')}`;
         </div>
       </section>
 
-      <section ref={requirementBuilderRef} id="requirement-builder" className="py-14 sm:py-16 lg:py-20 border-y border-[#f1d6d2] bg-gradient-to-b from-white to-[#FFF0ED]">
+      <section ref={requirementBuilderRef} id="requirement-builder" className="py-10 sm:py-14 lg:py-20 border-y border-[#f1d6d2] bg-gradient-to-b from-white to-[#FFF0ED]">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-2xl sm:text-3xl font-bold">Live requirement builder</h2>
-          <p className="text-slate-600 mt-2 mb-8">Select options and get an instant estimated range.</p>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-            <div className="lg:col-span-2 space-y-4 sm:space-y-6">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
-                <p className="font-semibold mb-3">1) Number of pages</p>
+          <p className="text-slate-600 mt-1.5 mb-6">Select options and get an instant estimated range.</p>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-5">
+            <div className="lg:col-span-2 space-y-3 sm:space-y-5">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 sm:p-4">
+                <p className="font-semibold mb-2.5">1) Number of pages</p>
                 <div className="flex flex-nowrap sm:flex-wrap gap-1.5 sm:gap-2 overflow-x-auto sm:overflow-visible [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                   {requirementOptions.pages.map((option) => (
                     <button
@@ -513,8 +513,8 @@ Current Estimate: ₹${estimatedPrice.toLocaleString('en-IN')}`;
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
-                <p className="font-semibold mb-3">2) Required features</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 sm:p-4">
+                <p className="font-semibold mb-2.5">2) Required features</p>
                 <div className="space-y-1.5 sm:space-y-0">
                   <div className="flex flex-nowrap sm:flex-wrap gap-1.5 sm:gap-2 overflow-x-auto sm:overflow-visible [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                     {['Contact Form + WhatsApp', 'Blog / CMS'].map((label) => {
@@ -549,8 +549,8 @@ Current Estimate: ₹${estimatedPrice.toLocaleString('en-IN')}`;
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
-                <p className="font-semibold mb-3">3) Design style</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 sm:p-4">
+                <p className="font-semibold mb-2.5">3) Design style</p>
                 <div className="flex flex-nowrap sm:flex-wrap gap-1.5 sm:gap-2 overflow-x-auto sm:overflow-visible [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                   {requirementOptions.style.map((option) => (
                     <button
@@ -569,8 +569,8 @@ Current Estimate: ₹${estimatedPrice.toLocaleString('en-IN')}`;
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
-                <p className="font-semibold mb-3">4) Budget range</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 sm:p-4">
+                <p className="font-semibold mb-2.5">4) Budget range</p>
                 <div className="flex flex-wrap gap-1.5 sm:gap-2">
                   {requirementOptions.budget.map((option) => (
                     <button key={option} onClick={() => { setSelectedBudget(option); setHasUserCustomized(true); setIsMobileEstimateVisible(true); setIsMobileEstimateOpen(true); }} className={`rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 border ${selectedBudget === option ? 'border-[#E53935] bg-[#FFE8E4]' : 'border-slate-300 bg-white'}`}>
