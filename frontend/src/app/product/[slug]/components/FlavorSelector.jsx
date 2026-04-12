@@ -13,6 +13,12 @@ const FlavorSelector = ({
   const [hasUserSelected, setHasUserSelected] = useState(false);
   const dropdownRef = useRef(null);
 
+  const isFlavorPrimary = (flavor) => {
+    if (!flavor) return false;
+    const v = flavor.is_primary;
+    return v === 1 || v === true || v === '1';
+  };
+
   // Define flavor subcategory IDs based on the backend mapping
   const FLAVOR_SUBCATEGORY_IDS = [
     9,  // Chocolate
@@ -43,8 +49,8 @@ const FlavorSelector = ({
     
     // Sort: Primary flavor first, then others alphabetically
     return flavors.sort((a, b) => {
-      const aIsPrimary = a.is_primary === 1;
-      const bIsPrimary = b.is_primary === 1;
+      const aIsPrimary = isFlavorPrimary(a);
+      const bIsPrimary = isFlavorPrimary(b);
       
       // Primary flavors come first
       if (aIsPrimary && !bIsPrimary) return -1;
@@ -56,6 +62,7 @@ const FlavorSelector = ({
   };
 
   const availableFlavors = getAvailableFlavors();
+  const additionalFlavors = availableFlavors.filter((f) => !isFlavorPrimary(f));
 
   // Reset hasUserSelected when selectedFlavor is cleared (e.g., on page refresh)
   useEffect(() => {
@@ -81,8 +88,9 @@ const FlavorSelector = ({
     };
   }, [isExpanded]);
 
-  // Don't render if no flavors are available
-  if (availableFlavors.length === 0) {
+  // Don't render if no flavors are available, or only the primary flavour is offered
+  // (admin must select at least one additional flavour under "Available Flavors")
+  if (availableFlavors.length === 0 || additionalFlavors.length === 0) {
     return null;
   }
 
@@ -181,7 +189,7 @@ const FlavorSelector = ({
           Try this in another flavour (optional)
         </label>
         <span className="text-xs font-medium text-gray-500 dark:text-gray-400 flex-shrink-0 whitespace-nowrap">
-          {availableFlavors.length} available
+          {additionalFlavors.length} available
         </span>
       </div>
 
@@ -197,12 +205,12 @@ const FlavorSelector = ({
           }`}
         >
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            {selectedFlavor && selectedFlavor.is_primary === 1 && (
+            {selectedFlavor && isFlavorPrimary(selectedFlavor) && (
               <div className="flex-shrink-0 w-2 h-2 rounded-full bg-green-500 dark:bg-green-400"></div>
             )}
             <span className={`text-sm font-semibold truncate ${
               selectedFlavor 
-                ? selectedFlavor.is_primary === 1 
+                ? isFlavorPrimary(selectedFlavor) 
                   ? 'text-green-600 dark:text-green-400' 
                   : 'text-gray-900 dark:text-gray-100'
                 : 'text-gray-500 dark:text-gray-400'
@@ -228,7 +236,7 @@ const FlavorSelector = ({
         >
           <div className="max-h-80 overflow-y-auto py-1.5">
             {availableFlavors.map((flavor) => {
-              const isPrimary = flavor.is_primary === 1;
+              const isPrimary = isFlavorPrimary(flavor);
               const isSelected = selectedFlavor?.id === flavor.id;
               return (
                 <button
@@ -257,11 +265,11 @@ const FlavorSelector = ({
       {/* Selected Flavor Info - Only show after user actively selects */}
       {selectedFlavor && hasUserSelected && (
         <div className={`text-sm font-medium mt-2 ${
-          selectedFlavor.is_primary === 1
+          isFlavorPrimary(selectedFlavor)
             ? 'text-green-600 dark:text-green-400'
             : 'text-amber-700 dark:text-amber-400'
         }`}>
-          {selectedFlavor.is_primary === 1
+          {isFlavorPrimary(selectedFlavor)
             ? `• Primary flavour – Cake will be made in ${selectedFlavor.name.toLowerCase()}.`
             : `• Your cake will be made in ${selectedFlavor.name.toLowerCase()} flavour.`
           }

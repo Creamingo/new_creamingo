@@ -1142,6 +1142,17 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
                     />
                   </div>
                 </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Toppings
+                  </label>
+                  <Input
+                    value={details.toppings}
+                    onChange={(e) => handleDetailChange('toppings', e.target.value)}
+                    placeholder={toppingsPlaceholder}
+                    className="text-sm"
+                  />
+                </div>
               </>
             ) : isFlowersProfile ? (
               <div className="space-y-7">
