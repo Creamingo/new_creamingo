@@ -35,7 +35,7 @@ const {
   updateReview,
   deleteReview
 } = require('../controllers/productController');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, optionalAuth } = require('../middleware/auth');
 const { canManageProducts } = require('../middleware/role');
 const { validate, schemas } = require('../middleware/validation');
 
@@ -50,7 +50,7 @@ router.get('/testimonials/list', getTestimonials); // Homepage testimonials (pub
 router.get('/slug/:slug', getProductBySlug); // SEO-friendly product URLs
 router.get('/:id', getProduct);
 router.get('/:id/related', getRelatedProducts); // Related products
-router.get('/:id/reviews', getProductReviews); // Product reviews
+router.get('/:id/reviews', optionalAuth, getProductReviews); // Product reviews (optional auth: moderators see pending + is_approved)
 // Public: submit a new product review (auto set is_approved=false)
 router.post('/:id/reviews', require('../controllers/productController').createPublicReview);
 

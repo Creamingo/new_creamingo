@@ -334,8 +334,17 @@ const CustomerReviews = ({ productId }) => {
         const data = await productApi.getProductReviews(productId, 1, 10);
         const list = data?.data?.reviews || [];
         setReviews(list.length ? list : []);
+        const apiAvg = Number(data?.data?.avg_rating);
+        const avgFromPage =
+          list.length > 0
+            ? Math.round(
+                (list.reduce((sum, r) => sum + Number(r.rating || 0), 0) / list.length) * 10
+              ) / 10
+            : 0;
+        const averageRating =
+          Number.isFinite(apiAvg) && apiAvg > 0 ? apiAvg : avgFromPage;
         setOverallStats({
-          averageRating: data?.data?.avg_rating || 0,
+          averageRating,
           totalReviews: data?.data?.pagination?.total || list.length || 0,
           ratingBreakdown: data?.data?.ratingBreakdown || {
             taste: 0,

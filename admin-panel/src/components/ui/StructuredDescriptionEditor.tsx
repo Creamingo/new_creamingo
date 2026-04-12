@@ -347,6 +347,17 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
   const [flowerAdditionalOpen, setFlowerAdditionalOpen] = useState(false);
   const [flowerVarietyDraft, setFlowerVarietyDraft] = useState('');
 
+  /**
+   * Raw line after "Label:" — only strips whitespace immediately after the colon.
+   * Using line.trim() for the whole line removed trailing spaces on each re-parse
+   * (e.g. Toppings while typing "chocolate ").
+   */
+  const extractAfterLabel = (line: string, label: string): string => {
+    const i = line.indexOf(label);
+    if (i === -1) return '';
+    return line.slice(i + label.length).replace(/^\s+/, '');
+  };
+
   /** Small Treats: keep Flavor / style aligned with Primary Flavor in admin */
   useEffect(() => {
     if (formProfile !== 'treats' || !primaryFlavorDisplayName?.trim()) return;
@@ -521,54 +532,54 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
           }
           
           if (inDetails && trimmedLine) {
-            // Parse product details
+            // Parse product details (use raw `line` + extractAfterLabel so trailing spaces survive re-parse)
             if (trimmedLine.includes('Flower Type / Variety:')) {
-              const v = stripHtmlTags(trimmedLine.replace('Flower Type / Variety:', '').trim());
+              const v = stripHtmlTags(extractAfterLabel(line, 'Flower Type / Variety:'), false);
               currentDetails.flowerVariety = v;
               currentDetails.cakeFlavour = currentDetails.cakeFlavour || v;
             } else if (trimmedLine.includes('Arrangement Style:')) {
-              currentDetails.shape = stripHtmlTags(trimmedLine.replace('Arrangement Style:', '').trim());
+              currentDetails.shape = stripHtmlTags(extractAfterLabel(line, 'Arrangement Style:'), false);
             } else if (trimmedLine.includes('Color Theme:')) {
-              currentDetails.colorTheme = stripHtmlTags(trimmedLine.replace('Color Theme:', '').trim());
+              currentDetails.colorTheme = stripHtmlTags(extractAfterLabel(line, 'Color Theme:'), false);
             } else if (trimmedLine.includes('Number of Stems:')) {
-              currentDetails.numberOfStems = stripHtmlTags(trimmedLine.replace('Number of Stems:', '').trim());
+              currentDetails.numberOfStems = stripHtmlTags(extractAfterLabel(line, 'Number of Stems:'), false);
             } else if (trimmedLine.includes('Stems, Blooms & Presentation:')) {
-              const v = stripHtmlTags(trimmedLine.replace('Stems, Blooms & Presentation:', '').trim());
+              const v = stripHtmlTags(extractAfterLabel(line, 'Stems, Blooms & Presentation:'), false);
               currentDetails.stemsPresentation = v;
               currentDetails.weight = currentDetails.weight || v;
             } else if (trimmedLine.includes('Packaging Type:')) {
-              currentDetails.packagingType = stripHtmlTags(trimmedLine.replace('Packaging Type:', '').trim());
+              currentDetails.packagingType = stripHtmlTags(extractAfterLabel(line, 'Packaging Type:'), false);
             } else if (trimmedLine.includes('Add-ons:')) {
-              const v = stripHtmlTags(trimmedLine.replace('Add-ons:', '').trim());
+              const v = stripHtmlTags(extractAfterLabel(line, 'Add-ons:'), false);
               currentDetails.addOns = v;
               currentDetails.toppings = currentDetails.toppings || v;
             } else if (trimmedLine.includes('Occasion Tags:')) {
-              currentDetails.occasionTags = stripHtmlTags(trimmedLine.replace('Occasion Tags:', '').trim());
+              currentDetails.occasionTags = stripHtmlTags(extractAfterLabel(line, 'Occasion Tags:'), false);
             } else if (trimmedLine.includes('Cake Flavour:')) {
-              const v = stripHtmlTags(trimmedLine.replace('Cake Flavour:', '').trim());
+              const v = stripHtmlTags(extractAfterLabel(line, 'Cake Flavour:'), false);
               currentDetails.cakeFlavour = v;
               currentDetails.flowerVariety = currentDetails.flowerVariety || v;
             } else if (trimmedLine.includes('Bouquet contents:')) {
-              const v = stripHtmlTags(trimmedLine.replace('Bouquet contents:', '').trim());
+              const v = stripHtmlTags(extractAfterLabel(line, 'Bouquet contents:'), false);
               currentDetails.stemsPresentation = currentDetails.stemsPresentation || v;
               currentDetails.weight = v;
             } else if (trimmedLine.includes('Weight:')) {
-              currentDetails.weight = stripHtmlTags(trimmedLine.replace('Weight:', '').trim());
+              currentDetails.weight = stripHtmlTags(extractAfterLabel(line, 'Weight:'), false);
             } else if (trimmedLine.includes('Servings:')) {
-              currentDetails.servings = stripHtmlTags(trimmedLine.replace('Servings:', '').trim());
+              currentDetails.servings = stripHtmlTags(extractAfterLabel(line, 'Servings:'), false);
             } else if (trimmedLine.includes('Shape:')) {
               if (formProfile !== 'flowers') {
-                currentDetails.shape = stripHtmlTags(trimmedLine.replace('Shape:', '').trim());
+                currentDetails.shape = stripHtmlTags(extractAfterLabel(line, 'Shape:'), false);
               }
             } else if (trimmedLine.includes('Version:')) {
-              const version = stripHtmlTags(trimmedLine.replace('Version:', '').trim());
+              const version = stripHtmlTags(extractAfterLabel(line, 'Version:'));
               currentDetails.version = version === 'Egg' || version === 'Eggless' ? version : '';
             } else if (trimmedLine.includes('Toppings:')) {
-              const v = stripHtmlTags(trimmedLine.replace('Toppings:', '').trim());
+              const v = stripHtmlTags(extractAfterLabel(line, 'Toppings:'), false);
               currentDetails.toppings = v;
               currentDetails.addOns = currentDetails.addOns || v;
             } else if (trimmedLine.includes('Country of Origin:')) {
-              currentDetails.countryOfOrigin = stripHtmlTags(trimmedLine.replace('Country of Origin:', '').trim());
+              currentDetails.countryOfOrigin = stripHtmlTags(extractAfterLabel(line, 'Country of Origin:'), false);
             }
           } else if (inPleaseNote && trimmedLine) {
             // Parse please note
@@ -701,9 +712,10 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
   }), [value, onChange, formProfile]);
 
   // Helper function to strip HTML tags and template text
-  const stripHtmlTags = (text: string): string => {
-    let cleaned = text.replace(/<[^>]*>/g, '').trim();
-    
+  const stripHtmlTags = (text: string, trimResult = true): string => {
+    let cleaned = text.replace(/<[^>]*>/g, '');
+    if (trimResult) cleaned = cleaned.trim();
+
     // Remove common template/placeholder text
     const templateTexts = [
       '(Editable per product)',
@@ -717,16 +729,20 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
       '(Enter details)',
       '(Add details)'
     ];
-    
+
     templateTexts.forEach(template => {
-      cleaned = cleaned.replace(new RegExp(template, 'gi'), '').trim();
+      cleaned = cleaned.replace(new RegExp(template, 'gi'), '');
+      if (trimResult) cleaned = cleaned.trim();
     });
-    
-    // If the result is just parentheses or empty, return empty string
-    if (cleaned === '()' || cleaned === '' || cleaned === '()' || cleaned.match(/^[()\s]*$/)) {
+
+    if (trimResult) {
+      if (cleaned === '()' || cleaned === '' || cleaned.match(/^[()\s]*$/)) {
+        return '';
+      }
+    } else if (!cleaned.replace(/[()\s]/g, '')) {
       return '';
     }
-    
+
     return cleaned;
   };
 

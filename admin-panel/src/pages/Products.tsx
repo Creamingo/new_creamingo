@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Plus, Search, Edit, Trash2, Package, Star, Award, Loader2, Download, Upload, FileText, Eye, RefreshCw, X, MessageSquare, CheckCircle, Image as ImageIcon } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Package, Star, Award, Loader2, Download, Upload, FileText, Eye, RefreshCw, X, MessageSquare, CheckCircle, Image as ImageIcon, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Modal, ModalFooter } from '../components/ui/Modal';
@@ -39,6 +39,11 @@ const getFileTypeFromUrl = (url: string): 'image' | 'video' => {
   return videoExtensions.includes(extension) ? 'video' : 'image';
 };
 
+/** Backend may send 0/1; missing field was treated as pending before is_approved was selected. */
+const isReviewApproved = (review: { is_approved?: unknown }): boolean => {
+  const v = review.is_approved;
+  return v === true || v === 1 || v === '1';
+};
 
 // Helper function to render Egg/Eggless icon
 const getEgglessIcon = (isEggless: boolean | undefined) => {
@@ -157,6 +162,14 @@ export const Products: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterCategoryId, setFilterCategoryId] = useState<number | 'all'>('all');
+  const [filterSubcategoryId, setFilterSubcategoryId] = useState<number | 'all'>('all');
+  const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('all');
+  const [filterTopOnly, setFilterTopOnly] = useState(false);
+  const [filterFeaturedOnly, setFilterFeaturedOnly] = useState(false);
+  const [filterBestsellerOnly, setFilterBestsellerOnly] = useState(false);
+  const [listPage, setListPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showVariantsModal, setShowVariantsModal] = useState(false);
@@ -790,25 +803,115 @@ export const Products: React.FC = () => {
     restoreFormData();
   }, [loadData, loadDraftProducts, restoreFormData]);
 
-  const filteredProducts = products.filter(product => {
-    // Add null checks to prevent undefined errors
-    if (!product || !product.name) return false;
-    
-    const categoryName = product.category_id 
-      ? categories.find(c => c.id === product.category_id)?.name || product.category_name || ''
-      : product.category_name || '';
-    
-    const subcategoryName = product.subcategory_id 
-      ? subcategories.find(s => s.id === product.subcategory_id)?.name || product.subcategory_name || ''
-      : product.subcategory_name || '';
-    
-    return (
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      categoryName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      subcategoryName.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  });
+  useEffect(() => {
+    setFilterSubcategoryId('all');
+  }, [filterCategoryId]);
 
+  useEffect(() => {
+    setListPage(1);
+  }, [
+    searchTerm,
+    filterCategoryId,
+    filterSubcategoryId,
+    filterActive,
+    filterTopOnly,
+    filterFeaturedOnly,
+    filterBestsellerOnly,
+    pageSize,
+  ]);
+
+  const subcategoryFilterOptions = useMemo(() => {
+    if (filterCategoryId === 'all') return subcategories;
+    return subcategories.filter((s) => Number(s.category_id) === Number(filterCategoryId));
+  }, [subcategories, filterCategoryId]);
+
+  const filteredProducts = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    return products.filter((product) => {
+      if (!product || !product.name) return false;
+
+      const categoryName = product.category_id
+        ? categories.find((c) => c.id === product.category_id)?.name || product.category_name || ''
+        : product.category_name || '';
+
+      const subcategoryName = product.subcategory_id
+        ? subcategories.find((s) => s.id === product.subcategory_id)?.name || product.subcategory_name || ''
+        : product.subcategory_name || '';
+
+      const matchesSearch =
+        !q ||
+        product.name.toLowerCase().includes(q) ||
+        categoryName.toLowerCase().includes(q) ||
+        subcategoryName.toLowerCase().includes(q);
+      if (!matchesSearch) return false;
+
+      if (filterCategoryId !== 'all') {
+        const cid = Number(filterCategoryId);
+        const inMulti = product.categories?.some((c) => Number(c.id) === cid);
+        const legacy = Number(product.category_id) === cid;
+        if (!inMulti && !legacy) return false;
+      }
+
+      if (filterSubcategoryId !== 'all') {
+        const sid = Number(filterSubcategoryId);
+        const inMulti = product.subcategories?.some((s) => Number(s.id) === sid);
+        const legacy = Number(product.subcategory_id) === sid;
+        if (!inMulti && !legacy) return false;
+      }
+
+      if (filterActive === 'active' && !product.is_active) return false;
+      if (filterActive === 'inactive' && product.is_active) return false;
+      if (filterTopOnly && !product.is_top_product) return false;
+      if (filterFeaturedOnly && !product.is_featured) return false;
+      if (filterBestsellerOnly && !product.is_bestseller) return false;
+
+      return true;
+    });
+  }, [
+    products,
+    categories,
+    subcategories,
+    searchTerm,
+    filterCategoryId,
+    filterSubcategoryId,
+    filterActive,
+    filterTopOnly,
+    filterFeaturedOnly,
+    filterBestsellerOnly,
+  ]);
+
+  const totalFiltered = filteredProducts.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+  const currentPage = Math.min(Math.max(1, listPage), totalPages);
+
+  useEffect(() => {
+    if (listPage > totalPages) setListPage(totalPages);
+  }, [listPage, totalPages]);
+
+  const pageStart = (currentPage - 1) * pageSize;
+  const paginatedProducts = useMemo(
+    () => filteredProducts.slice(pageStart, pageStart + pageSize),
+    [filteredProducts, pageStart, pageSize]
+  );
+
+  const hasActiveListFilters =
+    searchTerm.trim() !== '' ||
+    filterCategoryId !== 'all' ||
+    filterSubcategoryId !== 'all' ||
+    filterActive !== 'all' ||
+    filterTopOnly ||
+    filterFeaturedOnly ||
+    filterBestsellerOnly;
+
+  const clearListFilters = () => {
+    setSearchTerm('');
+    setFilterCategoryId('all');
+    setFilterSubcategoryId('all');
+    setFilterActive('all');
+    setFilterTopOnly(false);
+    setFilterFeaturedOnly(false);
+    setFilterBestsellerOnly(false);
+  };
 
   const handleDeleteProduct = async (productId: string | number) => {
     console.log('=== PRODUCT DELETE FUNCTION CALLED ===');
@@ -1956,11 +2059,20 @@ export const Products: React.FC = () => {
 
   return (
     <div className="space-y-4 p-6">
+      {/* Product table: client filters + pagination; labeled status grid; stacked action buttons (no overflow menu). */}
       {/* Simplified Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Products</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{filteredProducts.length} products</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {products.length} in catalog
+            {hasActiveListFilters ? (
+              <>
+                {' '}
+                · <span className="font-medium text-gray-700 dark:text-gray-300">{totalFiltered} match filters</span>
+              </>
+            ) : null}
+          </p>
         </div>
         {/* Mobile: Stacked layout, Desktop: Horizontal layout */}
         <div className="flex flex-col md:flex-row gap-3 md:space-x-3 md:space-y-0">
@@ -2018,16 +2130,118 @@ export const Products: React.FC = () => {
         </div>
       </div>
 
-      {/* Simplified Search */}
-      <div className="flex gap-3">
-        <div className="flex-1">
-          <Input
-            placeholder="Search products..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            leftIcon={<Search className="h-4 w-4" />}
-            className="text-sm"
-          />
+      {/* Search + filters */}
+      <div className="space-y-3">
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <Input
+              placeholder="Search products..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              leftIcon={<Search className="h-4 w-4" />}
+              className="text-sm"
+            />
+          </div>
+        </div>
+        <div className="flex flex-col gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-900/40 p-3 sm:p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3 items-end">
+            <div className="min-w-0">
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Category</label>
+              <select
+                value={filterCategoryId === 'all' ? 'all' : String(filterCategoryId)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setFilterCategoryId(v === 'all' ? 'all' : Number(v));
+                }}
+                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-2 py-2"
+              >
+                <option value="all">All categories</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="min-w-0">
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Subcategory / flavor</label>
+              <select
+                value={filterSubcategoryId === 'all' ? 'all' : String(filterSubcategoryId)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setFilterSubcategoryId(v === 'all' ? 'all' : Number(v));
+                }}
+                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-2 py-2"
+              >
+                <option value="all">All subcategories</option>
+                {subcategoryFilterOptions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="min-w-0">
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Status</label>
+              <select
+                value={filterActive}
+                onChange={(e) => setFilterActive(e.target.value as 'all' | 'active' | 'inactive')}
+                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-2 py-2"
+              >
+                <option value="all">Active and inactive</option>
+                <option value="active">Active only</option>
+                <option value="inactive">Inactive only</option>
+              </select>
+            </div>
+            <div className="min-w-0">
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Page size</label>
+              <select
+                value={String(pageSize)}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-2 py-2"
+              >
+                <option value="25">25 per page</option>
+                <option value="50">50 per page</option>
+                <option value="100">100 per page</option>
+              </select>
+            </div>
+            <div className="sm:col-span-2 lg:col-span-2 xl:col-span-2 flex flex-wrap items-center gap-3 pt-1">
+              <label className="inline-flex items-center gap-1.5 text-xs text-gray-700 dark:text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filterTopOnly}
+                  onChange={(e) => setFilterTopOnly(e.target.checked)}
+                  className="rounded border-gray-300 dark:border-gray-600"
+                />
+                Top only
+              </label>
+              <label className="inline-flex items-center gap-1.5 text-xs text-gray-700 dark:text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filterFeaturedOnly}
+                  onChange={(e) => setFilterFeaturedOnly(e.target.checked)}
+                  className="rounded border-gray-300 dark:border-gray-600"
+                />
+                Featured only
+              </label>
+              <label className="inline-flex items-center gap-1.5 text-xs text-gray-700 dark:text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filterBestsellerOnly}
+                  onChange={(e) => setFilterBestsellerOnly(e.target.checked)}
+                  className="rounded border-gray-300 dark:border-gray-600"
+                />
+                Bestseller only
+              </label>
+            </div>
+          </div>
+          {hasActiveListFilters && (
+            <div className="flex justify-end">
+              <Button type="button" variant="ghost" size="sm" onClick={clearListFilters} className="text-xs">
+                Clear filters
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -2043,8 +2257,9 @@ export const Products: React.FC = () => {
               </p>
             </div>
           ) : (
-            <table className="w-full divide-y divide-gray-200 dark:divide-gray-700 table-fixed min-w-[800px]">
-              <thead className="bg-gray-50 dark:bg-gray-700">
+            <>
+            <table className="w-full divide-y divide-gray-200 dark:divide-gray-700 table-fixed min-w-[960px]">
+              <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 shadow-sm">
                 <tr>
                   <th className="w-20 px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Image
@@ -2058,16 +2273,16 @@ export const Products: React.FC = () => {
                   <th className="w-24 px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Price
                   </th>
-                  <th className="w-28 px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  <th className="w-[14rem] px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Status
                   </th>
-                  <th className="w-28 px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  <th className="w-[7.5rem] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {filteredProducts.map((product) => (
+                {paginatedProducts.map((product) => (
                   <React.Fragment key={product.id}>
                     {/* Main Product Row */}
                     <tr className="hover:bg-gray-50 dark:hover:bg-gray-700">
@@ -2152,128 +2367,129 @@ export const Products: React.FC = () => {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col gap-1">
-                          {/* Top Product Button */}
+                      <td className="px-3 py-3 align-top">
+                        <div className="grid grid-cols-2 gap-1.5 min-w-[13rem]">
                           <button
+                            type="button"
                             onClick={() => handleToggleTopProduct(product.id)}
                             disabled={actionLoading === `top-${product.id}`}
-                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium transition-all duration-200 ${
+                            className={`inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md border text-[11px] font-medium leading-tight transition-colors ${
                               product.is_top_product
-                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/20 dark:text-amber-400 shadow-sm'
-                                : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 opacity-60 hover:opacity-80'
-                            } ${actionLoading === `top-${product.id}` ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                ? 'border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200'
+                                : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
+                            } ${actionLoading === `top-${product.id}` ? 'opacity-50 cursor-not-allowed' : ''}`}
                             title={product.is_top_product ? 'Remove from Top Products' : 'Mark as Top Product'}
                           >
                             {actionLoading === `top-${product.id}` ? (
-                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
                             ) : (
-                              <Star className={`h-3 w-3 mr-1 ${product.is_top_product ? 'fill-current' : ''}`} />
+                              <Star className={`h-3.5 w-3.5 shrink-0 ${product.is_top_product ? 'fill-current' : ''}`} />
                             )}
-                            Top
+                            <span className="text-left">Top product</span>
                           </button>
-
-                          {/* Bestseller Button */}
                           <button
-                            onClick={() => handleToggleBestseller(product.id)}
-                            disabled={actionLoading === `bestseller-${product.id}`}
-                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium transition-all duration-200 ${
-                              product.is_bestseller
-                                ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400 shadow-sm'
-                                : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 opacity-60 hover:opacity-80'
-                            } ${actionLoading === `bestseller-${product.id}` ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                            title={product.is_bestseller ? 'Remove from Bestsellers' : 'Mark as Bestseller'}
-                          >
-                            {actionLoading === `bestseller-${product.id}` ? (
-                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                            ) : (
-                              <Award className={`h-3 w-3 mr-1 ${product.is_bestseller ? 'fill-current' : ''}`} />
-                            )}
-                            Best
-                          </button>
-
-                          {/* Featured Button */}
-                          <button
+                            type="button"
                             onClick={() => handleToggleFeatured(product.id)}
                             disabled={actionLoading === `featured-${product.id}`}
-                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium transition-all duration-200 ${
+                            className={`inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md border text-[11px] font-medium leading-tight transition-colors ${
                               product.is_featured
-                                ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400 shadow-sm'
-                                : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 opacity-60 hover:opacity-80'
-                            } ${actionLoading === `featured-${product.id}` ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                ? 'border-blue-300 bg-blue-100 text-blue-900 dark:border-blue-700 dark:bg-blue-900/30 dark:text-blue-200'
+                                : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
+                            } ${actionLoading === `featured-${product.id}` ? 'opacity-50 cursor-not-allowed' : ''}`}
                             title={product.is_featured ? 'Remove from Featured' : 'Mark as Featured'}
                           >
                             {actionLoading === `featured-${product.id}` ? (
-                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
                             ) : (
-                              <Star className={`h-3 w-3 mr-1 ${product.is_featured ? 'fill-current' : ''}`} />
+                              <Sparkles className="h-3.5 w-3.5 shrink-0" />
                             )}
-                            Featured
+                            <span className="text-left">Featured</span>
                           </button>
-
-                          {/* Active/Inactive Button */}
                           <button
+                            type="button"
+                            onClick={() => handleToggleBestseller(product.id)}
+                            disabled={actionLoading === `bestseller-${product.id}`}
+                            className={`inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md border text-[11px] font-medium leading-tight transition-colors ${
+                              product.is_bestseller
+                                ? 'border-purple-300 bg-purple-100 text-purple-900 dark:border-purple-700 dark:bg-purple-900/30 dark:text-purple-200'
+                                : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
+                            } ${actionLoading === `bestseller-${product.id}` ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            title={product.is_bestseller ? 'Remove from Bestsellers' : 'Mark as Bestseller'}
+                          >
+                            {actionLoading === `bestseller-${product.id}` ? (
+                              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                            ) : (
+                              <Award className={`h-3.5 w-3.5 shrink-0 ${product.is_bestseller ? 'fill-current' : ''}`} />
+                            )}
+                            <span className="text-left">Bestseller</span>
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleToggleActive(product.id)}
                             disabled={actionLoading === `active-${product.id}`}
-                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium transition-all duration-200 ${
+                            className={`inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md border text-[11px] font-medium leading-tight transition-colors ${
                               product.is_active
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 shadow-sm'
-                                : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400 shadow-sm'
-                            } ${actionLoading === `active-${product.id}` ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:opacity-80'}`}
+                                ? 'border-green-300 bg-green-100 text-green-900 dark:border-green-700 dark:bg-green-900/30 dark:text-green-200'
+                                : 'border-red-300 bg-red-100 text-red-900 dark:border-red-700 dark:bg-red-900/30 dark:text-red-200'
+                            } ${actionLoading === `active-${product.id}` ? 'opacity-50 cursor-not-allowed' : ''}`}
                             title={product.is_active ? 'Deactivate Product' : 'Activate Product'}
                           >
                             {actionLoading === `active-${product.id}` ? (
-                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
                             ) : (
-                              <div className={`h-2 w-2 mr-1 rounded-full ${product.is_active ? 'bg-green-500' : 'bg-red-500'}`} />
+                              <div className={`h-2.5 w-2.5 shrink-0 rounded-full ${product.is_active ? 'bg-green-500' : 'bg-red-500'}`} />
                             )}
-                            {product.is_active ? 'Active' : 'Inactive'}
+                            <span className="text-left">{product.is_active ? 'Active' : 'Inactive'}</span>
                           </button>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex flex-col items-end space-y-1 min-w-[100px]">
+                      <td className="px-3 py-3 align-top text-right">
+                        <div className="inline-flex flex-col items-stretch gap-1 min-w-[6.75rem]">
                           <button
+                            type="button"
                             onClick={() => handleViewReviews(product)}
-                            className="flex items-center space-x-1.5 px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/30 rounded transition-colors w-full justify-center"
+                            className="inline-flex items-center justify-center gap-1.5 px-2 py-1.5 text-[11px] font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/25 dark:text-blue-300 dark:hover:bg-blue-900/40 rounded-md border border-blue-200/80 dark:border-blue-800 transition-colors"
                             title="View Reviews"
                           >
-                            <MessageSquare className="h-3 w-3" />
-                            <span>Reviews</span>
+                            <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+                            Reviews
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleAddReview(product)}
-                            className="flex items-center space-x-1.5 px-2 py-1 text-xs font-medium text-green-600 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 rounded transition-colors w-full justify-center"
+                            className="inline-flex items-center justify-center gap-1.5 px-2 py-1.5 text-[11px] font-medium text-green-700 bg-green-50 hover:bg-green-100 dark:bg-green-900/25 dark:text-green-300 dark:hover:bg-green-900/40 rounded-md border border-green-200/80 dark:border-green-800 transition-colors"
                             title="Add Review"
                           >
-                            <Plus className="h-3 w-3" />
-                            <span>Rate</span>
+                            <Plus className="h-3.5 w-3.5 shrink-0" />
+                            Add rating
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleSetEditingProduct(product)}
-                            className="flex items-center space-x-1.5 px-2 py-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400 dark:hover:bg-indigo-900/30 rounded transition-colors w-full justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                             disabled={actionLoading === `edit-${product.id}`}
+                            className="inline-flex items-center justify-center gap-1.5 px-2 py-1.5 text-[11px] font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/25 dark:text-indigo-300 dark:hover:bg-indigo-900/40 rounded-md border border-indigo-200/80 dark:border-indigo-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Edit Product"
                           >
                             {actionLoading === `edit-${product.id}` ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
+                              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
                             ) : (
-                              <Edit className="h-3 w-3" />
+                              <Edit className="h-3.5 w-3.5 shrink-0" />
                             )}
-                            <span>Edit</span>
+                            Edit
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleDeleteProduct(product.id)}
-                            className="flex items-center space-x-1.5 px-2 py-1 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 rounded transition-colors w-full justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Delete Product"
                             disabled={actionLoading === `delete-${product.id}`}
+                            className="inline-flex items-center justify-center gap-1.5 px-2 py-1.5 text-[11px] font-medium text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-900/25 dark:text-red-300 dark:hover:bg-red-900/40 rounded-md border border-red-200/80 dark:border-red-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Delete Product"
                           >
                             {actionLoading === `delete-${product.id}` ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
+                              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
                             ) : (
-                              <Trash2 className="h-3 w-3" />
+                              <Trash2 className="h-3.5 w-3.5 shrink-0" />
                             )}
-                            <span>Delete</span>
+                            Delete
                           </button>
                         </div>
                       </td>
@@ -2386,6 +2602,47 @@ export const Products: React.FC = () => {
                 ))}
               </tbody>
             </table>
+            {totalFiltered > 0 && (
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-900/30">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Showing{' '}
+                  <span className="font-medium text-gray-900 dark:text-gray-100">{pageStart + 1}</span>
+                  –
+                  <span className="font-medium text-gray-900 dark:text-gray-100">
+                    {Math.min(pageStart + pageSize, totalFiltered)}
+                  </span>{' '}
+                  of <span className="font-medium text-gray-900 dark:text-gray-100">{totalFiltered}</span>
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={currentPage <= 1}
+                    onClick={() => setListPage((p) => Math.max(1, p - 1))}
+                    className="inline-flex items-center gap-1"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </Button>
+                  <span className="text-sm text-gray-600 dark:text-gray-400 px-1 tabular-nums">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setListPage((p) => Math.min(totalPages, p + 1))}
+                    className="inline-flex items-center gap-1"
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </div>
       </div>
@@ -4245,7 +4502,11 @@ export const Products: React.FC = () => {
                             Verified Purchase
                           </span>
                         )}
-                        {!review.is_approved && (
+                        {isReviewApproved(review) ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200">
+                            Approved
+                          </span>
+                        ) : (
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
                             Pending Approval
                           </span>
@@ -4263,14 +4524,23 @@ export const Products: React.FC = () => {
                         {new Date(review.created_at).toLocaleDateString()}
                       </p>
                     </div>
-                    <div className="flex items-center space-x-2 ml-4">
-                      {!review.is_approved && (
-                        <button
-                          onClick={() => handleApproveReview(review.id)}
-                          className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
-                          title="Approve Review"
+                    <div className="flex items-center space-x-2 ml-4 shrink-0">
+                      {isReviewApproved(review) ? (
+                        <span
+                          className="inline-flex items-center justify-center rounded-full p-1.5 bg-emerald-100 text-emerald-800 ring-2 ring-emerald-400/80 dark:bg-emerald-900/45 dark:text-emerald-200 dark:ring-emerald-500/50"
+                          title="Approved — live on storefront"
+                          aria-label="Approved"
                         >
-                          <CheckCircle className="h-4 w-4" />
+                          <CheckCircle className="h-5 w-5" strokeWidth={2.5} />
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleApproveReview(review.id)}
+                          className="inline-flex items-center justify-center rounded-full p-1.5 bg-amber-100 text-amber-900 ring-2 ring-amber-500/80 hover:bg-amber-200 hover:ring-amber-600 dark:bg-amber-950/50 dark:text-amber-100 dark:ring-amber-500/60 dark:hover:bg-amber-900/60 transition-colors"
+                          title="Click to approve (publish on storefront)"
+                        >
+                          <CheckCircle className="h-5 w-5" strokeWidth={2.5} />
                         </button>
                       )}
                       <button

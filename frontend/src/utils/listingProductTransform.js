@@ -1,12 +1,25 @@
 import { resolveImageUrl } from './imageUrl';
 
-function reviewCountFromProduct(product) {
-  const raw =
-    product.review_count ??
-    product.reviews ??
-    product.reviewCount;
-  if (raw != null && raw !== '') return raw;
-  return Math.floor(Math.random() * 100) + 10;
+/** Approved text reviews + rating-only rows (matches products.review_count + products.rating_count). */
+function totalListingReviewCount(product) {
+  const rc = Number(product.review_count);
+  const rtc = Number(product.rating_count);
+  if (Number.isFinite(rc) || Number.isFinite(rtc)) {
+    return (Number.isFinite(rc) ? rc : 0) + (Number.isFinite(rtc) ? rtc : 0);
+  }
+  const legacy = product.reviews ?? product.reviewCount;
+  if (legacy != null && legacy !== '') {
+    const n = Number(legacy);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
+
+/** Average star rating from products.rating (maintained by backend from approved reviews). */
+function listingAverageRating(product) {
+  const r = Number(product.rating);
+  if (!Number.isFinite(r) || r <= 0) return 0;
+  return Math.round(r * 100) / 100;
 }
 
 /**
@@ -45,8 +58,8 @@ export function toListingProductCardShape(product) {
     image: resolveImageUrl(product.image_url || product.image),
     originalPrice: basePrice,
     discountedPrice: discounted,
-    rating: product.rating ?? 4.5,
-    reviews: reviewCountFromProduct(product),
+    rating: listingAverageRating(product),
+    reviews: totalListingReviewCount(product),
     category: product.category_name || product.category,
     subcategory: product.subcategory_name || product.subcategory,
     subcategory_id: product.subcategory_id ?? product.subcategoryId,

@@ -104,7 +104,7 @@ const ListingPage = () => {
       
       if (response.success && response.data && response.data.subcategory) {
         const subcategory = response.data.subcategory;
-n         const slugFromName = subcategory.name
+        const slugFromName = subcategory.name
           .toLowerCase()
           .replace(/\s+/g, '-')
           .replace(/\//g, '-') // handle "1/2 Year" style names

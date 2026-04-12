@@ -936,6 +936,8 @@ const getRelatedProducts = async (req, res) => {
   }
 };
 
+const REVIEW_MODERATOR_ROLES = new Set(['admin', 'staff', 'super_admin', 'bakery_production']);
+
 // Get product reviews
 const getProductReviews = async (req, res) => {
   try {
@@ -947,6 +949,10 @@ const getProductReviews = async (req, res) => {
     const safePage = Math.max(1, pageNum);
     const offset = (safePage - 1) * safeLimit;
 
+    const isModerator = req.user && REVIEW_MODERATOR_ROLES.has(req.user.role);
+    const approvalFilter = isModerator ? '' : ' AND is_approved = 1';
+    const isApprovedSelect = isModerator ? ', is_approved' : '';
+
     // Get reviews with pagination
     const reviewsQuery = `
       SELECT 
@@ -956,24 +962,40 @@ const getProductReviews = async (req, res) => {
         review_title,
         review_text,
         is_verified_purchase,
-        created_at
+        created_at${isApprovedSelect}
       FROM product_reviews 
-      WHERE product_id = ? AND is_approved = 1
+      WHERE product_id = ?${approvalFilter}
       ORDER BY created_at DESC
       LIMIT ${safeLimit} OFFSET ${offset}
     `;
     
-    const reviewsResult = await query(reviewsQuery, [id]);
+    const reviewsQueryPromise = query(reviewsQuery, [id]);
 
     // Get total count
     const countQuery = `
       SELECT COUNT(*) as total
       FROM product_reviews 
+      WHERE product_id = ?${approvalFilter}
+    `;
+
+    const avgQuery = `
+      SELECT AVG(rating) as avg_rating
+      FROM product_reviews
       WHERE product_id = ? AND is_approved = 1
     `;
-    
-    const countResult = await query(countQuery, [id]);
+
+    const [reviewsResult, countResult, avgResult] = await Promise.all([
+      reviewsQueryPromise,
+      query(countQuery, [id]),
+      query(avgQuery, [id])
+    ]);
+
     const total = countResult.rows[0].total;
+    const rawAvg = avgResult.rows[0]?.avg_rating;
+    const avgRatingAll =
+      rawAvg != null && rawAvg !== ''
+        ? Math.round(parseFloat(String(rawAvg), 10) * 100) / 100
+        : 0;
 
     // Get review images for each review
     const reviewIds = reviewsResult.rows.map(review => review.id);
@@ -995,6 +1017,10 @@ const getProductReviews = async (req, res) => {
 
     // Attach images to reviews and parse category data
     const reviewsWithImages = reviewsResult.rows.map(review => {
+      review.is_approved = isModerator
+        ? Number(review.is_approved) === 1 || review.is_approved === true
+        : true;
+
       review.images = reviewImages
         .filter(img => img.review_id === review.id)
         .map(img => buildPublicUrlWithBase(baseUrl, normalizeUploadUrl(img.image_url)));
@@ -1067,6 +1093,9 @@ const getProductReviews = async (req, res) => {
     let overallRatingSum = 0;
     
     reviewsWithImages.forEach(review => {
+      if (isModerator && !review.is_approved) {
+        return;
+      }
       // Use the processed ratings object
       if (review.ratings) {
         ratingBreakdown.taste += review.ratings.taste || 0;
@@ -1098,6 +1127,7 @@ const getProductReviews = async (req, res) => {
       success: true,
       data: {
         reviews: reviewsWithImages,
+        avg_rating: avgRatingAll,
         ratingBreakdown: ratingBreakdown,
         pagination: {
           current_page: parseInt(page),
@@ -1119,6 +1149,7 @@ const getProductReviews = async (req, res) => {
         success: true,
         data: {
           reviews: [],
+          avg_rating: 0,
           ratingBreakdown: {
             taste: 0,
             presentation: 0,
@@ -3761,7 +3792,9 @@ const createReview = async (req, res) => {
       product_id,
       customer_name,
       customer_email,
-      rating,
+      rating: ratingBody,
+      overall_rating,
+      manual_overall_rating,
       review_title,
       review_text,
       is_verified_purchase = false,
@@ -3769,8 +3802,24 @@ const createReview = async (req, res) => {
       images = []
     } = req.body;
 
+    const toTinyInt = (v) =>
+      v === true || v === 1 || v === '1' || v === 'true' ? 1 : 0;
+
+    const verifiedInt = toTinyInt(is_verified_purchase);
+    const approvedInt = toTinyInt(is_approved);
+
+    const ratingRaw =
+      overall_rating !== undefined && overall_rating !== null && overall_rating !== ''
+        ? overall_rating
+        : manual_overall_rating !== undefined &&
+            manual_overall_rating !== null &&
+            manual_overall_rating !== ''
+          ? manual_overall_rating
+          : ratingBody;
+    const rating = Number(ratingRaw);
+
     // Validate required fields
-    if (!product_id || !customer_name || !rating) {
+    if (!product_id || !customer_name || !Number.isFinite(rating)) {
       return res.status(400).json({
         success: false,
         message: 'Product ID, customer name, and rating are required'
@@ -3805,8 +3854,14 @@ const createReview = async (req, res) => {
     `;
     
     const reviewResult = await query(insertReviewQuery, [
-      product_id, customer_name, customer_email, rating,
-      review_title, review_text, is_verified_purchase, is_approved
+      product_id,
+      customer_name,
+      customer_email,
+      rating,
+      review_title,
+      review_text,
+      verifiedInt,
+      approvedInt
     ]);
 
     const reviewId = reviewResult.lastID;
@@ -4005,8 +4060,11 @@ const updateProductRatingStats = async (productId) => {
     
     const statsResult = await query(statsQuery, [productId]);
     const stats = statsResult.rows[0];
-    
-    const avgRating = stats.avg_rating ? parseFloat(stats.avg_rating.toFixed(2)) : 0;
+
+    const avgRating =
+      stats.avg_rating != null && stats.avg_rating !== ''
+        ? Math.round(parseFloat(String(stats.avg_rating), 10) * 100) / 100
+        : 0;
     const totalCount = stats.total_count || 0;
     const reviewCount = stats.review_count || 0;
     const ratingCount = totalCount - reviewCount; // Ratings without written reviews
