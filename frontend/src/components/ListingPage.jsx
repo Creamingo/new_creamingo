@@ -15,7 +15,7 @@ import productApi from '../api/productApi';
 import { useCategoryMenu } from '../contexts/CategoryMenuContext';
 import { useWishlist } from '../contexts/WishlistContext';
 import { formatPrice } from '../utils/priceFormatter';
-import { resolveImageUrl } from '../utils/imageUrl';
+import { toListingProductCardShape } from '../utils/listingProductTransform';
 
 const ListingPage = () => {
   const params = useParams();
@@ -104,7 +104,7 @@ const ListingPage = () => {
       
       if (response.success && response.data && response.data.subcategory) {
         const subcategory = response.data.subcategory;
-        const slugFromName = subcategory.name
+n         const slugFromName = subcategory.name
           .toLowerCase()
           .replace(/\s+/g, '-')
           .replace(/\//g, '-') // handle "1/2 Year" style names
@@ -191,22 +191,7 @@ const ListingPage = () => {
         products = response;
       }
       
-      // Transform API response to match frontend expected format
-      return products.map(product => ({
-        id: product.id,
-        name: product.name,
-        slug: product.slug, // Include the slug field
-        image: resolveImageUrl(product.image_url || product.image),
-        originalPrice: product.base_price || product.originalPrice,
-        discountedPrice: product.discounted_price || product.discountedPrice,
-        rating: product.rating || 4.5, // Default rating if not provided
-        reviews: product.reviews || Math.floor(Math.random() * 100) + 10,
-        category: product.category_name || product.category,
-        subcategory: product.subcategory_name || product.subcategory,
-        subcategory_id: product.subcategory_id || product.subcategoryId, // Preserve subcategory ID for matching
-        isTopProduct: product.is_top_product === 1 || product.isTopProduct,
-        discount: product.discount || Math.round(((product.base_price - product.discounted_price) / product.base_price) * 100)
-      }));
+      return products.map((product) => toListingProductCardShape(product));
     } catch (error) {
       console.error('Failed to fetch products data:', error);
       throw error; // Don't fall back to mock data, let the error propagate

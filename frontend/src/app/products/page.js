@@ -8,7 +8,7 @@ import MobileFooter from '../../components/MobileFooter';
 import LocationBar from '../../components/LocationBar';
 import ListingProductCard from '../../components/ListingProductCard';
 import { useWishlist } from '../../contexts/WishlistContext';
-import { resolveImageUrl } from '../../utils/imageUrl';
+import { toListingProductCardShape } from '../../utils/listingProductTransform';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -52,20 +52,9 @@ const ProductsContent = () => {
         // Transform API response to match frontend expected format
         if (searchResults.success && searchResults.data) {
           const productsData = searchResults.data.products || searchResults.data || [];
-          const transformedProducts = productsData.map(product => ({
-            id: product.id,
-            name: product.name,
-            slug: product.slug,
-            image: resolveImageUrl(product.image_url || product.image),
-            originalPrice: product.base_price || product.originalPrice,
-            discountedPrice: product.discounted_price || product.discountedPrice,
-            rating: product.rating || 4.5,
-            reviews: product.review_count || product.reviews || Math.floor(Math.random() * 100) + 10,
-            category: product.category_name || product.category,
-            subcategory: product.subcategory_name || product.subcategory,
-            isTopProduct: product.is_top_product === 1 || product.isTopProduct,
-            discount: product.discount_percent || (product.discounted_price && product.base_price ? Math.round(((product.base_price - product.discounted_price) / product.base_price) * 100) : 0)
-          }));
+          const transformedProducts = productsData.map((product) =>
+            toListingProductCardShape(product)
+          );
 
           // Sort by ID in ascending order
           transformedProducts.sort((a, b) => a.id - b.id);
