@@ -462,10 +462,13 @@ const ListingPage = () => {
     setFocusedSubcategoryIndex(selectedIndex);
 
     requestAnimationFrame(() => {
+      // 'center' clips the first/last chip borders against the scroll container edges; 'nearest' keeps full border visible
+      const inline =
+        selectedIndex <= 0 ? 'start' : selectedIndex >= allSubcategories.length - 1 ? 'end' : 'nearest';
       targetButton.scrollIntoView({
         behavior: 'auto',
-        inline: 'center',
-        block: 'nearest'
+        inline,
+        block: 'nearest',
       });
 
       const container = subcategoryScrollRef.current;
@@ -635,7 +638,7 @@ const ListingPage = () => {
               {/* Subcategory Horizontal Scroll - Mobile Only */}
                 <div 
                   ref={subcategoryScrollRef}
-                  className="flex space-x-2 overflow-x-auto pb-1 scrollbar-hide relative"
+                  className="flex gap-2 overflow-x-auto overflow-y-visible py-1.5 px-2 -mx-2 scrollbar-hide relative"
                   style={{
                     scrollSnapType: 'x mandatory',
                     WebkitOverflowScrolling: 'touch',
@@ -679,7 +682,7 @@ const ListingPage = () => {
                       aria-label={`View ${subcategory.name} subcategory`}
                       aria-pressed={subCategorySlug === subcategory.slug}
                       tabIndex={0}
-                      className={`group flex flex-col items-center p-1.5 rounded-xl border-2 transition-all duration-300 hover:shadow-md active:scale-95 active:shadow-sm flex-shrink-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 ${
+                      className={`group flex flex-col items-center p-1.5 rounded-xl border-2 transition-all duration-300 hover:shadow-md flex-shrink-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-800 ${
                       subCategorySlug === subcategory.slug
                           ? 'border-pink-500 dark:border-pink-400 bg-purple-50 dark:bg-purple-900/30'
                           : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-500'
@@ -1045,10 +1048,10 @@ const ListingPage = () => {
 
             {/* Subcategory Navigation */}
             {allSubcategories.length > 0 && (
-              <div className="hidden lg:block pt-4 pb-1.5">
+              <div className="hidden lg:block pt-4 pb-2 overflow-visible">
                 {allSubcategories.length >= 10 ? (
                   // Original circular layout for 10+ subcategories (like "Pick a Cake by Flavor")
-                  <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center justify-between w-full gap-1 px-1 py-1.5 overflow-visible">
                     {allSubcategories.map((subcategory, index) => {
                       // Define border colors based on category names
                       const getBorderColor = (categoryName) => {
@@ -1100,12 +1103,12 @@ const ListingPage = () => {
                           }}
                           aria-label={`View ${subcategory.name} subcategory`}
                           aria-pressed={subCategorySlug === subcategory.slug}
-                          className="flex flex-col items-center space-y-2 flex-1 group cursor-pointer relative active:scale-95 transition-transform duration-150"
+                          className="flex flex-col items-center space-y-2 flex-1 min-w-0 group cursor-pointer relative"
                         >
-                          <div className="w-24 h-24 relative">
+                          <div className="w-24 h-24 relative shrink-0">
                             <div className={`w-full h-full rounded-full overflow-hidden border-2 transition-all duration-200 ${
                             subCategorySlug === subcategory.slug
-                                ? 'border-pink-500 shadow-lg'
+                                ? 'border-pink-500 shadow-lg shadow-pink-500/20 dark:shadow-pink-500/15'
                                 : 'border-gray-300 hover:border-gray-400'
                           }`}>
                             <img
@@ -1134,7 +1137,7 @@ const ListingPage = () => {
                   </div>
                 ) : (
                   // New rectangular layout for fewer than 10 subcategories - in a row
-                  <div className="flex gap-4 w-full">
+                  <div className="flex gap-4 w-full px-1 py-1 overflow-visible">
                     {allSubcategories.map((subcategory, index) => {
                       return (
                         <button
@@ -1156,7 +1159,7 @@ const ListingPage = () => {
                             aria-label={`View ${subcategory.name} subcategory`}
                             aria-pressed={subCategorySlug === subcategory.slug}
                             tabIndex={0}
-                            className={`flex items-center space-x-4 p-4 rounded-xl border-2 transition-all duration-200 group cursor-pointer flex-1 relative active:scale-[0.98] active:shadow-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 ${
+                            className={`flex items-center space-x-4 p-4 rounded-xl border-2 transition-all duration-200 group cursor-pointer flex-1 min-w-0 relative focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 focus:ring-offset-gray-50 dark:focus:ring-offset-gray-900 ${
                             subCategorySlug === subcategory.slug
                                 ? 'border-pink-500 bg-purple-50 shadow-lg'
                                 : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'

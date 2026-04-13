@@ -14,7 +14,7 @@ export interface CategoryGridSelectorProps {
   onCategoriesChange: (categoryIds: number[]) => void;
   onSubcategoriesChange: (subcategoryIds: number[]) => void;
   onPrimaryCategoryChange: (categoryId: number) => void;
-  onPrimarySubcategoryChange: (subcategoryId: number) => void;
+  onPrimarySubcategoryChange: (subcategoryId: number | undefined) => void;
   error?: string;
   disabled?: boolean;
 }
@@ -60,15 +60,44 @@ export const CategoryGridSelector: React.FC<CategoryGridSelectorProps> = ({
     }
   }, [selectedCategoryIds, selectedSubcategoryIds, subcategories, onSubcategoriesChange]);
 
-  // Clear primary subcategory if it's no longer valid
+  // Clear primary subcategory if it's no longer in the available pool (wrong category), using numeric ids
   useEffect(() => {
-    if (primarySubcategoryId && availableSubcategories.length > 0) {
-      const isValid = availableSubcategories.some(subcat => subcat.id === primarySubcategoryId);
-      if (!isValid) {
-        onPrimarySubcategoryChange(Number(availableSubcategories[0].id));
-      }
+    if (primarySubcategoryId == null || availableSubcategories.length === 0) return;
+    const p = Number(primarySubcategoryId);
+    const isValid = availableSubcategories.some((subcat) => Number(subcat.id) === p);
+    if (!isValid) {
+      onPrimarySubcategoryChange(Number(availableSubcategories[0].id));
     }
   }, [availableSubcategories, primarySubcategoryId, onPrimarySubcategoryChange]);
+
+  /**
+   * When exactly one subcategory is selected, it is the effective primary (UI shows "Primary: X")
+   * but we never called onPrimarySubcategoryChange — keep parent state (e.g. Cake Flavour sync) in sync.
+   */
+  useEffect(() => {
+    if (selectedSubcategoryIds.length === 0) {
+      if (primarySubcategoryId != null) {
+        onPrimarySubcategoryChange(undefined);
+      }
+      return;
+    }
+    if (selectedSubcategoryIds.length === 1) {
+      const onlyId = Number(selectedSubcategoryIds[0]);
+      if (Number(primarySubcategoryId) !== onlyId) {
+        onPrimarySubcategoryChange(onlyId);
+      }
+    }
+  }, [selectedSubcategoryIds, primarySubcategoryId, onPrimarySubcategoryChange]);
+
+  // If multiple subcategories are selected, ensure primary is one of them (numeric-safe)
+  useEffect(() => {
+    if (selectedSubcategoryIds.length <= 1) return;
+    if (primarySubcategoryId == null) return;
+    const p = Number(primarySubcategoryId);
+    if (!selectedSubcategoryIds.some((id) => Number(id) === p)) {
+      onPrimarySubcategoryChange(Number(selectedSubcategoryIds[0]));
+    }
+  }, [selectedSubcategoryIds, primarySubcategoryId, onPrimarySubcategoryChange]);
 
   // Handle category selection
   const handleCategoryToggle = (categoryId: number) => {

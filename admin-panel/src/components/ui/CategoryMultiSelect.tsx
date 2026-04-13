@@ -14,7 +14,7 @@ export interface CategoryMultiSelectProps {
   onCategoriesChange: (categoryIds: number[]) => void;
   onSubcategoriesChange: (subcategoryIds: number[]) => void;
   onPrimaryCategoryChange: (categoryId: number) => void;
-  onPrimarySubcategoryChange: (subcategoryId: number) => void;
+  onPrimarySubcategoryChange: (subcategoryId: number | undefined) => void;
   error?: string;
   disabled?: boolean;
 }
@@ -60,15 +60,40 @@ export const CategoryMultiSelect: React.FC<CategoryMultiSelectProps> = ({
     }
   }, [selectedCategoryIds, selectedSubcategoryIds, subcategories, onSubcategoriesChange]);
 
-  // Clear primary subcategory if it's no longer valid
+  // Clear primary subcategory if it's no longer in the available pool (numeric ids)
   useEffect(() => {
-    if (primarySubcategoryId && availableSubcategories.length > 0) {
-      const isValid = availableSubcategories.some(subcat => subcat.id === primarySubcategoryId);
-      if (!isValid) {
-        onPrimarySubcategoryChange(Number(availableSubcategories[0].id));
-      }
+    if (primarySubcategoryId == null || availableSubcategories.length === 0) return;
+    const p = Number(primarySubcategoryId);
+    const isValid = availableSubcategories.some((subcat) => Number(subcat.id) === p);
+    if (!isValid) {
+      onPrimarySubcategoryChange(Number(availableSubcategories[0].id));
     }
   }, [availableSubcategories, primarySubcategoryId, onPrimarySubcategoryChange]);
+
+  /** Single selected subcategory is the implicit primary — persist id for downstream forms (e.g. Cake Flavour). */
+  useEffect(() => {
+    if (selectedSubcategoryIds.length === 0) {
+      if (primarySubcategoryId != null) {
+        onPrimarySubcategoryChange(undefined);
+      }
+      return;
+    }
+    if (selectedSubcategoryIds.length === 1) {
+      const onlyId = Number(selectedSubcategoryIds[0]);
+      if (Number(primarySubcategoryId) !== onlyId) {
+        onPrimarySubcategoryChange(onlyId);
+      }
+    }
+  }, [selectedSubcategoryIds, primarySubcategoryId, onPrimarySubcategoryChange]);
+
+  useEffect(() => {
+    if (selectedSubcategoryIds.length <= 1) return;
+    if (primarySubcategoryId == null) return;
+    const p = Number(primarySubcategoryId);
+    if (!selectedSubcategoryIds.some((id) => Number(id) === p)) {
+      onPrimarySubcategoryChange(Number(selectedSubcategoryIds[0]));
+    }
+  }, [selectedSubcategoryIds, primarySubcategoryId, onPrimarySubcategoryChange]);
 
   // Prepare category options
   const categoryOptions: MultiSelectOption[] = categories.map(cat => ({

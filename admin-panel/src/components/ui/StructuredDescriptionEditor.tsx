@@ -391,17 +391,16 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
   // Auto-population logic based on primary subcategory and variations (cakes / treats — not flowers)
   useEffect(() => {
     if (formProfile === 'flowers') return;
-    if (primarySubcategoryId && subcategories.length > 0 && !details.cakeFlavour) {
-      const primarySubcategory = subcategories.find(sub => 
-        sub.id === primarySubcategoryId || sub.id === primarySubcategoryId.toString()
-      );
-      if (primarySubcategory) {
-        const flavorName = primarySubcategory.name;
-        setDetails(prev => ({
-          ...prev,
-          cakeFlavour: prev.cakeFlavour || flavorName
-        }));
-      }
+    if (primarySubcategoryId == null || subcategories.length === 0 || details.cakeFlavour) return;
+    const primarySubcategory = subcategories.find(
+      (sub) => Number(sub.id) === Number(primarySubcategoryId)
+    );
+    if (primarySubcategory) {
+      const flavorName = primarySubcategory.name;
+      setDetails((prev) => ({
+        ...prev,
+        cakeFlavour: prev.cakeFlavour || flavorName,
+      }));
     }
   }, [primarySubcategoryId, subcategories, details.cakeFlavour, formProfile]);
 
@@ -1064,9 +1063,10 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
                   <div>
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                       {flavourFieldLabel}
-                      {primarySubcategoryId && subcategories.find(sub =>
-                        sub.id === primarySubcategoryId || sub.id === primarySubcategoryId.toString()
-                      ) && (
+                      {primarySubcategoryId != null &&
+                        subcategories.some(
+                          (sub) => Number(sub.id) === Number(primarySubcategoryId)
+                        ) && (
                         <span className="ml-1 text-xs text-blue-600 dark:text-blue-400">(Auto-filled)</span>
                       )}
                     </label>
@@ -1502,9 +1502,10 @@ const StructuredDescriptionEditor = forwardRef<StructuredDescriptionEditorRef, S
                   <div>
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                       {flavourFieldLabel}
-                      {primarySubcategoryId && subcategories.find(sub =>
-                        sub.id === primarySubcategoryId || sub.id === primarySubcategoryId.toString()
-                      ) && (
+                      {primarySubcategoryId != null &&
+                        subcategories.some(
+                          (sub) => Number(sub.id) === Number(primarySubcategoryId)
+                        ) && (
                         <span className="ml-1 text-xs text-blue-600 dark:text-blue-400">(Auto-filled)</span>
                       )}
                     </label>
