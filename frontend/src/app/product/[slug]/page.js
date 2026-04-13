@@ -14,7 +14,6 @@ import ProductCombos from './components/ProductCombos';
 import ProductTabs from './components/ProductTabs';
 import CustomerReviews from './components/CustomerReviews';
 import RelatedProducts from './components/RelatedProducts';
-import StickyCartBar from './components/StickyCartBar';
 import LoadingSpinner from '../../../components/ui/LoadingSpinner';
 import ErrorMessage from '../../../components/ui/ErrorMessage';
 import ProductSkeleton from './components/ProductSkeleton';
@@ -51,6 +50,7 @@ export default function ProductPage() {
   const [displayTitle, setDisplayTitle] = useState(null);
   const [selectedTier, setSelectedTier] = useState(null);
   const [mobileShareOpen, setMobileShareOpen] = useState(false);
+  const [pdpReviewOverlayOpen, setPdpReviewOverlayOpen] = useState(false);
 
   // Add data attribute to body for product page specific styles
   // Must be called before any conditional returns to follow Rules of Hooks
@@ -356,6 +356,7 @@ export default function ProductPage() {
                 displayTitle={displayTitle}
                 selectedTier={selectedTier}
                 onTierChange={setSelectedTier}
+                hideMobileStickyCTA={pdpReviewOverlayOpen}
               />
 
 
@@ -375,7 +376,10 @@ export default function ProductPage() {
 
         {/* Customer Reviews Section */}
         <div className="mt-10 sm:mt-12">
-          <CustomerReviews productId={product.id} />
+          <CustomerReviews
+            productId={product.id}
+            onPdpReviewOverlayChange={setPdpReviewOverlayOpen}
+          />
         </div>
 
         {/* Related Products */}

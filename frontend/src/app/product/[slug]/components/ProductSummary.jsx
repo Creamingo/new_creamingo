@@ -47,7 +47,8 @@ const ProductSummary = ({
   onDynamicContentUpdate,
   displayTitle,
   selectedTier,
-  onTierChange
+  onTierChange,
+  hideMobileStickyCTA = false
 }) => {
   const formProfile = useMemo(
     () => resolveProductFormProfileFromProduct(product),
@@ -1144,7 +1145,7 @@ const ProductSummary = ({
 
        {/* Mobile Sticky Footer - Above category menu (z-[60]); safe-area so buttons stay above iPhone home indicator */}
        <div
-         className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-xl dark:shadow-black/30 z-[60]"
+         className={`lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-xl dark:shadow-black/30 z-[60] ${hideMobileStickyCTA ? 'hidden' : ''}`}
          style={{
            willChange: 'transform',
            transform: 'translateZ(0)',

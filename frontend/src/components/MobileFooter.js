@@ -11,7 +11,7 @@ import { useAuthModal } from '../contexts/AuthModalContext'
 import { useToast } from '../contexts/ToastContext'
 import CartDisplay from './CartDisplay'
 
-const MobileFooter = ({ wishlistCount: propWishlistCount = 0 }) => {
+const MobileFooter = ({ wishlistCount: propWishlistCount = 0, hidden = false }) => {
   const router = useRouter()
   const pathname = usePathname()
   const [activeTab, setActiveTab] = useState('home')
@@ -184,7 +184,7 @@ const MobileFooter = ({ wishlistCount: propWishlistCount = 0 }) => {
   return (
     <>
       {/* Expandable Help Menu */}
-      {isHelpExpanded && (
+      {isHelpExpanded && !hidden && (
         <div className="fixed bottom-[4.5rem] right-4 z-40">
           <div className="flex flex-col space-y-2 mb-4">
             {helpOptions.map((option, index) => (
@@ -203,6 +203,7 @@ const MobileFooter = ({ wishlistCount: propWishlistCount = 0 }) => {
         </div>
       )}
 
+      {!hidden && (
       <footer
         className="fixed bottom-0 left-0 right-0 w-full z-50 h-[3.6rem] max-w-full bg-white dark:bg-gray-800 backdrop-blur-md rounded-t-2xl shadow-lg dark:shadow-xl dark:shadow-black/20 border border-gray-200/50 dark:border-gray-700/50 border-t-2 border-t-pink-200 dark:border-t-pink-700"
       >
@@ -253,6 +254,7 @@ const MobileFooter = ({ wishlistCount: propWishlistCount = 0 }) => {
           })}
         </div>
       </footer>
+      )}
       
       {/* Cart Display Modal */}
       <CartDisplay
