@@ -16,10 +16,12 @@ import { useCategoryMenu } from '../contexts/CategoryMenuContext';
 import { formatPrice } from '../utils/priceFormatter';
 import { toListingProductCardShape } from '../utils/listingProductTransform';
 
-const LISTING_PAGE_SIZE = 16;
+const LISTING_PAGE_SIZE = 40;
 const NUDGE_STORAGE_PREFIX = 'creamingo-listing-sub-nudge';
 /** Hide the subcategory nudge when the user returns near the top (sticky header + location). */
 const NUDGE_AUTO_HIDE_SCROLL_TOP_PX = 140;
+const NUDGE_COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes
+const NUDGE_MAX_SHOWS_PER_DAY = 2;
 
 const ListingPage = () => {
   const params = useParams();
@@ -53,6 +55,7 @@ const ListingPage = () => {
   const leftScrollIndicatorRef = useRef(null);
   const rightScrollIndicatorRef = useRef(null);
   const nudgeSentinelRef = useRef(null);
+  const nudgeVisibleRef = useRef(false);
   
   // Calculate max price from products and round up to ensure slider can reach it
   const rawMaxPrice = products.length > 0 
@@ -340,16 +343,101 @@ const ListingPage = () => {
     fetchProductsPage,
   ]);
 
-  const dismissSubcategoryNudge = useCallback(() => {
-    if (categorySlug) {
-      try {
-        sessionStorage.setItem(`${NUDGE_STORAGE_PREFIX}:${categorySlug}`, '1');
-      } catch (_) {
-        /* ignore */
-      }
-    }
-    setShowSubcategoryNudge(false);
+  const getNudgeStorageKey = useCallback(() => {
+    if (!categorySlug) return null;
+    return `${NUDGE_STORAGE_PREFIX}:${categorySlug}`;
   }, [categorySlug]);
+
+  const getLocalDayKey = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = `${now.getMonth() + 1}`.padStart(2, '0');
+    const day = `${now.getDate()}`.padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const readNudgeMeta = useCallback(() => {
+    const key = getNudgeStorageKey();
+    const todayKey = getLocalDayKey();
+    const fallback = { dayKey: todayKey, showCount: 0, dismissedAt: 0 };
+    if (!key) return fallback;
+
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return fallback;
+      const parsed = JSON.parse(raw);
+      const meta = {
+        dayKey: typeof parsed?.dayKey === 'string' ? parsed.dayKey : todayKey,
+        showCount: Number.isFinite(parsed?.showCount) ? parsed.showCount : 0,
+        dismissedAt: Number.isFinite(parsed?.dismissedAt) ? parsed.dismissedAt : 0,
+      };
+      // Reset daily show counter when local calendar day changes.
+      if (meta.dayKey !== todayKey) {
+        meta.dayKey = todayKey;
+        meta.showCount = 0;
+      }
+      return meta;
+    } catch (_) {
+      return fallback;
+    }
+  }, [getNudgeStorageKey]);
+
+  const writeNudgeMeta = useCallback((meta) => {
+    const key = getNudgeStorageKey();
+    if (!key) return;
+    try {
+      localStorage.setItem(key, JSON.stringify(meta));
+    } catch (_) {
+      /* ignore */
+    }
+  }, [getNudgeStorageKey]);
+
+  const canShowSubcategoryNudge = useCallback(() => {
+    const meta = readNudgeMeta();
+    const now = Date.now();
+    const inCooldown =
+      Number(meta.dismissedAt) > 0 &&
+      now - Number(meta.dismissedAt) < NUDGE_COOLDOWN_MS;
+    const hitDailyCap = Number(meta.showCount) >= NUDGE_MAX_SHOWS_PER_DAY;
+    return !inCooldown && !hitDailyCap;
+  }, [readNudgeMeta]);
+
+  const markSubcategoryNudgeShown = useCallback(() => {
+    const meta = readNudgeMeta();
+    const nextShowCount = Math.min(
+      Number(meta.showCount) + 1,
+      NUDGE_MAX_SHOWS_PER_DAY
+    );
+    writeNudgeMeta({
+      ...meta,
+      showCount: nextShowCount,
+    });
+  }, [readNudgeMeta, writeNudgeMeta]);
+
+  const hideSubcategoryNudge = useCallback(() => {
+    nudgeVisibleRef.current = false;
+    setShowSubcategoryNudge(false);
+  }, []);
+
+  const maybeShowSubcategoryNudge = useCallback(() => {
+    if (nudgeVisibleRef.current) return;
+    if (!canShowSubcategoryNudge()) {
+      hideSubcategoryNudge();
+      return;
+    }
+    markSubcategoryNudgeShown();
+    nudgeVisibleRef.current = true;
+    setShowSubcategoryNudge(true);
+  }, [canShowSubcategoryNudge, hideSubcategoryNudge, markSubcategoryNudgeShown]);
+
+  const dismissSubcategoryNudge = useCallback(() => {
+    const meta = readNudgeMeta();
+    writeNudgeMeta({
+      ...meta,
+      dismissedAt: Date.now(),
+    });
+    hideSubcategoryNudge();
+  }, [hideSubcategoryNudge, readNudgeMeta, writeNudgeMeta]);
 
   const handleSortChange = (newSortBy) => {
     setSortBy(newSortBy);
@@ -602,25 +690,23 @@ const ListingPage = () => {
     : `${totalProductCount} Products`;
 
   useEffect(() => {
+    nudgeVisibleRef.current = showSubcategoryNudge;
+  }, [showSubcategoryNudge]);
+
+  useEffect(() => {
     if (typeof window === 'undefined' || loading || error) return;
     if (isSubcategory || !categorySlug || allSubcategories.length === 0) {
-      setShowSubcategoryNudge(false);
+      hideSubcategoryNudge();
       return;
     }
-    let dismissed = false;
-    try {
-      dismissed = sessionStorage.getItem(`${NUDGE_STORAGE_PREFIX}:${categorySlug}`) === '1';
-    } catch (_) {
-      dismissed = false;
-    }
-    if (dismissed) {
-      setShowSubcategoryNudge(false);
+    if (!canShowSubcategoryNudge()) {
+      hideSubcategoryNudge();
       return;
     }
 
     const hideNudgeNearTop = () => {
       if (window.scrollY <= NUDGE_AUTO_HIDE_SCROLL_TOP_PX) {
-        setShowSubcategoryNudge(false);
+        hideSubcategoryNudge();
       }
     };
 
@@ -644,16 +730,16 @@ const ListingPage = () => {
       obs = new IntersectionObserver(
         ([entry]) => {
           if (entry.isIntersecting) {
-            setShowSubcategoryNudge(true);
+            maybeShowSubcategoryNudge();
             return;
           }
           if (window.scrollY <= NUDGE_AUTO_HIDE_SCROLL_TOP_PX) {
-            setShowSubcategoryNudge(false);
+            hideSubcategoryNudge();
             return;
           }
           // Sentinel is fully below the viewport — user scrolled back up past the nudge zone
           if (entry.boundingClientRect.top > window.innerHeight) {
-            setShowSubcategoryNudge(false);
+            hideSubcategoryNudge();
           }
         },
         { root: null, rootMargin: '80px 0px', threshold: 0 }
@@ -672,6 +758,9 @@ const ListingPage = () => {
     categorySlug,
     allSubcategories.length,
     sortedProducts.length,
+    canShowSubcategoryNudge,
+    hideSubcategoryNudge,
+    maybeShowSubcategoryNudge,
   ]);
 
   if (error) {
@@ -809,8 +898,8 @@ const ListingPage = () => {
                       tabIndex={0}
                       className={`group flex flex-col items-center p-1.5 rounded-xl border-2 transition-all duration-300 flex-shrink-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-800 ${
                       subCategorySlug === subcategory.slug
-                          ? 'border-pink-400 dark:border-pink-400/80 bg-purple-50 dark:bg-purple-900/30 shadow-md shadow-pink-200/30 dark:shadow-pink-900/25'
-                          : 'border-pink-100 dark:border-pink-500/30 bg-white dark:bg-gray-700 shadow-sm shadow-pink-50/40 dark:shadow-black/20 hover:border-pink-200 dark:hover:border-pink-400/45 hover:shadow-md hover:shadow-pink-100/35 dark:hover:shadow-pink-900/25'
+                          ? 'border-pink-500 dark:border-pink-400/90 bg-purple-50 dark:bg-purple-900/30 shadow-md shadow-pink-200/35 dark:shadow-pink-900/30'
+                          : 'border-pink-200 dark:border-pink-500/45 bg-white dark:bg-gray-700 shadow-sm shadow-pink-100/45 dark:shadow-black/20 hover:border-pink-300 dark:hover:border-pink-400/60 hover:shadow-md hover:shadow-pink-100/40 dark:hover:shadow-pink-900/30'
                     }`}
                       style={{ scrollSnapAlign: 'start' }}
                   >

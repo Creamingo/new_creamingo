@@ -370,32 +370,37 @@ const ProductSummary = ({
   // Calculate total price including combos - for Add to Cart button and other uses
   const totalPrice = useMemo(() => productOnlyPrice + comboTotal, [productOnlyPrice, comboTotal]);
 
-  // Infer servings dynamically from weight when variant changes
+  // Infer servings dynamically from weight when variant changes.
+  // Keep this in sync with admin-panel calculateServings() for consistency.
   const inferServingsFromWeight = (weightText) => {
     if (!weightText) return null;
-    // Normalize to kilograms number
-    const lower = String(weightText).toLowerCase().trim();
-    let kg = 0;
-    const kgMatch = lower.match(/([0-9]*\.?[0-9]+)\s*(kg|kilogram|kilograms)/);
-    const gmMatch = lower.match(/([0-9]*\.?[0-9]+)\s*(g|gm|gram|grams)/);
-    if (kgMatch) {
-      kg = parseFloat(kgMatch[1]);
-    } else if (gmMatch) {
-      kg = parseFloat(gmMatch[1]) / 1000;
-    } else {
-      // try parsing like "1500 gm" or "1.5kg" without space
-      const compactKg = lower.match(/([0-9]*\.?[0-9]+)kg/);
-      if (compactKg) kg = parseFloat(compactKg[1]);
+    const match = String(weightText).trim().match(/^(\d+(?:\.\d+)?)\s*(.*)$/);
+    if (!match) return null;
+
+    const [, numberStr, unitRaw] = match;
+    const number = parseFloat(numberStr);
+    if (isNaN(number)) return null;
+
+    let weightInGrams = number;
+    const unitLower = String(unitRaw || '').toLowerCase();
+
+    if (unitLower === 'kg' || unitLower === 'kilogram' || unitLower === 'kilograms') {
+      weightInGrams = number * 1000;
+    } else if (unitLower === 'lb' || unitLower === 'pound' || unitLower === 'pounds') {
+      weightInGrams = number * 453.592;
+    } else if (unitLower === 'oz' || unitLower === 'ounce' || unitLower === 'ounces') {
+      weightInGrams = number * 28.3495;
     }
-    if (!kg || isNaN(kg)) return null;
-    // Heuristic mapping (common cake servings)
-    if (kg <= 0.6) return '4–6 servings';
-    if (kg <= 1.0) return '8–10 servings';
-    if (kg <= 1.5) return '12–15 servings';
-    if (kg <= 2.0) return '16–20 servings';
-    if (kg <= 2.5) return '20–25 servings';
-    if (kg <= 3.0) return '24–30 servings';
-    return `${Math.round(kg * 10)}+ servings`;
+    // For g/gm/gram/grams (and unknown units), keep numeric value as-is.
+
+    const minServings = Math.floor(weightInGrams / 100);
+    const maxServings = Math.round(weightInGrams / 83.33);
+
+    if (minServings <= 0 && maxServings <= 0) return null;
+    if (minServings === maxServings) {
+      return `${minServings} serving${minServings !== 1 ? 's' : ''}`;
+    }
+    return `${minServings}–${maxServings} servings`;
   };
 
   // Generate badges
