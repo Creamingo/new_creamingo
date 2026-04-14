@@ -884,7 +884,7 @@ const getPromoCodeAnalytics = async (req, res) => {
 // Track promo code event from frontend (public endpoint for tracking)
 const trackPromoCodeEventFromFrontend = async (req, res) => {
   try {
-    const { code, event_type, cart_value } = req.body;
+    const { code, event_type, cart_value, validation_result = null, failure_reason = null } = req.body;
     const customer_id = req.customer?.id || null;
     const ip_address = req.ip || req.connection?.remoteAddress || null;
     const user_agent = req.get('user-agent') || null;
@@ -923,6 +923,8 @@ const trackPromoCodeEventFromFrontend = async (req, res) => {
     await trackPromoCodeEvent(promo.id, event_type, {
       customer_id,
       cart_value: cart_value || null,
+      validation_result,
+      failure_reason,
       ip_address,
       user_agent,
       referrer_url
