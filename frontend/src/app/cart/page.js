@@ -459,6 +459,8 @@ export default function CartPage() {
       .filter(item => item.is_deal_item)
       .reduce((sum, item) => sum + (item.totalPrice || 0), 0);
   }, [cartItems]);
+  const dealCartItems = useMemo(() => cartItems.filter((item) => item.is_deal_item), [cartItems]);
+  const regularCartItems = useMemo(() => cartItems.filter((item) => !item.is_deal_item), [cartItems]);
   
   // Subtotal excludes deal items
   const subtotal = regularItemsTotal;
@@ -553,15 +555,16 @@ export default function CartPage() {
     })[0];
   }, [availableOffers]);
   const visibleOfferCards = useMemo(() => {
-    const eligible = topAvailableOffers.filter((promo) => promo.eligible);
+    // Keep the main cart view focused: show only one most relevant eligible offer.
+    // If a promo is already applied and still present, keep that visible as the single card.
     if (appliedPromo?.code) {
       const appliedOffer = topAvailableOffers.find((promo) => promo.code === appliedPromo.code);
-      if (appliedOffer && !eligible.some((promo) => promo.code === appliedOffer.code)) {
-        eligible.unshift(appliedOffer);
-      }
+      if (appliedOffer) return [appliedOffer];
     }
-    return eligible.slice(0, 2);
-  }, [topAvailableOffers, appliedPromo]);
+
+    if (bestEligibleOffer) return [bestEligibleOffer];
+    return [];
+  }, [topAvailableOffers, appliedPromo, bestEligibleOffer]);
   const nextBestUnlockProgress = useMemo(() => {
     if (!nextBestOffer?.minOrder) return 0;
     return Math.max(0, Math.min(100, (subtotal / nextBestOffer.minOrder) * 100));
@@ -1701,6 +1704,16 @@ export default function CartPage() {
                         String(promo.discount_type || '').toLowerCase() === 'percentage'
                           ? `${promo.discount_value}% off`
                           : `${formatPrice(promo.discount_value || 0)} off`;
+                      const statusText = isApplied
+                        ? `Applied ${appliedPromo?.code}. You saved ${formatRoundedAmount(promoDiscount)}.`
+                        : promo.eligible
+                          ? 'Ready to apply the best coupon'
+                          : `Add ${formatRoundedAmount(promo.shortBy)} more`;
+                      const statusClass = isApplied
+                        ? 'text-green-600 dark:text-green-400'
+                        : promo.eligible
+                          ? 'text-green-600 dark:text-green-400'
+                          : 'text-gray-500 dark:text-gray-400';
 
                       return (
                         <div
@@ -1716,8 +1729,8 @@ export default function CartPage() {
                               <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100 leading-tight">
                                 {discountLabel} on orders above {formatPrice(promo.minOrder)}
                               </p>
-                              <p className={`mt-0.5 text-[10px] font-medium ${promo.eligible ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                                {promo.eligible ? 'Ready to apply' : `Add ${formatRoundedAmount(promo.shortBy)} more`}
+                              <p className={`mt-0.5 text-[10px] font-medium ${statusClass}`}>
+                                {statusText}
                               </p>
                             </div>
 
@@ -1765,6 +1778,12 @@ export default function CartPage() {
                       </div>
                     )}
 
+                    {appliedPromo && nextBestOffer && (
+                      <p className="text-[11px] font-medium text-pink-600 dark:text-pink-300">
+                        Add {formatRoundedAmount(nextBestOffer.shortBy)} more to unlock {formatRoundedAmount(nextBestUnlockSavings)} OFF
+                      </p>
+                    )}
+
                     {!appliedPromo && (
                       <button
                         type="button"
@@ -1804,13 +1823,9 @@ export default function CartPage() {
                       </div>
                     )}
 
-                    {(promoStatus?.message || promoError) && (
+                    {(promoStatus?.type === 'error' || promoError) && (
                       <div
-                        className={`rounded-md border px-2.5 py-1.5 text-[11px] font-medium ${
-                          (promoStatus?.type || 'error') === 'error'
-                            ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300'
-                            : 'border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300'
-                        }`}
+                        className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] font-medium text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300"
                       >
                         {promoStatus?.message || promoError}
                       </div>
@@ -1901,7 +1916,7 @@ export default function CartPage() {
                                 </div>
                                 <div className="mt-0.5 flex items-center justify-between gap-2">
                                   <p className={`text-[11px] font-medium ${promo.eligible ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                                    {promo.eligible ? 'Ready to apply' : `Add ${formatRoundedAmount(promo.shortBy)} more`}
+                                    {promo.eligible ? 'Ready to apply the best coupon' : `Add ${formatRoundedAmount(promo.shortBy)} more`}
                                   </p>
                                   {isBestEligible && (
                                     <span className="text-[11px] font-semibold text-pink-600 dark:text-pink-300">
@@ -1944,15 +1959,19 @@ export default function CartPage() {
                 </div>
               )}
 
+              {topAvailableOffers.length > 0 && cartItems.length > 0 && (
+                <div className="border-t border-gray-200/90 dark:border-gray-700/90 pt-4 sm:pt-5" />
+              )}
+
               {/* Deal Items - Grid Layout for Mobile */}
-              {cartItems.filter(item => item.is_deal_item).length > 0 && (
+              {dealCartItems.length > 0 && (
                 <div className="mb-4 sm:mb-6">
                   <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 mb-2 sm:mb-3 flex items-center gap-2">
                     <Gift className="w-4 h-4 sm:w-5 sm:h-5 text-pink-600 dark:text-pink-400" />
                     Deal Items
                   </h2>
-                  <div className="grid grid-cols-1 gap-4 sm:gap-5">
-                    {cartItems.filter(item => item.is_deal_item).map((item, index) => {
+                  <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 sm:grid sm:grid-cols-1 sm:gap-5 sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent sm:dark:bg-transparent">
+                    {dealCartItems.map((item, index) => {
                       // Number sequentially across all main products (deal items start from 1)
                       const productNumber = index + 1;
                       const itemPrice = item.is_deal_item && item.deal_price 
@@ -1973,7 +1992,11 @@ export default function CartPage() {
                       return (
                         <div
                           key={item.id}
-                          className="relative overflow-hidden mb-4 sm:mb-5"
+                          className={`relative overflow-hidden sm:mb-5 ${
+                            index !== dealCartItems.length - 1
+                              ? 'border-b border-gray-200/90 dark:border-gray-700/90 sm:border-0'
+                              : ''
+                          }`}
                           onTouchStart={(e) => handleTouchStart(e, item.id)}
                           onTouchMove={(e) => handleTouchMove(e, item.id)}
                           onTouchEnd={(e) => handleTouchEnd(e, item.id)}
@@ -1987,8 +2010,8 @@ export default function CartPage() {
                           )}
                           
                           <div
-                          className={`bg-white dark:bg-gray-800 rounded-xl border-l-4 border-pink-500 dark:border-pink-400 border border-gray-200 dark:border-gray-700 p-3 sm:p-4 transition-all duration-300 ${
-                            isRemoving ? 'opacity-50 scale-95' : 'hover:shadow-lg dark:hover:shadow-xl dark:hover:shadow-black/30 hover:border-pink-300 dark:hover:border-pink-600'
+                          className={`bg-transparent sm:bg-white sm:dark:bg-gray-800 rounded-none sm:rounded-xl border-0 sm:border sm:border-gray-200 sm:dark:border-gray-700 sm:border-l-4 sm:border-l-pink-500 sm:dark:border-l-pink-400 p-3 sm:p-4 transition-all duration-300 ${
+                            isRemoving ? 'opacity-50 scale-95' : 'sm:hover:shadow-lg sm:dark:hover:shadow-xl sm:dark:hover:shadow-black/30 sm:hover:border-pink-300 sm:dark:hover:border-pink-600'
                           }`}
                             style={{
                               transform: `translateX(${dealSwipeOffset}px)`,
@@ -2080,11 +2103,11 @@ export default function CartPage() {
               )}
 
               {/* Regular Items */}
-              {cartItems.filter(item => !item.is_deal_item).length > 0 && (
-                <div>
-                  {cartItems.filter(item => !item.is_deal_item).map((item, index) => {
+              {regularCartItems.length > 0 && (
+                <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent sm:dark:bg-transparent">
+                  {regularCartItems.map((item, index) => {
                     // Number sequentially across all main products (continue after deal items)
-                    const dealItemsCount = cartItems.filter(item => item.is_deal_item).length;
+                    const dealItemsCount = dealCartItems.length;
                     const productNumber = dealItemsCount + index + 1;
                     // Use deal price if it's a deal item
                     const itemPrice = item.is_deal_item && item.deal_price 
@@ -2119,7 +2142,11 @@ export default function CartPage() {
                       <div
                         id={`cart-item-${item.id}`}
                         key={item.id}
-                        className="relative overflow-hidden mb-4 sm:mb-5"
+                        className={`relative overflow-hidden sm:mb-5 ${
+                          index !== regularCartItems.length - 1
+                            ? 'border-b border-gray-200/90 dark:border-gray-700/90 sm:border-0'
+                            : ''
+                        }`}
                         onTouchStart={(e) => handleTouchStart(e, item.id)}
                         onTouchMove={(e) => handleTouchMove(e, item.id)}
                         onTouchEnd={(e) => handleTouchEnd(e, item.id)}
@@ -2133,8 +2160,8 @@ export default function CartPage() {
                         )}
                         
                         <div
-                          className={`bg-white dark:bg-gray-800 rounded-xl border-l-4 border-blue-500 dark:border-blue-400 border border-gray-200 dark:border-gray-700 p-3 sm:p-4 lg:p-6 transition-all duration-300 ${
-                          isRemoving ? 'opacity-50 scale-95' : 'hover:shadow-lg dark:hover:shadow-xl dark:hover:shadow-black/30 hover:border-blue-300 dark:hover:border-blue-600'
+                          className={`bg-transparent sm:bg-white sm:dark:bg-gray-800 rounded-none sm:rounded-xl border-0 sm:border sm:border-gray-200 sm:dark:border-gray-700 sm:border-l-4 sm:border-l-blue-500 sm:dark:border-l-blue-400 p-3 sm:p-4 lg:p-6 transition-all duration-300 ${
+                          isRemoving ? 'opacity-50 scale-95' : 'sm:hover:shadow-lg sm:dark:hover:shadow-xl sm:dark:hover:shadow-black/30 sm:hover:border-blue-300 sm:dark:hover:border-blue-600'
                         }`}
                           style={{
                             transform: `translateX(${swipeOffset}px)`,
@@ -2706,7 +2733,7 @@ export default function CartPage() {
 
               {/* Deal Unlocked Section */}
               {cartItems.length > 0 && (
-                <div className="mt-5 sm:mt-7">
+                <div className="mt-5 sm:mt-7 border-t border-gray-200/90 dark:border-gray-700/90 pt-4 sm:pt-5">
                   <CartDeals />
                 </div>
               )}
@@ -3284,16 +3311,16 @@ export default function CartPage() {
         <div className="lg:hidden fixed left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-black/40 z-40 bottom-0">
           <div className="max-w-7xl mx-auto px-2 py-1">
             {/* Total Box and Checkout Button Row */}
-            <div className="flex items-center gap-1.5 mb-0.5">
-              <div className="w-[20vw] min-w-[64px] h-[48px] bg-gray-50 dark:bg-gray-700/50 rounded-lg px-1.5 py-1 border border-pink-300 dark:border-pink-500/50 flex items-center justify-center shrink-0">
+            <div className="flex items-center gap-2 mb-0.5">
+              <div className="w-[28vw] min-w-[86px] h-[48px] bg-gradient-to-br from-pink-50 to-rose-50 dark:from-pink-900/25 dark:to-rose-900/20 rounded-lg px-2 py-1 border border-pink-400/80 dark:border-pink-500/60 shadow-[0_1px_6px_rgba(236,72,153,0.12)] dark:shadow-black/20 flex items-center justify-center shrink-0">
                 <div className="flex flex-col items-center justify-center text-center leading-tight">
-                  <p className="text-xs font-bold text-pink-600 dark:text-pink-400">{formatPrice(total)}</p>
-                  <span className="text-[9px] text-gray-500 dark:text-gray-400">{cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'}</span>
+                  <p className="text-[13px] font-extrabold text-pink-600 dark:text-pink-400">{formatPrice(total)}</p>
+                  <span className="text-[10px] font-medium text-gray-600 dark:text-gray-300">{cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'}</span>
                 </div>
               </div>
               <button
                 onClick={handleCheckout}
-                className="flex-1 min-h-[48px] h-[48px] py-2 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all font-bold text-sm shadow-lg dark:shadow-xl dark:shadow-black/30 active:scale-[0.98] flex items-center justify-center gap-1.5"
+                className="flex-1 min-h-[46px] h-[46px] py-1.5 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all font-bold text-[13px] shadow-lg dark:shadow-xl dark:shadow-black/30 active:scale-[0.98] flex items-center justify-center gap-1.5"
               >
                 <span>PROCEED TO CHECKOUT</span>
                 <ChevronRight className="w-4 h-4" />

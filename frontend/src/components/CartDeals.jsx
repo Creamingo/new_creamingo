@@ -149,6 +149,8 @@ const CartDeals = () => {
 
   const unlockedDeals = deals.eligible_deals.filter(d => d.status === 'unlocked');
   const lockedDeals = deals.eligible_deals.filter(d => d.status === 'locked');
+  const unlockedAddedCount = unlockedDeals.filter((deal) => isDealInCart(deal.product_id)).length;
+  const allUnlockedAlreadyAdded = unlockedDeals.length > 0 && unlockedAddedCount === unlockedDeals.length;
 
   return (
     <div className="space-y-3 sm:space-y-4">
@@ -156,13 +158,17 @@ const CartDeals = () => {
       {unlockedDeals.length > 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-lg sm:rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-6 shadow-sm dark:shadow-xl dark:shadow-black/30">
           <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-            <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 dark:text-green-400" />
+            <TrendingUp className={`w-4 h-4 sm:w-5 sm:h-5 ${allUnlockedAlreadyAdded ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'}`} />
             <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
-              Deal unlocked!
+              {allUnlockedAlreadyAdded ? 'Deal added to cart!' : 'Deal unlocked!'}
             </h3>
-            <span className="inline-flex items-center gap-1 rounded-full bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-[10px] font-semibold px-2 py-0.5 border border-green-200 dark:border-green-800">
+            <span className={`inline-flex items-center gap-1 rounded-full text-[10px] font-semibold px-2 py-0.5 border ${
+              allUnlockedAlreadyAdded
+                ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+                : 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800'
+            }`}>
               <CheckCircle className="w-3 h-3" />
-              Unlocked
+              {allUnlockedAlreadyAdded ? 'Added' : 'Unlocked'}
             </span>
           </div>
 
@@ -174,10 +180,16 @@ const CartDeals = () => {
 
               return (
                 <div key={deal.deal_id} className="rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
-                  {/* Top bar - same style as Upcoming Deals but green for unlocked */}
-                  <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-3 py-2 text-xs sm:text-sm font-semibold flex items-center gap-2">
+                  {/* Top bar changes with state to avoid same-message confusion */}
+                  <div
+                    className={`px-3 py-2 text-xs sm:text-sm font-semibold flex items-center gap-2 ${
+                      alreadyInCart
+                        ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-b border-blue-200 dark:border-blue-800'
+                        : 'bg-gradient-to-r from-green-600 to-emerald-600 text-white'
+                    }`}
+                  >
                     <CheckCircle className="w-3.5 h-3.5" />
-                    <span>Deal unlocked – grab now</span>
+                    <span>{alreadyInCart ? 'Deal added to cart' : 'Deal unlocked - grab now'}</span>
                   </div>
 
                   {/* Deal card - same layout as Upcoming Deals */}
