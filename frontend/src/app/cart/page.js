@@ -582,6 +582,31 @@ export default function CartPage() {
     });
     return [...eligibleOffers, ...lockedClosestOffers];
   }, [availableOffers]);
+  const betterEligibleOffer = useMemo(() => {
+    if (!appliedPromo?.code) return null;
+
+    const currentlyAppliedOffer = availableOffers.find((offer) => offer.code === appliedPromo.code) || null;
+    const appliedDiscountAtCurrentSubtotal = currentlyAppliedOffer
+      ? getPromoPotentialDiscount(currentlyAppliedOffer, subtotal)
+      : Number(appliedPromo.discount) || 0;
+
+    const betterEligibleCandidates = availableOffers
+      .filter((offer) => offer.eligible && offer.code !== appliedPromo.code)
+      .sort((a, b) => {
+        if ((b.potentialDiscount || 0) !== (a.potentialDiscount || 0)) {
+          return (b.potentialDiscount || 0) - (a.potentialDiscount || 0);
+        }
+        return (b.discount_value || 0) - (a.discount_value || 0);
+      });
+
+    const bestCandidate = betterEligibleCandidates[0] || null;
+    if (!bestCandidate) return null;
+
+    const bestCandidateDiscount = getPromoPotentialDiscount(bestCandidate, subtotal);
+    if (bestCandidateDiscount <= appliedDiscountAtCurrentSubtotal) return null;
+
+    return bestCandidate;
+  }, [availableOffers, appliedPromo, subtotal]);
   
   // Count regular items for subtotal display
   const regularItemsCount = useMemo(() => {
@@ -1778,10 +1803,24 @@ export default function CartPage() {
                       </div>
                     )}
 
-                    {appliedPromo && nextBestOffer && (
-                      <p className="text-[11px] font-medium text-pink-600 dark:text-pink-300">
-                        Add {formatRoundedAmount(nextBestOffer.shortBy)} more to unlock {formatRoundedAmount(nextBestUnlockSavings)} OFF
-                      </p>
+                    {appliedPromo && betterEligibleOffer && (
+                      <div className="flex items-center justify-between gap-2 rounded-md border border-pink-200 bg-pink-50/70 px-2.5 py-1.5 dark:border-pink-800 dark:bg-pink-900/20">
+                        <p className="text-[11px] font-medium text-pink-700 dark:text-pink-300">
+                          Better offer available:{' '}
+                          {String(betterEligibleOffer.discount_type || '').toLowerCase() === 'percentage'
+                            ? `${betterEligibleOffer.discount_value}% OFF`
+                            : `${formatPrice(betterEligibleOffer.discount_value || 0)} OFF`}
+                          . Switch now?
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => handleSuggestedPromo(betterEligibleOffer)}
+                          disabled={isApplyingPromo}
+                          className="h-7 shrink-0 rounded-md bg-pink-600 px-2.5 text-[11px] font-semibold text-white hover:bg-pink-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-pink-700 dark:hover:bg-pink-600"
+                        >
+                          {isApplyingPromo ? '...' : 'Switch now'}
+                        </button>
+                      </div>
                     )}
 
                     {!appliedPromo && (
