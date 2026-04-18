@@ -122,6 +122,23 @@ const formatTimeSlot = (deliverySlot) => {
   return 'N/A';
 };
 
+/** Shared checkout form section chrome (P3) */
+const CHECKOUT_FORM_CARD =
+  'rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800 overflow-hidden scroll-mt-24';
+const CHECKOUT_FORM_CARD_GATE =
+  `${CHECKOUT_FORM_CARD} border-l-4 border-l-pink-500 dark:border-l-pink-400`;
+const CHECKOUT_SECTION_HEADER_BTN =
+  'ui-focus-visible flex w-full min-h-[44px] items-center justify-between p-3 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50 sm:p-4 lg:p-6 lg:pointer-events-none lg:hover:bg-transparent';
+const CHECKOUT_PRIMARY_BTN =
+  'ui-focus-visible w-full min-h-[44px] rounded-lg bg-pink-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-pink-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-pink-700 dark:hover:bg-pink-600 sm:min-h-[48px] sm:py-3';
+const CHECKOUT_SECONDARY_BTN =
+  'ui-focus-visible w-full min-h-[44px] rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700 sm:min-h-[48px] sm:py-3';
+
+/** Form field typography — aligned with cart label / meta tokens (P4) */
+const CHECKOUT_FIELD_LABEL = 'block text-cart-label mb-1 sm:mb-1.5';
+const CHECKOUT_FIELD_ERROR = 'text-form-error mt-1.5 flex items-start gap-1.5';
+const CHECKOUT_FIELD_ERROR_ICON = 'h-3.5 w-3.5 shrink-0 text-red-500 dark:text-red-400 mt-0.5';
+
 function CheckoutPageContent({ isClient }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -415,6 +432,15 @@ function CheckoutPageContent({ isClient }) {
   
   // Order summary bottom sheet state for mobile
   const [showOrderSummarySheet, setShowOrderSummarySheet] = useState(false);
+
+  useEffect(() => {
+    if (!showOrderSummarySheet) return;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setShowOrderSummarySheet(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [showOrderSummarySheet]);
   
   // Section navigation state
   const [showSectionNav, setShowSectionNav] = useState(false);
@@ -616,7 +642,14 @@ function CheckoutPageContent({ isClient }) {
   // Track active section on scroll
   useEffect(() => {
     const handleScroll = () => {
-      const sections = ['customerInfo', 'deliveryAddress', 'deliverySlot', 'paymentMethod', 'specialInstructions'];
+      const sections = [
+        'checkoutAuth',
+        'customerInfo',
+        'deliverySlot',
+        'deliveryAddress',
+        'paymentMethod',
+        'specialInstructions'
+      ];
       const scrollPosition = window.scrollY + 150;
       
       for (let i = sections.length - 1; i >= 0; i--) {
@@ -916,6 +949,34 @@ function CheckoutPageContent({ isClient }) {
 
   const cartDeliverySlot = getCartDeliverySlot();
 
+  /** Tracks prior "must pick / replace slot" state to expand by default, then collapse after slot becomes valid. */
+  const prevCheckoutSlotNeedsActionRef = useRef(null);
+
+  // Open date/time picker when checkout needs a slot (none or expired); collapse after slot becomes valid again.
+  useEffect(() => {
+    if (pathname !== '/checkout') {
+      prevCheckoutSlotNeedsActionRef.current = null;
+      return;
+    }
+    if (!isInitialized) return;
+
+    const effectiveSlot = selectedSlot || cartDeliverySlot;
+    const needsAction =
+      !effectiveSlot || getSlotExpirationStatus(effectiveSlot) === 'expired';
+    const wasNeedsAction = prevCheckoutSlotNeedsActionRef.current;
+    prevCheckoutSlotNeedsActionRef.current = needsAction;
+
+    if (needsAction) {
+      setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+      setShowSlotSelector(true);
+      return;
+    }
+
+    if (wasNeedsAction === true) {
+      setShowSlotSelector(false);
+    }
+  }, [pathname, isInitialized, selectedSlot, cartDeliverySlot, cartItems.length]);
+
   // Track previous expiration status to detect changes
   const previousExpirationStatusRef = React.useRef(null);
 
@@ -1139,7 +1200,6 @@ function CheckoutPageContent({ isClient }) {
       currentPinCode && 
       isValidPinCode && 
       !isAutoSelected &&
-      !showSlotSelector &&
       !isLoadingEarliestSlot
     ) {
       setIsLoadingEarliestSlot(true);
@@ -1201,7 +1261,8 @@ function CheckoutPageContent({ isClient }) {
                   deliveryDate: slotDateObj.toISOString().split('T')[0],
                   deliveryTime: timeString
                 }));
-                
+                setShowSlotSelector(false);
+
                 break; // Stop after finding first available slot
               }
             }
@@ -1221,7 +1282,7 @@ function CheckoutPageContent({ isClient }) {
       
       return () => clearTimeout(timer);
     }
-  }, [selectedSlot, cartDeliverySlot, currentPinCode, isValidPinCode, isAutoSelected, showSlotSelector, isLoadingEarliestSlot]);
+  }, [selectedSlot, cartDeliverySlot, currentPinCode, isValidPinCode, isAutoSelected, isLoadingEarliestSlot]);
 
   // Auto-update expired delivery slots when checkout page loads
   useEffect(() => {
@@ -2398,18 +2459,20 @@ function CheckoutPageContent({ isClient }) {
           
           <h1 className="heading-page">Checkout</h1>
           <p className="text-cart-subtitle mt-0.5 text-gray-600 dark:text-gray-400 sm:mt-1">
-            Complete your order details
+            {isAuthenticated
+              ? 'Add your details, choose delivery, then pay.'
+              : 'Sign in, choose delivery, then pay.'}
           </p>
         </div>
 
         {error && (
           <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2 sm:gap-3">
             <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
-            <p className="text-sm sm:text-base text-red-700 dark:text-red-300">{error}</p>
+            <p className="text-cart-body text-red-800 dark:text-red-200">{error}</p>
           </div>
         )}
 
-        {/* Delivery Slot Warning Banner - Prominent warning for expired/expiring slots */}
+        {/* Delivery Slot Warning Banner — blocking (expired) vs soft (expiring soon) */}
         {isClient && (selectedSlot || cartDeliverySlot) && !showSlotSelector && (() => {
           const currentSlot = selectedSlot || cartDeliverySlot;
           if (!currentSlot) return null;
@@ -2418,36 +2481,30 @@ function CheckoutPageContent({ isClient }) {
           const isExpired = expirationStatus === 'expired';
           const isExpiringSoon = expirationStatus === 'expiring_soon';
           
-          // Debug: Log expiration status (can be removed in production)
-          if (process.env.NODE_ENV === 'development') {
-            console.log('Slot expiration status:', {
-              expirationStatus,
-              slotDate: currentSlot.date,
-              slotTime: currentSlot.time || currentSlot.slot?.startTime,
-              countdown
-            });
-          }
-          
           if (isExpired) {
             return (
-              <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-800 rounded-lg animate-pulse">
+              <div
+                className="mb-4 sm:mb-6 rounded-xl border-2 border-red-500 bg-red-50 p-3 shadow-sm dark:border-red-500 dark:bg-red-950/50 sm:p-4"
+                role="alert"
+              >
                 <div className="flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <h3 className="text-sm sm:text-base font-bold text-red-800 dark:text-red-300 mb-1">
-                      ⚠️ Delivery Slot Expired
+                  <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <h3 className="heading-subsection mb-1 flex items-center gap-2 text-red-900 dark:text-red-200">
+                      <span className="min-w-0">Delivery slot expired</span>
                     </h3>
-                    <p className="text-xs sm:text-sm text-red-700 dark:text-red-400 mb-2">
+                    <p className="text-form-helper mb-3 text-red-800 dark:text-red-200">
                       Your selected delivery slot has expired. Please select a new slot to continue with your order.
                     </p>
                     <button
+                      type="button"
                       onClick={() => {
                         setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
                         setShowSlotSelector(true);
                       }}
-                      className="px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-600 transition-colors font-medium"
+                      className="ui-focus-visible min-h-[44px] rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600 sm:min-h-[48px]"
                     >
-                      Select New Slot
+                      Select new slot
                     </button>
                   </div>
                 </div>
@@ -2455,41 +2512,47 @@ function CheckoutPageContent({ isClient }) {
             );
           } else if (isExpiringSoon && !dismissExpiringSoonWarning) {
             return (
-              <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-300 dark:border-yellow-800 rounded-lg relative">
+              <div
+                className="relative mb-4 sm:mb-6 rounded-xl border border-yellow-400/90 bg-yellow-50/95 p-3 dark:border-yellow-600 dark:bg-yellow-950/35 sm:p-4"
+                role="status"
+              >
                 <button
+                  type="button"
                   onClick={() => setDismissExpiringSoonWarning(true)}
-                  className="absolute top-2 right-2 sm:top-3 sm:right-3 p-1 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 rounded-full transition-colors"
-                  aria-label="Close warning"
+                  className="ui-focus-visible absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-full text-yellow-800 transition-colors hover:bg-yellow-100 dark:text-yellow-200 dark:hover:bg-yellow-900/40 sm:right-3 sm:top-3"
+                  aria-label="Dismiss expiring slot reminder"
                 >
-                  <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <X className="h-5 w-5" aria-hidden />
                 </button>
-                <div className="flex items-start gap-3 pr-6 sm:pr-8">
-                  <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <h3 className="text-sm sm:text-base font-bold text-yellow-800 dark:text-yellow-300 mb-1">
-                      ⏰ Delivery Slot Expiring Soon
+                <div className="flex items-start gap-3 pr-12 sm:pr-14">
+                  <Clock className="mt-0.5 h-5 w-5 shrink-0 text-yellow-700 dark:text-yellow-300 sm:h-6 sm:w-6" aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <h3 className="heading-subsection mb-1 text-yellow-900 dark:text-yellow-200">
+                      Delivery slot expiring soon
                     </h3>
-                    <p className="text-xs sm:text-sm text-yellow-700 dark:text-yellow-400 mb-2">
+                    <p className="text-form-helper mb-3 text-yellow-900/95 dark:text-yellow-100/90">
                       {countdown 
                         ? `Your delivery slot expires in ${countdown.hours} hour${countdown.hours !== 1 ? 's' : ''} ${countdown.minutes} minute${countdown.minutes !== 1 ? 's' : ''}. Please complete your order soon or select a new slot.`
                         : 'Your delivery slot is expiring soon. Please complete your order quickly or select a new slot.'}
                     </p>
                     <div className="flex flex-wrap gap-2">
                       <button
+                        type="button"
                         onClick={() => {
                           setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
                           setShowSlotSelector(true);
                         }}
-                        className="px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm border border-yellow-600 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300 rounded-lg hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition-colors font-medium"
+                        className="ui-focus-visible min-h-[44px] rounded-lg border border-yellow-600 px-4 py-2.5 text-sm font-medium text-yellow-900 transition-colors hover:bg-yellow-100 dark:border-yellow-500 dark:text-yellow-100 dark:hover:bg-yellow-900/40 sm:min-h-[48px]"
                       >
-                        Change Slot
+                        Change slot
                       </button>
                       <button
+                        type="button"
                         onClick={handlePlaceOrder}
                         disabled={loading || !selectedSlot || !isAuthenticated}
-                        className="px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm bg-yellow-600 dark:bg-yellow-700 text-white rounded-lg hover:bg-yellow-700 dark:hover:bg-yellow-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="ui-focus-visible min-h-[44px] rounded-lg bg-yellow-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-yellow-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-yellow-700 dark:hover:bg-yellow-600 sm:min-h-[48px]"
                       >
-                        Complete Order Now
+                        Complete order now
                       </button>
                     </div>
                   </div>
@@ -2504,21 +2567,25 @@ function CheckoutPageContent({ isClient }) {
           {/* LEFT SECTION: Form */}
           <div className="space-y-4 sm:space-y-6">
             {!isAuthenticated && (
+              <div className="space-y-2 sm:space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                  1 · Account
+                </p>
               <div
                 id="checkoutAuth"
                 ref={authSectionRef}
-                className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-pink-500 dark:border-pink-400 border border-gray-200 dark:border-gray-700 overflow-hidden scroll-mt-24"
+                className={CHECKOUT_FORM_CARD_GATE}
               >
                 <div className="p-3 sm:p-4 lg:p-6 border-b border-gray-100 dark:border-gray-700">
                   <div className="flex items-start gap-3">
                     <div className="p-2 rounded-lg bg-pink-100 dark:bg-pink-900/30">
                       <Lock className="w-4 h-4 sm:w-5 sm:h-5 text-pink-600 dark:text-pink-400" />
                     </div>
-                    <div>
-                      <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">
+                    <div className="min-w-0">
+                      <h2 className="heading-section text-gray-900 dark:text-gray-100">
                         Sign in to place your order
                       </h2>
-                      <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      <p className="text-form-helper mt-1">
                         Use your email to continue. We will prompt you to sign in or create an account.
                       </p>
                     </div>
@@ -2527,16 +2594,16 @@ function CheckoutPageContent({ isClient }) {
 
                 <div className="px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6">
                   {authError && (
-                    <div className="mb-3 sm:mb-4 p-2.5 sm:p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-xs sm:text-sm text-red-700 dark:text-red-300 flex items-start gap-2">
-                      <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                      <span>{authError}</span>
+                    <div className="mb-3 sm:mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-2.5 dark:border-red-800 dark:bg-red-900/20 sm:p-3">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" aria-hidden />
+                      <span className="min-w-0 text-sm leading-snug text-red-800 dark:text-red-200">{authError}</span>
                     </div>
                   )}
 
                   {authStep === 'email' && (
                     <form onSubmit={handleCheckEmail} className="space-y-3 sm:space-y-4">
-                      <div>
-                        <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                      <div className="space-y-1">
+                        <label className={CHECKOUT_FIELD_LABEL}>
                           Email *
                         </label>
                         <input
@@ -2551,7 +2618,7 @@ function CheckoutPageContent({ isClient }) {
                       <button
                         type="submit"
                         disabled={authLoading}
-                        className="w-full px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-semibold bg-pink-600 dark:bg-pink-700 text-white rounded-lg hover:bg-pink-700 dark:hover:bg-pink-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className={CHECKOUT_PRIMARY_BTN}
                       >
                         {authLoading ? 'Checking...' : 'Continue'}
                       </button>
@@ -2560,12 +2627,12 @@ function CheckoutPageContent({ isClient }) {
 
                   {authStep === 'login' && (
                     <form onSubmit={handleLoginSubmit} className="space-y-3 sm:space-y-4">
-                      <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                        Account found for <span className="font-semibold text-gray-900 dark:text-gray-100">{authEmail}</span>
+                      <div className="text-form-context">
+                        Account found for <span className="text-cart-body-strong text-gray-900 dark:text-gray-100">{authEmail}</span>
                         {emailCheckResult?.customer?.name ? ` • Welcome back, ${emailCheckResult.customer.name}` : ''}
                       </div>
-                      <div>
-                        <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                      <div className="space-y-1">
+                        <label className={CHECKOUT_FIELD_LABEL}>
                           Password *
                         </label>
                         <div className="relative">
@@ -2594,7 +2661,7 @@ function CheckoutPageContent({ isClient }) {
                       <button
                         type="submit"
                         disabled={authLoading}
-                        className="w-full px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-semibold bg-pink-600 dark:bg-pink-700 text-white rounded-lg hover:bg-pink-700 dark:hover:bg-pink-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className={CHECKOUT_PRIMARY_BTN}
                       >
                         {authLoading ? 'Signing in...' : 'Sign in'}
                       </button>
@@ -2604,7 +2671,7 @@ function CheckoutPageContent({ isClient }) {
                           setAuthStep('email');
                           setAuthError('');
                         }}
-                        className="w-full text-xs sm:text-sm text-gray-600 dark:text-gray-400 hover:text-pink-600 dark:hover:text-pink-400 transition-colors"
+                        className="text-form-helper w-full text-center text-gray-600 transition-colors hover:text-pink-600 dark:text-gray-400 dark:hover:text-pink-400"
                       >
                         Use a different email
                       </button>
@@ -2613,11 +2680,11 @@ function CheckoutPageContent({ isClient }) {
 
                   {authStep === 'signup' && (
                     <form onSubmit={handleSignupSubmit} className="space-y-3 sm:space-y-4">
-                      <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                        New account for <span className="font-semibold text-gray-900 dark:text-gray-100">{authEmail}</span>
+                      <div className="text-form-context">
+                        New account for <span className="text-cart-body-strong text-gray-900 dark:text-gray-100">{authEmail}</span>
                       </div>
-                      <div>
-                        <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                      <div className="space-y-1">
+                        <label className={CHECKOUT_FIELD_LABEL}>
                           Full Name *
                         </label>
                         <input
@@ -2630,8 +2697,8 @@ function CheckoutPageContent({ isClient }) {
                           placeholder="Enter your full name"
                         />
                       </div>
-                      <div>
-                        <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                      <div className="space-y-1">
+                        <label className={CHECKOUT_FIELD_LABEL}>
                           Mobile Number
                         </label>
                         <input
@@ -2644,8 +2711,8 @@ function CheckoutPageContent({ isClient }) {
                         />
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                        <div>
-                          <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                        <div className="space-y-1">
+                          <label className={CHECKOUT_FIELD_LABEL}>
                             Password *
                           </label>
                           <div className="relative">
@@ -2672,8 +2739,8 @@ function CheckoutPageContent({ isClient }) {
                             </button>
                           </div>
                         </div>
-                        <div>
-                          <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                        <div className="space-y-1">
+                          <label className={CHECKOUT_FIELD_LABEL}>
                             Confirm Password *
                           </label>
                           <div className="relative">
@@ -2701,8 +2768,8 @@ function CheckoutPageContent({ isClient }) {
                           </div>
                         </div>
                       </div>
-                      <div>
-                        <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                      <div className="space-y-1">
+                        <label className={CHECKOUT_FIELD_LABEL}>
                           Referral Code (optional)
                         </label>
                         <input
@@ -2716,7 +2783,7 @@ function CheckoutPageContent({ isClient }) {
                       <button
                         type="submit"
                         disabled={authLoading}
-                        className="w-full px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-semibold bg-pink-600 dark:bg-pink-700 text-white rounded-lg hover:bg-pink-700 dark:hover:bg-pink-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className={CHECKOUT_PRIMARY_BTN}
                       >
                         {authLoading ? 'Creating account...' : 'Create account'}
                       </button>
@@ -2726,7 +2793,7 @@ function CheckoutPageContent({ isClient }) {
                           setAuthStep('email');
                           setAuthError('');
                         }}
-                        className="w-full text-xs sm:text-sm text-gray-600 dark:text-gray-400 hover:text-pink-600 dark:hover:text-pink-400 transition-colors"
+                        className="text-form-helper w-full text-center text-gray-600 transition-colors hover:text-pink-600 dark:text-gray-400 dark:hover:text-pink-400"
                       >
                         Use a different email
                       </button>
@@ -2734,37 +2801,41 @@ function CheckoutPageContent({ isClient }) {
                   )}
                 </div>
               </div>
-            )}
-
-            {isAuthenticated && (
-              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 sm:p-4 text-xs sm:text-sm text-green-700 dark:text-green-300 flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
-                Signed in as <span className="font-semibold">{customer?.email || 'customer'}</span>
               </div>
             )}
 
-            {/* Customer Information - Collapsible on Mobile */}
             {isAuthenticated && (
-              <div id="customerInfo" className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-blue-500 dark:border-blue-400 border border-gray-200 dark:border-gray-700 overflow-hidden scroll-mt-24">
+              <div className="space-y-3 sm:space-y-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                  1 · Account
+                </p>
+                <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 p-3 text-form-helper text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-200 sm:p-4">
+                  <CheckCircle className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400" aria-hidden />
+                  <span className="min-w-0">
+                    Signed in as <span className="text-cart-meta-strong text-green-900 dark:text-green-100">{customer?.email || 'customer'}</span>
+                  </span>
+                </div>
+                <div id="customerInfo" className={CHECKOUT_FORM_CARD}>
                 {/* Header - Clickable on Mobile */}
                 <button
+                  type="button"
                   onClick={() => toggleSection('customerInfo')}
-                  className="w-full lg:pointer-events-none flex items-center justify-between p-3 sm:p-4 lg:p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors lg:hover:bg-transparent"
+                  className={CHECKOUT_SECTION_HEADER_BTN}
                 >
-                  <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                    <div className="p-1.5 sm:p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                      <User className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <span className="text-blue-900 dark:text-blue-100">Customer Information</span>
+                  <h2 className="heading-section flex min-w-0 items-center gap-2 text-left">
+                    <span className="shrink-0 rounded-lg bg-gray-100 p-1.5 dark:bg-gray-700/80 sm:p-2">
+                      <User className="h-4 w-4 text-gray-600 dark:text-gray-300 sm:h-5 sm:w-5" />
+                    </span>
+                    <span className="text-gray-900 dark:text-gray-100">Your details</span>
                   </h2>
-                  <ChevronDown className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform duration-200 lg:hidden ${expandedSections.customerInfo ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`h-5 w-5 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400 lg:hidden ${expandedSections.customerInfo ? 'rotate-180' : ''}`} />
                 </button>
                 
                 {/* Content - Collapsible on Mobile */}
                 <div className={`px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6 transition-all duration-300 lg:block ${expandedSections.customerInfo ? 'block' : 'hidden'}`}>
                   <div className="space-y-3 sm:space-y-4">
-                  <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                  <div className="space-y-1">
+                  <label className={CHECKOUT_FIELD_LABEL}>
                     Full Name *
                   </label>
                   <input
@@ -2781,16 +2852,16 @@ function CheckoutPageContent({ isClient }) {
                     placeholder="Enter your full name"
                   />
                   {fieldErrors.name && (
-                    <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" />
-                      {fieldErrors.name}
+                    <p className={CHECKOUT_FIELD_ERROR} role="alert">
+                      <AlertCircle className={CHECKOUT_FIELD_ERROR_ICON} aria-hidden />
+                      <span className="min-w-0">{fieldErrors.name}</span>
                     </p>
                   )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                  <div>
-                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                  <div className="space-y-1">
+                    <label className={CHECKOUT_FIELD_LABEL}>
                       <Mail className="w-3.5 h-3.5 sm:w-4 sm:h-4 inline mr-1" />
                       Email *
                     </label>
@@ -2808,15 +2879,15 @@ function CheckoutPageContent({ isClient }) {
                       placeholder="your@email.com"
                     />
                     {fieldErrors.email && (
-                      <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {fieldErrors.email}
+                      <p className={CHECKOUT_FIELD_ERROR} role="alert">
+                        <AlertCircle className={CHECKOUT_FIELD_ERROR_ICON} aria-hidden />
+                        <span className="min-w-0">{fieldErrors.email}</span>
                       </p>
                     )}
                   </div>
 
-                  <div>
-                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                  <div className="space-y-1">
+                    <label className={CHECKOUT_FIELD_LABEL}>
                       <Phone className="w-3.5 h-3.5 sm:w-4 sm:h-4 inline mr-1" />
                       Phone *
                     </label>
@@ -2835,270 +2906,48 @@ function CheckoutPageContent({ isClient }) {
                       placeholder="10-digit phone number"
                     />
                     {fieldErrors.phone && (
-                      <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {fieldErrors.phone}
+                      <p className={CHECKOUT_FIELD_ERROR} role="alert">
+                        <AlertCircle className={CHECKOUT_FIELD_ERROR_ICON} aria-hidden />
+                        <span className="min-w-0">{fieldErrors.phone}</span>
                       </p>
                     )}
                   </div>
                   </div>
                   </div>
                 </div>
+              </div>
               </div>
             )}
 
-            {/* Delivery Address - Collapsible on Mobile */}
-            <div id="deliveryAddress" className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-green-500 dark:border-green-400 border border-gray-200 dark:border-gray-700 overflow-hidden scroll-mt-24">
-              {/* Header - Clickable on Mobile */}
-              <button
-                onClick={() => toggleSection('deliveryAddress')}
-                className="w-full lg:pointer-events-none flex items-center justify-between p-3 sm:p-4 lg:p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors lg:hover:bg-transparent"
-              >
-                <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  <div className="p-1.5 sm:p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                    <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 dark:text-green-400" />
-                  </div>
-                  <span className="text-green-900 dark:text-green-100">Delivery Address</span>
-              </h2>
-                <ChevronDown className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform duration-200 lg:hidden ${expandedSections.deliveryAddress ? 'rotate-180' : ''}`} />
-              </button>
-              
-              {/* Content - Collapsible on Mobile */}
-              <div className={`px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6 transition-all duration-300 lg:block ${expandedSections.deliveryAddress ? 'block' : 'hidden'}`}>
-              <div className="space-y-3 sm:space-y-4">
-              <div>
-                  {/* Delivery location: label + Use current location button */}
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 mb-3">
-                    <label className="flex items-center gap-1.5 text-xs sm:text-sm text-gray-600 dark:text-gray-300 font-medium">
-                      <MapPin className="w-3.5 h-3.5 text-green-600 dark:text-green-400 flex-shrink-0" />
-                      Delivery location (optional)
-                    </label>
-                    <button
-                      type="button"
-                      onClick={handleUseMyLocation}
-                      disabled={isFetchingLocation}
-                      className={`group relative inline-flex items-center justify-center gap-2 text-xs sm:text-sm text-blue-700 dark:text-blue-300 font-semibold px-4 py-2 rounded-lg border-2 border-blue-400 dark:border-blue-600 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-800/30 hover:from-blue-100 hover:to-blue-200 dark:hover:from-blue-900/50 dark:hover:to-blue-800/40 hover:border-blue-500 dark:hover:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-md hover:shadow-lg hover:shadow-blue-200/50 dark:hover:shadow-blue-900/30 active:scale-95 w-full sm:w-auto ${
-                        isFetchingLocation ? 'grayscale-[0.3] backdrop-blur-[2px] pointer-events-none' : ''
-                      }`}
-                    >
-                      {isFetchingLocation && (
-                        <div className="absolute inset-0 bg-white/30 dark:bg-gray-900/30 rounded-lg backdrop-blur-[1px] z-10" />
-                      )}
-                      {!isFetchingLocation && (
-                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-blue-500 rounded-full animate-pulse opacity-80" />
-                      )}
-                      <div className={`relative ${isFetchingLocation ? 'animate-spin' : ''}`}>
-                        <Navigation className="w-4 h-4 text-blue-600 dark:text-blue-400" strokeWidth={2.5} />
-                      </div>
-                      <MapPin className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" strokeWidth={2} />
-                      <span className="relative z-10">
-                        {isFetchingLocation ? (
-                          <span className="flex items-center gap-1.5">
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            Detecting location…
-                          </span>
-                        ) : (
-                          'Use my current location'
-                        )}
-                      </span>
-                    </button>
-                  </div>
-
-                  {/* Detected location block – only when location is set */}
-                  {formData.address?.location && typeof formData.address.location.lat === 'number' && typeof formData.address.location.lng === 'number' && (
-                    <div className="rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 px-3 py-2.5 mb-4 space-y-1.5">
-                      <p className="text-[11px] sm:text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                        Current location detected
-                      </p>
-                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                        {locationName || 'Location set'}
-                      </p>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">
-                        Location already detected. Verify if it’s correct and also enter your full address below.
-                      </p>
-                      <a
-                        href={`https://www.google.com/maps?q=${formData.address.location.lat},${formData.address.location.lng}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs font-medium text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 hover:underline"
-                      >
-                        <MapPin className="w-3.5 h-3.5" />
-                        View on map to verify
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </div>
-                  )}
-
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
-                    <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 inline mr-1" />
-                    Street Address *
-                  </label>
-                  
-                  <div className="relative">
-                  <input
-                    type="text"
-                    name="address.street"
-                    value={formData.address.street}
-                    onChange={handleInputChange}
-                    required
-                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 pr-10 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 transition-all duration-300 ${
-                      fieldErrors['address.street'] 
-                        ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
-                          : formData.address.street && addressScore >= 75
-                          ? 'border-green-400 dark:border-green-500 focus:ring-green-500 dark:focus:ring-green-400'
-                          : formData.address.street && addressScore >= 50
-                          ? 'border-yellow-400 dark:border-yellow-500 focus:ring-yellow-500 dark:focus:ring-yellow-400'
-                        : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
-                    }`}
-                      placeholder={formData.address.street ? "Add more details..." : "e.g., Flat 201, Green Valley Apartments, MG Road"}
-                    />
-                    {/* Checkmark icon when address is ≥75% complete */}
-                    {formData.address.street && addressScore >= 75 && (
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                        <CheckCircle className="w-5 h-5 text-green-500 dark:text-green-400 animate-in fade-in duration-300" />
-                      </div>
-                    )}
-                  </div>
-                  
-                  {fieldErrors['address.street'] && (
-                    <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" />
-                      {fieldErrors['address.street']}
-                    </p>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                  <div>
-                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
-                      Landmark (Optional)
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        name="address.landmark"
-                        value={formData.address.landmark}
-                        onChange={handleInputChange}
-                        className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 pr-10 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
-                          formData.address.landmark.trim().length >= 3
-                            ? 'border-green-400 dark:border-green-500 focus:ring-green-500 dark:focus:ring-green-400'
-                            : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
-                        }`}
-                        placeholder="Nearby landmark or location (optional)"
-                      />
-                      {formData.address.landmark.trim().length >= 3 && (
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                          <CheckCircle className="w-5 h-5 text-green-500 dark:text-green-400 animate-in fade-in duration-300" />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
-                      City *
-                    </label>
-                    <input
-                      type="text"
-                      name="address.city"
-                      value={formData.address.city}
-                      onChange={handleInputChange}
-                      required
-                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
-                        fieldErrors['address.city'] 
-                          ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
-                          : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
-                      }`}
-                      placeholder="City"
-                    />
-                    {fieldErrors['address.city'] && (
-                      <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {fieldErrors['address.city']}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                  <div>
-                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
-                      State *
-                    </label>
-                    <input
-                      type="text"
-                      name="address.state"
-                      value={formData.address.state}
-                      onChange={handleInputChange}
-                      required
-                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
-                        fieldErrors['address.state'] 
-                          ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
-                          : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
-                      }`}
-                      placeholder="State"
-                    />
-                    {fieldErrors['address.state'] && (
-                      <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {fieldErrors['address.state']}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
-                      PIN Code *
-                    </label>
-                    <input
-                      type="text"
-                      name="address.zip_code"
-                      value={formData.address.zip_code}
-                      onChange={handleInputChange}
-                      required
-                      maxLength={6}
-                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
-                        fieldErrors['address.zip_code'] 
-                          ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
-                          : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
-                      }`}
-                      placeholder="6-digit PIN code"
-                    />
-                    {fieldErrors['address.zip_code'] && (
-                      <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {fieldErrors['address.zip_code']}
-                      </p>
-                    )}
-                  </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
+            <div className="space-y-4 sm:space-y-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                2 · Delivery
+              </p>
             {/* Delivery Slot - Always Visible - Collapsible on Mobile */}
-            <div id="deliverySlot" className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-purple-500 dark:border-purple-400 border border-gray-200 dark:border-gray-700 overflow-hidden scroll-mt-24">
+            <div id="deliverySlot" className={CHECKOUT_FORM_CARD}>
               {/* Header - Clickable on Mobile */}
               <button
+                type="button"
                 onClick={() => toggleSection('deliverySlot')}
-                className="w-full lg:pointer-events-none flex items-center justify-between p-3 sm:p-4 lg:p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors lg:hover:bg-transparent"
+                className={CHECKOUT_SECTION_HEADER_BTN}
               >
-                <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  <div className="p-1.5 sm:p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-                    <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-purple-600 dark:text-purple-400" />
-                  </div>
-                  <span className="text-purple-900 dark:text-purple-100">Delivery Date & Time *</span>
-              </h2>
-                <ChevronDown className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform duration-200 lg:hidden ${expandedSections.deliverySlot ? 'rotate-180' : ''}`} />
+                <h2 className="heading-section flex min-w-0 items-center gap-2 text-left">
+                  <span className="shrink-0 rounded-lg bg-gray-100 p-1.5 dark:bg-gray-700/80 sm:p-2">
+                    <Calendar className="h-4 w-4 text-gray-600 dark:text-gray-300 sm:h-5 sm:w-5" />
+                  </span>
+                  <span className="text-gray-900 dark:text-gray-100">Date &amp; time *</span>
+                </h2>
+                <ChevronDown className={`h-5 w-5 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400 lg:hidden ${expandedSections.deliverySlot ? 'rotate-180' : ''}`} />
               </button>
               
               {/* Content - Collapsible on Mobile */}
               <div className={`px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6 transition-all duration-300 lg:block ${expandedSections.deliverySlot ? 'block' : 'hidden'}`}>
               {/* Field error for delivery slot */}
               {fieldErrors.deliverySlot && (
-                <div className="mb-3 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
-                  <p className="text-xs text-red-700 dark:text-red-300">{fieldErrors.deliverySlot}</p>
-                </div>
+                <p className={`${CHECKOUT_FIELD_ERROR} mb-3`} role="alert">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-red-500 dark:text-red-400 mt-0.5" aria-hidden />
+                  <span className="min-w-0">{fieldErrors.deliverySlot}</span>
+                </p>
               )}
               {/* Always-visible slot display */}
               {isClient && (selectedSlot || cartDeliverySlot) && !showSlotSelector && (() => {
@@ -3142,8 +2991,8 @@ function CheckoutPageContent({ isClient }) {
                       <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
                         {badgeIcon}
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <p className={`text-xs sm:text-sm font-medium ${badgeText}`}>
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <p className={`text-cart-body font-semibold ${badgeText}`}>
                               {badgeMessage}
                             </p>
                             {isAutoSelected && selectedSlot && (
@@ -3152,18 +3001,19 @@ function CheckoutPageContent({ isClient }) {
                               </span>
                             )}
                           </div>
-                          <p className={`text-xs sm:text-sm ${badgeText} opacity-90`}>
+                          <p className={`text-form-helper ${badgeText}`}>
                             {formatDeliveryDate(currentSlot.date)} • {formatTimeSlot(currentSlot)}
                           </p>
                         </div>
                       </div>
                       <button
+                        type="button"
                         onClick={() => {
                           setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
                           setShowSlotSelector(true);
                           setIsAutoSelected(false); // Clear auto-selected flag when user manually changes
                         }}
-                        className="px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium whitespace-nowrap flex-shrink-0"
+                        className="inline-flex min-h-[44px] shrink-0 items-center justify-center whitespace-nowrap rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
                       >
                         Change
                       </button>
@@ -3176,13 +3026,14 @@ function CheckoutPageContent({ isClient }) {
                 /* Show Select Button if no slot */
                 !(selectedSlot || cartDeliverySlot) && (
                   <button
+                    type="button"
                     onClick={() => {
                       setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
                       setShowSlotSelector(true);
                     }}
-                    className="w-full px-3 sm:px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
+                    className={CHECKOUT_PRIMARY_BTN}
                   >
-                    Select Delivery Slot
+                    Select delivery slot
                   </button>
                 )
               ) : (
@@ -3195,6 +3046,7 @@ function CheckoutPageContent({ isClient }) {
                   />
                   {(selectedSlot || cartDeliverySlot) && (
                     <button
+                      type="button"
                       onClick={() => {
                         setShowSlotSelector(false);
                         // If selectedSlot exists, keep it; otherwise reset to cart's original slot
@@ -3218,9 +3070,9 @@ function CheckoutPageContent({ isClient }) {
                           }));
                         }
                       }}
-                      className="w-full px-3 sm:px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
+                      className={CHECKOUT_SECONDARY_BTN}
                     >
-                      Cancel {selectedSlot ? '(Keep Current Slot)' : '(Use Cart Slot)'}
+                      {selectedSlot ? 'Cancel (keep current slot)' : 'Cancel (use cart slot)'}
                     </button>
                   )}
                 </div>
@@ -3228,20 +3080,257 @@ function CheckoutPageContent({ isClient }) {
               </div>
             </div>
 
-            {/* Payment Method - Collapsible on Mobile */}
-            <div id="paymentMethod" className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-orange-500 dark:border-orange-400 border border-gray-200 dark:border-gray-700 overflow-hidden scroll-mt-24">
+            {/* Delivery Address - Collapsible on Mobile */}
+            <div id="deliveryAddress" className={CHECKOUT_FORM_CARD}>
               {/* Header - Clickable on Mobile */}
               <button
-                onClick={() => toggleSection('paymentMethod')}
-                className="w-full lg:pointer-events-none flex items-center justify-between p-3 sm:p-4 lg:p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors lg:hover:bg-transparent"
+                type="button"
+                onClick={() => toggleSection('deliveryAddress')}
+                className={CHECKOUT_SECTION_HEADER_BTN}
               >
-                <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  <div className="p-1.5 sm:p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
-                    <CreditCard className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600 dark:text-orange-400" />
+                <h2 className="heading-section flex min-w-0 items-center gap-2 text-left">
+                  <span className="shrink-0 rounded-lg bg-gray-100 p-1.5 dark:bg-gray-700/80 sm:p-2">
+                    <MapPin className="h-4 w-4 text-gray-600 dark:text-gray-300 sm:h-5 sm:w-5" />
+                  </span>
+                  <span className="text-gray-900 dark:text-gray-100">Delivery address</span>
+                </h2>
+                <ChevronDown className={`h-5 w-5 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400 lg:hidden ${expandedSections.deliveryAddress ? 'rotate-180' : ''}`} />
+              </button>
+              
+              {/* Content - Collapsible on Mobile */}
+              <div className={`px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6 transition-all duration-300 lg:block ${expandedSections.deliveryAddress ? 'block' : 'hidden'}`}>
+              <div className="space-y-3 sm:space-y-4">
+              <div>
+                  {/* Delivery location: label + Use current location button */}
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 mb-3">
+                    <span className="flex items-center gap-1.5 text-cart-label">
+                      <MapPin className="h-3.5 w-3.5 shrink-0 text-gray-500 dark:text-gray-400" aria-hidden />
+                      Delivery location (optional)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleUseMyLocation}
+                      disabled={isFetchingLocation}
+                      className={`group relative inline-flex items-center justify-center gap-2 text-xs sm:text-sm text-blue-700 dark:text-blue-300 font-semibold px-4 py-2 rounded-lg border-2 border-blue-400 dark:border-blue-600 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-800/30 hover:from-blue-100 hover:to-blue-200 dark:hover:from-blue-900/50 dark:hover:to-blue-800/40 hover:border-blue-500 dark:hover:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-md hover:shadow-lg hover:shadow-blue-200/50 dark:hover:shadow-blue-900/30 active:scale-95 w-full sm:w-auto ${
+                        isFetchingLocation ? 'grayscale-[0.3] backdrop-blur-[2px] pointer-events-none' : ''
+                      }`}
+                    >
+                      {isFetchingLocation && (
+                        <div className="absolute inset-0 bg-white/30 dark:bg-gray-900/30 rounded-lg backdrop-blur-[1px] z-10" />
+                      )}
+                      {!isFetchingLocation && (
+                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-blue-500 rounded-full animate-pulse opacity-80" />
+                      )}
+                      <div className={`relative ${isFetchingLocation ? 'animate-spin' : ''}`}>
+                        <Navigation className="w-4 h-4 text-blue-600 dark:text-blue-400" strokeWidth={2.5} />
+                      </div>
+                      <MapPin className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" strokeWidth={2} />
+                      <span className="relative z-10">
+                        {isFetchingLocation ? (
+                          <span className="flex items-center gap-1.5">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            Detecting location…
+                          </span>
+                        ) : (
+                          'Use my current location'
+                        )}
+                      </span>
+                    </button>
                   </div>
-                  <span className="text-orange-900 dark:text-orange-100">Payment Method *</span>
-              </h2>
-                <ChevronDown className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform duration-200 lg:hidden ${expandedSections.paymentMethod ? 'rotate-180' : ''}`} />
+
+                  {/* Detected location block – only when location is set */}
+                  {formData.address?.location && typeof formData.address.location.lat === 'number' && typeof formData.address.location.lng === 'number' && (
+                    <div className="mb-4 space-y-1.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-600 dark:bg-gray-700/50">
+                      <p className="text-form-legal font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        Current location detected
+                      </p>
+                      <p className="text-cart-body-strong text-gray-900 dark:text-gray-100">
+                        {locationName || 'Location set'}
+                      </p>
+                      <p className="text-form-helper">
+                        Location already detected. Verify if it’s correct and also enter your full address below.
+                      </p>
+                      <a
+                        href={`https://www.google.com/maps?q=${formData.address.location.lat},${formData.address.location.lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-form-helper inline-flex items-center gap-1.5 font-medium text-green-700 hover:underline dark:text-green-400 dark:hover:text-green-300"
+                      >
+                        <MapPin className="w-3.5 h-3.5" />
+                        View on map to verify
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  )}
+
+                  <div className="space-y-1">
+                  <label className={CHECKOUT_FIELD_LABEL}>
+                    <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 inline mr-1" />
+                    Street Address *
+                  </label>
+                  
+                  <div className="relative">
+                  <input
+                    type="text"
+                    name="address.street"
+                    value={formData.address.street}
+                    onChange={handleInputChange}
+                    required
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 pr-10 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 transition-all duration-300 ${
+                      fieldErrors['address.street'] 
+                        ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
+                          : formData.address.street && addressScore >= 75
+                          ? 'border-green-400 dark:border-green-500 focus:ring-green-500 dark:focus:ring-green-400'
+                          : formData.address.street && addressScore >= 50
+                          ? 'border-yellow-400 dark:border-yellow-500 focus:ring-yellow-500 dark:focus:ring-yellow-400'
+                        : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
+                    }`}
+                      placeholder={formData.address.street ? "Add more details..." : "e.g., Flat 201, Green Valley Apartments, MG Road"}
+                    />
+                    {/* Checkmark icon when address is ≥75% complete */}
+                    {formData.address.street && addressScore >= 75 && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                        <CheckCircle className="w-5 h-5 text-green-500 dark:text-green-400 animate-in fade-in duration-300" />
+                      </div>
+                    )}
+                  </div>
+                  
+                  {fieldErrors['address.street'] && (
+                    <p className={CHECKOUT_FIELD_ERROR} role="alert">
+                      <AlertCircle className={CHECKOUT_FIELD_ERROR_ICON} aria-hidden />
+                      <span className="min-w-0">{fieldErrors['address.street']}</span>
+                    </p>
+                  )}
+                </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="space-y-1">
+                    <label className={CHECKOUT_FIELD_LABEL}>
+                      Landmark (Optional)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        name="address.landmark"
+                        value={formData.address.landmark}
+                        onChange={handleInputChange}
+                        className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 pr-10 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                          formData.address.landmark.trim().length >= 3
+                            ? 'border-green-400 dark:border-green-500 focus:ring-green-500 dark:focus:ring-green-400'
+                            : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
+                        }`}
+                        placeholder="Nearby landmark or location (optional)"
+                      />
+                      {formData.address.landmark.trim().length >= 3 && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                          <CheckCircle className="w-5 h-5 text-green-500 dark:text-green-400 animate-in fade-in duration-300" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className={CHECKOUT_FIELD_LABEL}>
+                      City *
+                    </label>
+                    <input
+                      type="text"
+                      name="address.city"
+                      value={formData.address.city}
+                      onChange={handleInputChange}
+                      required
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                        fieldErrors['address.city'] 
+                          ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
+                          : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
+                      }`}
+                      placeholder="City"
+                    />
+                    {fieldErrors['address.city'] && (
+                      <p className={CHECKOUT_FIELD_ERROR} role="alert">
+                        <AlertCircle className={CHECKOUT_FIELD_ERROR_ICON} aria-hidden />
+                        <span className="min-w-0">{fieldErrors['address.city']}</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="space-y-1">
+                    <label className={CHECKOUT_FIELD_LABEL}>
+                      State *
+                    </label>
+                    <input
+                      type="text"
+                      name="address.state"
+                      value={formData.address.state}
+                      onChange={handleInputChange}
+                      required
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                        fieldErrors['address.state'] 
+                          ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
+                          : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
+                      }`}
+                      placeholder="State"
+                    />
+                    {fieldErrors['address.state'] && (
+                      <p className={CHECKOUT_FIELD_ERROR} role="alert">
+                        <AlertCircle className={CHECKOUT_FIELD_ERROR_ICON} aria-hidden />
+                        <span className="min-w-0">{fieldErrors['address.state']}</span>
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className={CHECKOUT_FIELD_LABEL}>
+                      PIN Code *
+                    </label>
+                    <input
+                      type="text"
+                      name="address.zip_code"
+                      value={formData.address.zip_code}
+                      onChange={handleInputChange}
+                      required
+                      maxLength={6}
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                        fieldErrors['address.zip_code'] 
+                          ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
+                          : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
+                      }`}
+                      placeholder="6-digit PIN code"
+                    />
+                    {fieldErrors['address.zip_code'] && (
+                      <p className={CHECKOUT_FIELD_ERROR} role="alert">
+                        <AlertCircle className={CHECKOUT_FIELD_ERROR_ICON} aria-hidden />
+                        <span className="min-w-0">{fieldErrors['address.zip_code']}</span>
+                      </p>
+                    )}
+                  </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            </div>
+
+            <div className="space-y-4 sm:space-y-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                3 · Payment
+              </p>
+            {/* Payment Method - Collapsible on Mobile */}
+            <div id="paymentMethod" className={CHECKOUT_FORM_CARD}>
+              {/* Header - Clickable on Mobile */}
+              <button
+                type="button"
+                onClick={() => toggleSection('paymentMethod')}
+                className={CHECKOUT_SECTION_HEADER_BTN}
+              >
+                <h2 className="heading-section flex min-w-0 items-center gap-2 text-left">
+                  <span className="shrink-0 rounded-lg bg-gray-100 p-1.5 dark:bg-gray-700/80 sm:p-2">
+                    <CreditCard className="h-4 w-4 text-gray-600 dark:text-gray-300 sm:h-5 sm:w-5" />
+                  </span>
+                  <span className="text-gray-900 dark:text-gray-100">Payment *</span>
+                </h2>
+                <ChevronDown className={`h-5 w-5 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400 lg:hidden ${expandedSections.paymentMethod ? 'rotate-180' : ''}`} />
               </button>
               
               {/* Content - Collapsible on Mobile */}
@@ -3250,9 +3339,9 @@ function CheckoutPageContent({ isClient }) {
                 {['cash', 'upi', 'card', 'wallet'].map((method) => (
                   <label
                     key={method}
-                    className={`flex items-center gap-2 sm:gap-3 p-3 sm:p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                    className={`flex min-h-[48px] cursor-pointer items-center gap-2 rounded-lg border-2 p-3 transition-all has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-pink-600 has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-white dark:has-[:focus-visible]:ring-pink-500 dark:has-[:focus-visible]:ring-offset-gray-900 sm:min-h-[52px] sm:gap-3 sm:p-4 ${
                       formData.paymentMethod === method
-                        ? 'border-pink-500 dark:border-pink-400 bg-pink-50 dark:bg-pink-900/30'
+                        ? 'border-pink-500 bg-pink-50 dark:border-pink-400 dark:bg-pink-900/30'
                         : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                     }`}
                   >
@@ -3262,9 +3351,9 @@ function CheckoutPageContent({ isClient }) {
                       value={method}
                       checked={formData.paymentMethod === method}
                       onChange={handleInputChange}
-                      className="w-4 h-4 text-pink-600 dark:text-pink-400 focus:ring-pink-500 dark:focus:ring-pink-400"
+                      className="h-5 w-5 shrink-0 text-pink-600 focus:ring-pink-500 dark:text-pink-400 dark:focus:ring-pink-400"
                     />
-                    <span className="text-sm sm:text-base font-medium text-gray-900 dark:text-gray-100 capitalize">
+                    <span className="text-cart-body font-semibold capitalize text-gray-900 dark:text-gray-100">
                       {method === 'upi' ? 'UPI' : method}
                     </span>
                   </label>
@@ -3274,23 +3363,25 @@ function CheckoutPageContent({ isClient }) {
             </div>
 
             {/* Special Instructions - Optional - Collapsible on All Devices */}
-            <div id="specialInstructions" className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-gray-400 dark:border-gray-500 border border-gray-200 dark:border-gray-700 overflow-hidden scroll-mt-24">
+            <div id="specialInstructions" className={CHECKOUT_FORM_CARD}>
               {/* Header - Clickable on All Devices */}
               <button
+                type="button"
                 onClick={() => toggleSection('specialInstructions')}
-                className="w-full flex items-center justify-between p-3 sm:p-4 lg:p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                className={CHECKOUT_SECTION_HEADER_BTN}
               >
-                <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  <div className="p-1.5 sm:p-2 rounded-lg bg-gray-100 dark:bg-gray-700">
-                    <Lock className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 dark:text-gray-400" />
-                  </div>
-                  <span className="text-gray-700 dark:text-gray-300">Special Instructions (Optional)</span>
+                <h2 className="heading-section flex min-w-0 items-center gap-2 text-left">
+                  <span className="shrink-0 rounded-lg bg-gray-100 p-1.5 dark:bg-gray-700/80 sm:p-2">
+                    <Lock className="h-4 w-4 text-gray-600 dark:text-gray-300 sm:h-5 sm:w-5" />
+                  </span>
+                  <span className="text-gray-900 dark:text-gray-100">Special instructions (optional)</span>
                 </h2>
-                <ChevronDown className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform duration-200 ${expandedSections.specialInstructions ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`h-5 w-5 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400 ${expandedSections.specialInstructions ? 'rotate-180' : ''}`} />
               </button>
               
               {/* Content - Collapsible on All Devices */}
               <div className={`px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6 transition-all duration-300 ${expandedSections.specialInstructions ? 'block' : 'hidden'}`}>
+              <div className="space-y-1">
               <textarea
                 name="specialInstructions"
                 value={formData.specialInstructions}
@@ -3300,35 +3391,42 @@ function CheckoutPageContent({ isClient }) {
                   className="w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:focus:ring-gray-400 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500"
                 placeholder="Any special delivery instructions or notes (optional)..."
               />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 sm:mt-2">
+                <p className="text-form-helper">
                 {formData.specialInstructions.length}/150 characters
               </p>
               </div>
+              </div>
+            </div>
             </div>
           </div>
 
           {/* RIGHT SECTION: Order Summary - Visible on All Devices */}
           <div className="lg:sticky lg:top-24 h-fit mb-8 lg:mb-0">
-            <div className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-pink-500 dark:border-pink-400 border border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-xl dark:shadow-black/30 p-3 sm:p-4 lg:p-5 space-y-3 sm:space-y-4">
-              {/* Header with Icon */}
-              <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
-                <div className="p-1.5 rounded-lg bg-pink-100 dark:bg-pink-900/30">
-                  <ShoppingBag className="w-4 h-4 text-pink-600 dark:text-pink-400" />
+            <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:shadow-black/20 sm:p-4 lg:p-5">
+              <div className="flex items-center justify-between gap-2 border-b border-gray-200 pb-3 dark:border-gray-700">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="shrink-0 rounded-lg bg-gray-100 p-1.5 dark:bg-gray-700/80">
+                    <ShoppingBag className="h-4 w-4 text-gray-700 dark:text-gray-300" />
+                  </div>
+                  <h2 className="heading-section">Order summary</h2>
                 </div>
-                <h2 className="heading-section">Order summary</h2>
+                <span className="shrink-0 tabular-nums text-cart-meta">
+                  {cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'}
+                </span>
               </div>
 
-              {/* Cart Items - Organized by Type */}
-              <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
+              <div className="flex flex-col gap-1">
+              <div className="relative">
+                <div className="custom-scrollbar max-h-[min(360px,55vh)] space-y-4 overflow-y-auto pb-6 pr-1 sm:max-h-[400px]">
                 {/* Separate Deal Items */}
                 {cartItems.filter(item => item.is_deal_item).length > 0 && (
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 pb-1.5 border-b border-green-200 dark:border-green-700">
-                      <div className="p-1 rounded-md bg-green-100 dark:bg-green-900/30">
-                        <Tag className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
+                    <div className="flex items-center gap-2 border-b border-gray-200 pb-2 dark:border-gray-700">
+                      <div className="rounded-md bg-gray-100 p-1 dark:bg-gray-700/80">
+                        <Tag className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
                       </div>
-                      <h3 className="text-xs sm:text-sm font-bold text-green-700 dark:text-green-400 uppercase tracking-wide">
-                        Special Deals ({cartItems.filter(item => item.is_deal_item).length})
+                      <h3 className="text-cart-label">
+                        Special deals ({cartItems.filter(item => item.is_deal_item).length})
                       </h3>
                     </div>
                     {cartItems.filter(item => item.is_deal_item).map((item) => {
@@ -3337,24 +3435,27 @@ function CheckoutPageContent({ isClient }) {
                       const totalItemPrice = item.totalPrice || itemTotal;
 
                       return (
-                        <div key={item.id} className="flex gap-3 p-3 rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800 shadow-sm">
+                        <div
+                          key={item.id}
+                          className="rounded-lg border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800 sm:p-3"
+                        >
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-2 mb-1.5">
-                              <div className="flex-1 min-w-0">
-                                <h4 className="font-bold text-sm sm:text-base text-gray-900 dark:text-gray-100 line-clamp-2 mb-1">
+                            <div className="mb-1.5 flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <h4 className="text-cart-card-title line-clamp-2 mb-1">
                                   {item.product.name}
                                 </h4>
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200 text-[10px] font-bold rounded-md">
-                                  <Gift className="w-3 h-3" />
-                                  DEAL
+                                <span className="text-cart-pill inline-flex items-center gap-1 rounded-md bg-green-100 px-2 py-0.5 text-green-800 dark:bg-green-900/40 dark:text-green-200">
+                                  <Gift className="h-3 w-3" />
+                                  Deal
                                 </span>
                               </div>
-                              <span className="text-base sm:text-lg font-extrabold text-green-600 dark:text-green-400 whitespace-nowrap ml-2">
+                              <span className="ml-2 shrink-0 tabular-nums text-cart-summary-value text-green-700 dark:text-green-400">
                                 {formatPrice(totalItemPrice)}
                               </span>
                             </div>
-                            <div className="flex items-center justify-between mt-2 pt-2 border-t border-green-200 dark:border-green-700">
-                              <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">Quantity: {item.quantity}</span>
+                            <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 dark:border-gray-700">
+                              <span className="text-cart-meta">Quantity: {item.quantity}</span>
                             </div>
                           </div>
                         </div>
@@ -3366,15 +3467,22 @@ function CheckoutPageContent({ isClient }) {
                 {/* Regular Items */}
                 {cartItems.filter(item => !item.is_deal_item).length > 0 && (
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 pb-1.5 border-b border-pink-200 dark:border-pink-700">
-                      <div className="p-1 rounded-md bg-pink-100 dark:bg-pink-900/30">
-                        <Package className="w-3.5 h-3.5 text-pink-600 dark:text-pink-400" />
+                    <div className="flex items-center gap-2 border-b border-gray-200 pb-2 dark:border-gray-700">
+                      <div className="rounded-md bg-gray-100 p-1 dark:bg-gray-700/80">
+                        <Package className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
                       </div>
-                      <h3 className="text-xs sm:text-sm font-bold text-pink-700 dark:text-pink-400 uppercase tracking-wide">
+                      <h3 className="text-cart-label">
                         Products ({cartItems.filter(item => !item.is_deal_item).length})
                       </h3>
                     </div>
-                    {cartItems.filter(item => !item.is_deal_item).map((item) => {
+                    <div
+                      className={
+                        cartItems.filter((i) => !i.is_deal_item).length > 1
+                          ? 'space-y-2 rounded-lg border border-gray-200 bg-gray-100 p-2 dark:border-gray-700 dark:bg-gray-900/35'
+                          : 'space-y-2'
+                      }
+                    >
+                    {cartItems.filter(item => !item.is_deal_item).map((item, index) => {
                       // Calculate price
                       const itemPrice = item.variant?.discounted_price || item.product.discounted_price || item.product.base_price;
                       const itemTotal = itemPrice * item.quantity;
@@ -3401,22 +3509,35 @@ function CheckoutPageContent({ isClient }) {
                       const productDetails = [];
                       if (itemWeight) productDetails.push(itemWeight);
                       if (item.flavor) productDetails.push(item.flavor.name);
-                      if (item.tier) productDetails.push(`${item.tier} Tier`);
+                      if (item.tier) {
+                        const tierLabel = String(item.tier).trim();
+                        productDetails.push(/tier/i.test(tierLabel) ? tierLabel : `${tierLabel} Tier`);
+                      }
+                      const multiRegularRows = cartItems.filter((i) => !i.is_deal_item).length > 1;
 
                       return (
-                        <div key={item.id} className="flex gap-3 p-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow">
+                        <div
+                          key={item.id}
+                          className={`flex gap-2 rounded-lg border p-2.5 sm:gap-3 sm:p-3 ${
+                            multiRegularRows
+                              ? index % 2 === 1
+                                ? 'border-gray-300 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/90'
+                                : 'border-gray-300 bg-white dark:bg-gray-800'
+                              : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
+                          }`}
+                        >
                           {/* Product Image */}
-                          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden flex-shrink-0 shadow-sm">
+                          <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-700 sm:h-20 sm:w-20">
                             <img
                               src={item.product.image_url}
                               alt={item.product.name}
-                              className="w-full h-full object-cover"
+                              className="h-full w-full object-cover"
                             />
                           </div>
                           
                           {/* Product Details */}
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold text-sm sm:text-base text-gray-900 dark:text-gray-100 line-clamp-2 mb-1.5">
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-cart-card-title mb-1.5 line-clamp-2">
                               {item.product.name}
                             </h4>
                             
@@ -3456,7 +3577,9 @@ function CheckoutPageContent({ isClient }) {
                                           </span>
                                         ) : (
                                           <>
-                                            <span className="text-purple-500 dark:text-purple-400 font-semibold">➕</span>
+                                            <span className="text-cart-meta font-semibold text-gray-400 dark:text-gray-500" aria-hidden>
+                                              +
+                                            </span>
                                             <span className="text-gray-700 dark:text-gray-300 font-medium">
                                               {combo.name || 'Combo Item'} × {combo.quantity || 1} = {formatPrice(comboTotalPrice)}
                                             </span>
@@ -3470,17 +3593,17 @@ function CheckoutPageContent({ isClient }) {
                             )}
                             
                             {/* Quantity and Price */}
-                            <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
-                              <span className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
-                                Qty: <span className="font-semibold">{item.quantity}</span>
+                            <div className="mt-2 flex items-center justify-between border-t border-gray-200 pt-2 dark:border-gray-600">
+                              <span className="text-cart-meta">
+                                Qty: <span className="text-cart-meta-strong">{item.quantity}</span>
                               </span>
                               <div className="text-right">
                                 {comboTotal > 0 && (
-                                  <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">
+                                  <div className="mb-0.5 text-cart-meta tabular-nums">
                                     {formatPrice(itemTotal)} + {formatPrice(comboTotal)}
                                   </div>
                                 )}
-                                <span className="text-sm sm:text-base font-bold text-pink-600 dark:text-pink-400">
+                                <span className="text-cart-summary-value">
                                   {formatPrice(totalItemPrice)}
                                 </span>
                               </div>
@@ -3489,78 +3612,90 @@ function CheckoutPageContent({ isClient }) {
                         </div>
                       );
                     })}
+                    </div>
                   </div>
                 )}
+                </div>
+                <div
+                  className="pointer-events-none absolute inset-x-0 bottom-0 h-6 rounded-b-lg bg-gradient-to-t from-white to-transparent dark:from-gray-800"
+                  aria-hidden
+                />
+              </div>
+              {cartItems.length > 1 && (
+                <p className="text-center text-cart-page-meta sm:text-left">Scroll the list above to see every line item.</p>
+              )}
               </div>
 
               {/* Price Breakdown */}
-              <div className="space-y-2 pt-2 border-t-2 border-gray-200 dark:border-gray-700">
+              <div className="border-t border-gray-200 pt-3 dark:border-gray-700">
+                <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div className="divide-y divide-gray-200 dark:divide-gray-700">
                 {/* 1. Subtotal */}
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300">Subtotal ({cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'})</span>
-                  <span className="text-sm sm:text-base font-semibold text-gray-900 dark:text-gray-100">{formatPrice(subtotal)}</span>
+                <div className="flex items-center justify-between gap-3 bg-white px-3 py-2.5 dark:bg-gray-800/40">
+                  <span className="min-w-0 text-cart-label">
+                    Subtotal ({cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'})
+                  </span>
+                  <span className="shrink-0 text-right text-cart-summary-value">{formatPrice(subtotal)}</span>
                 </div>
 
                 {/* 2. Promo Discount */}
                 {appliedPromo && promoDiscount > 0 && (
-                  <div className="flex items-center justify-between text-green-700 dark:text-green-400 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg p-2 border border-green-200 dark:border-green-800">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-1.5 h-1.5 rounded-full bg-green-500 dark:bg-green-400"></div>
-                      <span className="text-sm sm:text-base font-semibold">Promo Discount</span>
-                    </div>
-                    <span className="text-sm sm:text-base font-bold">-{formatPrice(promoDiscount)}</span>
+                  <div className="flex items-center justify-between gap-3 bg-white px-3 py-2.5 dark:bg-gray-800/40">
+                    <span className="min-w-0 text-cart-label">Promo discount</span>
+                    <span className="shrink-0 text-right text-sm font-semibold tabular-nums text-green-700 dark:text-green-400 sm:text-base">
+                      -{formatPrice(promoDiscount)}
+                    </span>
                   </div>
                 )}
 
                 {/* 3. Delivery Charge */}
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300">Delivery Charge</span>
-                  <span className="text-sm sm:text-base font-semibold">
+                <div className="flex items-center justify-between gap-3 bg-white px-3 py-2.5 dark:bg-gray-800/40">
+                  <span className="min-w-0 text-cart-label">Delivery</span>
+                  <span className="shrink-0 text-right text-cart-summary-value">
                     {finalDeliveryCharge === 0 ? (
-                      <span className="text-green-600 dark:text-green-400 font-bold">FREE</span>
+                      <span className="font-semibold text-green-600 dark:text-green-400">Free</span>
                     ) : (
-                      <span className="text-gray-900 dark:text-gray-100">{formatPrice(finalDeliveryCharge)}</span>
+                      formatPrice(finalDeliveryCharge)
                     )}
                   </span>
                 </div>
 
                 {/* 4. Wallet Balance (Box) - Fixed height to prevent layout shift */}
                 {isAuthenticated && walletBalance > 0 && (
-                  <div className="bg-pink-50 dark:bg-pink-900/20 rounded-lg p-2 border border-pink-200 dark:border-pink-800 min-h-[80px]">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <Wallet className="w-4 h-4 text-pink-600 dark:text-pink-400" />
-                        <span className="text-sm sm:text-base font-medium text-gray-900 dark:text-gray-100">Wallet Balance</span>
+                  <div className="min-h-[80px] space-y-2 bg-gray-50 px-3 py-2.5 dark:bg-gray-900/30">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <Wallet className="h-4 w-4 shrink-0 text-gray-600 dark:text-gray-400" />
+                        <span className="text-cart-label">Wallet balance</span>
                       </div>
-                      <span className="text-sm sm:text-base font-semibold text-pink-600 dark:text-pink-400">{formatPrice(walletBalance)}</span>
+                      <span className="shrink-0 tabular-nums text-cart-summary-value">{formatPrice(walletBalance)}</span>
                     </div>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
+                    <label className="flex cursor-pointer items-start gap-2">
                       <input
                         type="checkbox"
                         checked={applyWalletDiscount}
                         onChange={(e) => setApplyWalletDiscount(e.target.checked)}
-                        className="w-4 h-4 text-pink-600 dark:text-pink-400 rounded focus:ring-pink-500 dark:focus:ring-pink-400"
+                        className="mt-0.5 h-4 w-4 shrink-0 rounded text-pink-600 focus:ring-pink-500 dark:text-pink-400 dark:focus:ring-pink-400"
                       />
-                      <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">
-                        Use wallet (up to {formatPrice(maxWalletDiscount)} - 10% of order)
+                      <span className="text-cart-meta text-gray-700 dark:text-gray-300">
+                        Use wallet (up to {formatPrice(maxWalletDiscount)}, 10% of order)
                       </span>
                     </label>
-                    {/* Always reserve space for wallet discount line to prevent height fluctuation */}
-                    <div className={`flex items-center justify-between mt-1.5 pt-1.5 border-t border-pink-200 dark:border-pink-800 transition-opacity duration-200 ${applyWalletDiscount && walletDiscount > 0 ? 'opacity-100' : 'opacity-0 h-[24px]'}`}>
-                      <span className="text-sm sm:text-base font-medium text-pink-600 dark:text-pink-400">Wallet Discount</span>
-                      <span className="text-sm sm:text-base font-semibold text-pink-600 dark:text-pink-400">
+                    <div className={`flex items-center justify-between border-t border-gray-200 pt-2 transition-opacity duration-200 dark:border-gray-700 ${applyWalletDiscount && walletDiscount > 0 ? 'opacity-100' : 'opacity-0 h-[22px]'}`}>
+                      <span className="text-cart-label">Wallet discount</span>
+                      <span className="text-cart-summary-value text-pink-700 dark:text-pink-400">
                         {applyWalletDiscount && walletDiscount > 0 ? `-${formatPrice(walletDiscount)}` : '-₹0'}
                       </span>
                     </div>
                   </div>
                 )}
+                  </div>
+                </div>
 
                 {/* 5. Final Total (Amount to Pay) */}
-                <div className="border-t-2 border-pink-200 dark:border-pink-800 pt-2.5 mt-2.5 bg-gradient-to-r from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20 rounded-lg p-3 -mx-1">
-                  <div className="flex justify-between items-center">
-                    <span className="text-cart-total-label">Amount to pay</span>
-                    <span className="text-cart-grand-total">{formatPrice(total)}</span>
-                  </div>
+                <div className="mt-3 flex items-end justify-between gap-3 border-t-2 border-gray-300 pt-4 dark:border-gray-600">
+                  <span className="text-cart-total-label leading-tight">Amount to pay</span>
+                  <span className="text-checkout-due-amount leading-none">{formatPrice(total)}</span>
                 </div>
               </div>
 
@@ -3571,23 +3706,22 @@ function CheckoutPageContent({ isClient }) {
                   className="hidden lg:block mb-3 p-3 sm:p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-800 rounded-lg"
                 >
                   <div className="flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <h3 className="text-sm sm:text-base font-bold text-red-800 dark:text-red-300 mb-1">
-                        ⚠️ Unable to Place Order
-                      </h3>
-                      <p className="text-xs sm:text-sm text-red-700 dark:text-red-400">
+                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" aria-hidden />
+                    <div className="min-w-0 flex-1">
+                      <h3 className="heading-subsection mb-1 text-red-900 dark:text-red-200">Unable to place order</h3>
+                      <p className="text-form-helper text-red-800 dark:text-red-300">
                         {error || 'Please select a delivery date and time slot to place your order.'}
                       </p>
                       {(!selectedSlot && !cartDeliverySlot) && (
                         <button
+                          type="button"
                           onClick={() => {
                             setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
                             setShowSlotSelector(true);
                           }}
-                          className="mt-2 px-3 py-1.5 text-xs bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-600 transition-colors font-medium"
+                          className="ui-focus-visible mt-2 min-h-[40px] rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600"
                         >
-                          Select Delivery Slot
+                          Select delivery slot
                         </button>
                       )}
                     </div>
@@ -3598,12 +3732,13 @@ function CheckoutPageContent({ isClient }) {
               {/* Place Order Button - Hidden on mobile (shown in sticky bar) */}
               <button
                 data-place-order-button
+                type="button"
                 onClick={() => {
                   setShowSuccessIndicator(false);
                   handlePlaceOrder();
                 }}
                 disabled={loading || !isAuthenticated}
-                className={`hidden lg:flex w-full py-3 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all duration-200 font-semibold text-lg shadow-lg dark:shadow-xl dark:shadow-black/30 hover:shadow-xl transform hover:scale-[1.02] items-center justify-center gap-2 ${
+                className={`ui-focus-visible hidden w-full items-center justify-center gap-2 bg-gradient-to-r from-pink-600 to-rose-600 py-3 text-lg font-semibold text-white shadow-lg transition-all duration-200 hover:scale-[1.02] hover:from-pink-700 hover:to-rose-700 hover:shadow-xl dark:from-pink-700 dark:to-rose-700 dark:shadow-xl dark:shadow-black/30 dark:hover:from-pink-600 dark:hover:to-rose-600 lg:flex ${
                   loading || !isAuthenticated
                     ? 'opacity-50 cursor-not-allowed transform-none'
                     : (!selectedSlot && !cartDeliverySlot)
@@ -3630,10 +3765,10 @@ function CheckoutPageContent({ isClient }) {
               </button>
 
               {/* Security Badge */}
-              <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
-                <div className="flex items-center justify-center gap-1.5 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                  <Lock className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
-                  <span>Secure checkout • Your payment information is safe</span>
+              <div className="border-t border-gray-200 pt-2 dark:border-gray-700">
+                <div className="flex items-center justify-center gap-1.5 text-cart-page-meta">
+                  <Lock className="h-3.5 w-3.5 shrink-0 text-green-600 dark:text-green-400" aria-hidden />
+                  <span>Secure checkout · Your payment information is safe</span>
                 </div>
               </div>
             </div>
@@ -3641,97 +3776,97 @@ function CheckoutPageContent({ isClient }) {
         </div>
       </div>
 
-      {/* Mobile Sticky Checkout Bar */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-2xl dark:shadow-black/50 z-40">
-        <div className="max-w-7xl mx-auto px-3 py-2.5">
-          {/* Error Alert - Mobile - Shown when user tries to place order without slot or other validation fails */}
+      {/* Mobile Sticky Checkout Bar — amount + expand summary, then place order */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-gray-200 bg-white/95 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-2xl backdrop-blur-sm dark:border-gray-600 dark:bg-gray-900/95 dark:shadow-black/50">
+        <div className="mx-auto max-w-7xl px-3 pt-2.5">
           {error && (
-            <div 
+            <div
               data-error-alert
-              className="mb-2 p-3 bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-800 rounded-lg"
+              className="mb-2 rounded-lg border-2 border-red-300 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/40"
+              role="alert"
             >
               <div className="flex items-start gap-2.5">
-                <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-xs font-bold text-red-800 dark:text-red-300 mb-1">
-                    ⚠️ Unable to Place Order
-                  </h3>
-                  <p className="text-[11px] text-red-700 dark:text-red-400 leading-tight">
+                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-400" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <h3 className="heading-subsection mb-1 text-red-900 dark:text-red-200">Unable to place order</h3>
+                  <p className="text-form-legal text-red-800 dark:text-red-200">
                     {error || 'Please select a delivery date and time slot to place your order.'}
                   </p>
                   {(!selectedSlot && !cartDeliverySlot) && (
                     <button
+                      type="button"
                       onClick={() => {
                         setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
                         setShowSlotSelector(true);
                       }}
-                      className="mt-1.5 px-2.5 py-1 text-[10px] bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-600 transition-colors font-medium"
+                      className="ui-focus-visible mt-2 min-h-[40px] rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600"
                     >
-                      Select Slot
+                      Select delivery slot
                     </button>
                   )}
                 </div>
               </div>
             </div>
           )}
-          
-          {/* Total and Checkout Button Row */}
-          <div className="flex items-center gap-2.5 mb-1">
-            {/* Total Box - 30% width */}
-            <div className="w-[30%] min-w-[90px] bg-gray-50 dark:bg-gray-700/50 rounded-lg px-2.5 py-2 border border-pink-300 dark:border-pink-500/50 flex flex-col items-center justify-center">
-              <div className="flex items-baseline gap-0.5 justify-center mb-0.5">
-                <p className="text-base font-bold text-pink-600 dark:text-pink-400 leading-tight">{formatPrice(total)}</p>
-                {appliedPromo && promoDiscount > 0 && (
-                  <span className="text-[10px] text-green-600 dark:text-green-400 font-semibold">
-                    -{formatPrice(promoDiscount)}
-                  </span>
-                )}
+
+          <div className="mb-1 flex items-stretch gap-2">
+            <button
+              type="button"
+              onClick={() => setShowOrderSummarySheet(true)}
+              className="ui-focus-visible flex min-h-[52px] min-w-0 max-w-[45%] flex-[1_1_40%] items-center justify-between gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-left dark:border-gray-600 dark:bg-gray-800/90"
+              aria-label="View order summary and price breakdown"
+              aria-expanded={showOrderSummarySheet}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-lg font-extrabold tabular-nums leading-tight text-pink-600 dark:text-pink-400">
+                  {formatPrice(total)}
+                </p>
+                <p className="text-form-helper truncate text-gray-600 dark:text-gray-300">
+                  {cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'}
+                  {appliedPromo && promoDiscount > 0 ? ` · promo −${formatPrice(promoDiscount)}` : ''}
+                </p>
               </div>
-              <span className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight">
-                {cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'}
-              </span>
-            </div>
-            
-            {/* Checkout Button - 70% width */}
+              <ChevronUp className="h-5 w-5 shrink-0 text-gray-500 dark:text-gray-400" aria-hidden />
+            </button>
+
             <button
               data-place-order-button
+              type="button"
               onClick={() => {
                 setShowSuccessIndicator(false);
                 handlePlaceOrder();
               }}
               disabled={loading || !isAuthenticated}
-              className={`flex-1 w-[70%] h-[56px] bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all font-bold text-base shadow-lg dark:shadow-xl dark:shadow-black/30 flex items-center justify-center gap-2 ${
+              className={`ui-focus-visible flex min-h-[52px] min-w-0 flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-600 to-rose-600 px-3 text-base font-bold text-white shadow-lg transition-all dark:from-pink-700 dark:to-rose-700 dark:shadow-black/30 dark:hover:from-pink-600 dark:hover:to-rose-600 ${
                 loading || !isAuthenticated
-                  ? 'opacity-50 cursor-not-allowed active:scale-100'
-                  : (!selectedSlot && !cartDeliverySlot)
-                    ? 'opacity-75 cursor-pointer active:scale-95'
-                    : 'active:scale-95'
+                  ? 'cursor-not-allowed opacity-50'
+                  : !selectedSlot && !cartDeliverySlot
+                    ? 'cursor-pointer opacity-90'
+                    : 'hover:from-pink-700 hover:to-rose-700'
               }`}
             >
               {loading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>PLACING...</span>
+                  <Loader2 className="h-5 w-5 animate-spin shrink-0" aria-hidden />
+                  <span>Placing…</span>
                 </>
               ) : showSuccessIndicator ? (
                 <>
-                  <CheckCircle className="w-4 h-4" />
-                  <span>READY TO PLACE</span>
+                  <CheckCircle className="h-5 w-5 shrink-0" aria-hidden />
+                  <span className="truncate">Ready</span>
                 </>
               ) : (
                 <>
-                  <Lock className="w-4 h-4" />
-                  <span>PLACE ORDER</span>
+                  <Lock className="h-5 w-5 shrink-0" aria-hidden />
+                  <span className="truncate">Place order</span>
                 </>
               )}
             </button>
           </div>
-          
-          {/* Security Badge */}
-          <div className="flex items-center justify-center">
-            <p className="text-[9px] text-gray-400 dark:text-gray-500">
-              🔒 Secure checkout
-            </p>
+
+          <div className="flex items-center justify-center gap-1 pb-1 text-form-helper text-gray-500 dark:text-gray-400">
+            <Lock className="h-3 w-3 shrink-0 text-green-600 dark:text-green-400" aria-hidden />
+            <span>Secure checkout</span>
           </div>
         </div>
       </div>
@@ -3746,37 +3881,52 @@ function CheckoutPageContent({ isClient }) {
           />
           
           {/* Bottom Sheet */}
-          <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 rounded-t-3xl shadow-2xl dark:shadow-black/50 z-50 max-h-[85vh] flex flex-col transform transition-transform duration-300 ease-out">
+          <div
+            id="checkout-mobile-summary-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="checkout-summary-sheet-title"
+            className="lg:hidden fixed bottom-0 left-0 right-0 z-50 flex max-h-[85vh] flex-col rounded-t-3xl bg-white shadow-2xl transition-transform duration-300 ease-out dark:bg-gray-800 dark:shadow-black/50"
+          >
             {/* Handle Bar */}
-            <div className="flex justify-center pt-3 pb-2">
-              <div className="w-12 h-1.5 bg-gray-300 dark:bg-gray-600 rounded-full" />
+            <div className="flex justify-center pb-2 pt-3">
+              <div className="h-1.5 w-12 rounded-full bg-gray-300 dark:bg-gray-500" aria-hidden />
             </div>
             
             {/* Header */}
-            <div className="px-4 pb-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-              <h2 className="heading-section">Order summary</h2>
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 pb-3 dark:border-gray-600">
+              <div className="min-w-0">
+                <h2 id="checkout-summary-sheet-title" className="heading-section text-gray-900 dark:text-gray-100">
+                  Order summary
+                </h2>
+                <p className="mt-0.5 tabular-nums text-cart-meta text-gray-500 dark:text-gray-400">
+                  {cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'}
+                </p>
+              </div>
               <button
+                type="button"
                 onClick={() => setShowOrderSummarySheet(false)}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-                aria-label="Close"
+                className="ui-focus-visible flex h-11 w-11 items-center justify-center rounded-full text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                aria-label="Close order summary"
               >
-                <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                <X className="h-5 w-5" aria-hidden />
               </button>
             </div>
             
             {/* Scrollable Content */}
             <div className="flex-1 overflow-y-auto px-4 py-4">
-              {/* Cart Items - Organized by Type */}
-              <div className="space-y-4 mb-4">
+              <div className="flex flex-col gap-1">
+              <div className="relative">
+                <div className="custom-scrollbar max-h-[min(50vh,380px)] space-y-4 overflow-y-auto pb-6 pr-1">
                 {/* Separate Deal Items */}
                 {cartItems.filter(item => item.is_deal_item).length > 0 && (
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 pb-1.5 border-b border-green-200 dark:border-green-700">
-                      <div className="p-1 rounded-md bg-green-100 dark:bg-green-900/30">
-                        <Tag className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
+                    <div className="flex items-center gap-2 border-b border-gray-200 pb-2 dark:border-gray-700">
+                      <div className="rounded-md bg-gray-100 p-1 dark:bg-gray-700/80">
+                        <Tag className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
                       </div>
-                      <h3 className="text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wide">
-                        Special Deals ({cartItems.filter(item => item.is_deal_item).length})
+                      <h3 className="text-cart-label">
+                        Special deals ({cartItems.filter(item => item.is_deal_item).length})
                       </h3>
                     </div>
                     {cartItems.filter(item => item.is_deal_item).map((item) => {
@@ -3785,24 +3935,27 @@ function CheckoutPageContent({ isClient }) {
                       const totalItemPrice = item.totalPrice || itemTotal;
 
                       return (
-                        <div key={item.id} className="flex gap-3 p-3 rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800 shadow-sm">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-2 mb-1.5">
-                              <div className="flex-1 min-w-0">
-                                <h4 className="font-bold text-sm text-gray-900 dark:text-gray-100 line-clamp-2 mb-1">
+                        <div
+                          key={item.id}
+                          className="rounded-lg border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800 sm:p-3"
+                        >
+                          <div className="min-w-0">
+                            <div className="mb-1.5 flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <h4 className="text-cart-card-title mb-1 line-clamp-2">
                                   {item.product.name}
                                 </h4>
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200 text-[10px] font-bold rounded-md">
-                                  <Gift className="w-3 h-3" />
-                                  DEAL
+                                <span className="text-cart-pill inline-flex items-center gap-1 rounded-md bg-green-100 px-2 py-0.5 text-green-800 dark:bg-green-900/40 dark:text-green-200">
+                                  <Gift className="h-3 w-3" />
+                                  Deal
                                 </span>
                               </div>
-                              <span className="text-base font-extrabold text-green-600 dark:text-green-400 whitespace-nowrap ml-2">
+                              <span className="ml-2 shrink-0 tabular-nums text-cart-summary-value text-green-700 dark:text-green-400">
                                 {formatPrice(totalItemPrice)}
                               </span>
                             </div>
-                            <div className="flex items-center justify-between mt-2 pt-2 border-t border-green-200 dark:border-green-700">
-                              <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">Quantity: {item.quantity}</span>
+                            <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 dark:border-gray-700">
+                              <span className="text-cart-meta">Quantity: {item.quantity}</span>
                             </div>
                           </div>
                         </div>
@@ -3814,20 +3967,24 @@ function CheckoutPageContent({ isClient }) {
                 {/* Regular Items */}
                 {cartItems.filter(item => !item.is_deal_item).length > 0 && (
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 pb-1.5 border-b border-pink-200 dark:border-pink-700">
-                      <div className="p-1 rounded-md bg-pink-100 dark:bg-pink-900/30">
-                        <Package className="w-3.5 h-3.5 text-pink-600 dark:text-pink-400" />
+                    <div className="flex items-center gap-2 border-b border-gray-200 pb-2 dark:border-gray-700">
+                      <div className="rounded-md bg-gray-100 p-1 dark:bg-gray-700/80">
+                        <Package className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
                       </div>
-                      <h3 className="text-xs font-bold text-pink-700 dark:text-pink-400 uppercase tracking-wide">
+                      <h3 className="text-cart-label">
                         Products ({cartItems.filter(item => !item.is_deal_item).length})
                       </h3>
                     </div>
-                    {cartItems.filter(item => !item.is_deal_item).map((item) => {
-                      // Calculate price
+                    <div
+                      className={
+                        cartItems.filter((i) => !i.is_deal_item).length > 1
+                          ? 'space-y-2 rounded-lg border border-gray-200 bg-gray-100 p-2 dark:border-gray-700 dark:bg-gray-900/35'
+                          : 'space-y-2'
+                      }
+                    >
+                    {cartItems.filter(item => !item.is_deal_item).map((item, index) => {
                       const itemPrice = item.variant?.discounted_price || item.product.discounted_price || item.product.base_price;
                       const itemTotal = itemPrice * item.quantity;
-                      
-                      // Calculate combo total
                       const calculateComboTotal = (combos) => {
                         if (!combos || combos.length === 0) return 0;
                         return combos.reduce((sum, combo) => {
@@ -3840,72 +3997,75 @@ function CheckoutPageContent({ isClient }) {
                           return sum + (comboUnitPrice * combo.quantity);
                         }, 0);
                       };
-                      
                       const comboTotal = calculateComboTotal(item.combos);
                       const totalItemPrice = item.totalPrice || (itemTotal + comboTotal);
-                      
-                      // Get product details
                       const itemWeight = item.variant?.weight || item.product?.base_weight || null;
                       const productDetails = [];
                       if (itemWeight) productDetails.push(itemWeight);
                       if (item.flavor) productDetails.push(item.flavor.name);
-                      if (item.tier) productDetails.push(`${item.tier} Tier`);
+                      if (item.tier) {
+                        const tierLabel = String(item.tier).trim();
+                        productDetails.push(/tier/i.test(tierLabel) ? tierLabel : `${tierLabel} Tier`);
+                      }
+                      const multiRegularRows = cartItems.filter((i) => !i.is_deal_item).length > 1;
 
                       return (
-                        <div key={item.id} className="flex gap-3 p-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm">
-                          {/* Product Image */}
-                          <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden flex-shrink-0 shadow-sm">
+                        <div
+                          key={item.id}
+                          className={`flex gap-2 rounded-lg border p-2.5 sm:gap-3 sm:p-3 ${
+                            multiRegularRows
+                              ? index % 2 === 1
+                                ? 'border-gray-300 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/90'
+                                : 'border-gray-300 bg-white dark:bg-gray-800'
+                              : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
+                          }`}
+                        >
+                          <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-700 sm:h-20 sm:w-20">
                             <img
                               src={item.product.image_url}
                               alt={item.product.name}
-                              className="w-full h-full object-cover"
+                              className="h-full w-full object-cover"
                             />
                           </div>
-                          
-                          {/* Product Details */}
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold text-sm text-gray-900 dark:text-gray-100 line-clamp-2 mb-1.5">
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-cart-card-title mb-1.5 line-clamp-2">
                               {item.product.name}
                             </h4>
-                            
-                            {/* Product Specifications */}
                             {productDetails.length > 0 && (
-                              <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                              <div className="mb-2 flex flex-wrap items-center gap-1.5">
                                 {productDetails.map((detail, idx) => (
-                                  <span key={idx} className="inline-flex items-center px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-[10px] font-medium rounded">
+                                  <span key={idx} className="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-300 sm:text-xs">
                                     {detail}
                                   </span>
                                 ))}
                               </div>
                             )}
-                            
-                            {/* Add-ons/Combos */}
                             {item.combos && item.combos.length > 0 && (
                               <div className="mb-2">
-                                <div className="flex items-center gap-1 mb-1.5">
-                                  <Gift className="w-3 h-3 text-purple-500 dark:text-purple-400" />
-                                  <span className="text-[10px] font-semibold text-purple-600 dark:text-purple-400">
+                                <div className="mb-1.5 flex items-center gap-1">
+                                  <Gift className="h-3 w-3 text-purple-500 dark:text-purple-400" />
+                                  <span className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 sm:text-xs">
                                     {item.combos.length} Add-on{item.combos.length > 1 ? 's' : ''}
                                   </span>
                                 </div>
                                 <div className="space-y-1">
                                   {item.combos.map((combo, idx) => {
-                                    // Calculate individual combo price
                                     const comboUnitPrice = (combo.discount_percentage > 0 || (combo.discounted_price && combo.discounted_price < combo.price))
                                       ? (combo.discounted_price || combo.price)
                                       : combo.price;
                                     const comboTotalPrice = (comboUnitPrice || 0) * (combo.quantity || 1);
-                                    
                                     return (
-                                      <div key={idx} className="flex items-center gap-1.5 text-[10px]">
+                                      <div key={idx} className="flex items-center gap-1.5 text-[10px] sm:text-xs">
                                         {idx === 0 ? (
-                                          <span className="text-gray-700 dark:text-gray-300 font-medium">
+                                          <span className="font-medium text-gray-700 dark:text-gray-300">
                                             {combo.name || 'Combo Item'} × {combo.quantity || 1} = {formatPrice(comboTotalPrice)}
                                           </span>
                                         ) : (
                                           <>
-                                            <span className="text-purple-500 dark:text-purple-400 font-semibold">➕</span>
-                                            <span className="text-gray-700 dark:text-gray-300 font-medium">
+                                            <span className="text-cart-meta font-semibold text-gray-400 dark:text-gray-500" aria-hidden>
+                                              +
+                                            </span>
+                                            <span className="font-medium text-gray-700 dark:text-gray-300">
                                               {combo.name || 'Combo Item'} × {combo.quantity || 1} = {formatPrice(comboTotalPrice)}
                                             </span>
                                           </>
@@ -3916,107 +4076,111 @@ function CheckoutPageContent({ isClient }) {
                                 </div>
                               </div>
                             )}
-                            
-                            {/* Quantity and Price */}
-                            <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
-                              <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                                Qty: <span className="font-semibold">{item.quantity}</span>
+                            <div className="mt-2 flex items-center justify-between border-t border-gray-200 pt-2 dark:border-gray-600">
+                              <span className="text-cart-meta">
+                                Qty: <span className="text-cart-meta-strong">{item.quantity}</span>
                               </span>
                               <div className="text-right">
                                 {comboTotal > 0 && (
-                                  <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">
+                                  <div className="mb-0.5 text-cart-meta tabular-nums">
                                     {formatPrice(itemTotal)} + {formatPrice(comboTotal)}
                                   </div>
                                 )}
-                                <span className="text-sm font-bold text-pink-600 dark:text-pink-400">
-                                  {formatPrice(totalItemPrice)}
-                                </span>
+                                <span className="text-cart-summary-value">{formatPrice(totalItemPrice)}</span>
                               </div>
                             </div>
                           </div>
                         </div>
                       );
                     })}
+                    </div>
                   </div>
                 )}
+                </div>
+                <div
+                  className="pointer-events-none absolute inset-x-0 bottom-0 h-6 rounded-b-lg bg-gradient-to-t from-white to-transparent dark:from-gray-800"
+                  aria-hidden
+                />
+              </div>
+              {cartItems.length > 1 && (
+                <p className="text-center text-cart-page-meta sm:text-left">Scroll the list above to see every line item.</p>
+              )}
               </div>
 
-              {/* Price Breakdown */}
-              <div className="space-y-3 pt-1 border-t border-gray-200 dark:border-gray-700">
-                {/* 1. Subtotal */}
-                <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                  <span>Subtotal ({cartSummary.totalItems} items)</span>
-                  <span className="font-medium">{formatPrice(subtotal)}</span>
-                </div>
-
-                {/* 2. Promo Discount */}
-                {appliedPromo && promoDiscount > 0 && (
-                  <div className="flex items-center justify-between text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-lg p-2">
-                    <span className="text-sm font-medium">Promo Discount</span>
-                    <span className="font-semibold">-{formatPrice(promoDiscount)}</span>
-                  </div>
-                )}
-
-                {/* 3. Delivery Charge */}
-                <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                  <span>Delivery Charge</span>
-                  <span className="font-medium">
-                    {finalDeliveryCharge === 0 ? (
-                      <span className="text-green-600 dark:text-green-400 font-semibold">FREE</span>
-                    ) : (
-                      formatPrice(finalDeliveryCharge)
-                    )}
-                  </span>
-                </div>
-
-                {/* 4. Wallet Balance */}
-                {isAuthenticated && walletBalance > 0 && (
-                  <div className="bg-pink-50 dark:bg-pink-900/20 rounded-lg p-3 border border-pink-200 dark:border-pink-800">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Wallet className="w-4 h-4 text-pink-600 dark:text-pink-400" />
-                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Wallet Balance</span>
+              {/* Price Breakdown (matches desktop summary) */}
+              <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700">
+                <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                    <div className="flex items-center justify-between gap-3 bg-white px-3 py-2.5 dark:bg-gray-800/40">
+                      <span className="min-w-0 text-cart-label">
+                        Subtotal ({cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'})
+                      </span>
+                      <span className="shrink-0 text-right text-cart-summary-value">{formatPrice(subtotal)}</span>
+                    </div>
+                    {appliedPromo && promoDiscount > 0 && (
+                      <div className="flex items-center justify-between gap-3 bg-white px-3 py-2.5 dark:bg-gray-800/40">
+                        <span className="min-w-0 text-cart-label">Promo discount</span>
+                        <span className="shrink-0 text-right text-sm font-semibold tabular-nums text-green-700 dark:text-green-400 sm:text-base">
+                          -{formatPrice(promoDiscount)}
+                        </span>
                       </div>
-                      <span className="text-sm font-semibold text-pink-600 dark:text-pink-400">{formatPrice(walletBalance)}</span>
-                    </div>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={applyWalletDiscount}
-                        onChange={(e) => setApplyWalletDiscount(e.target.checked)}
-                        className="w-4 h-4 text-pink-600 dark:text-pink-400 rounded focus:ring-pink-500 dark:focus:ring-pink-400"
-                      />
-                      <span className="text-xs text-gray-700 dark:text-gray-300">
-                        Use wallet (up to {formatPrice(maxWalletDiscount)} - 10% of order)
-                      </span>
-                    </label>
-                    {applyWalletDiscount && walletDiscount > 0 && (
-                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-pink-200 dark:border-pink-800">
-                      <span className="text-sm font-medium text-pink-600 dark:text-pink-400">Wallet Discount</span>
-                      <span className="text-sm font-semibold text-pink-600 dark:text-pink-400">
-                          -{formatPrice(walletDiscount)}
+                    )}
+                    <div className="flex items-center justify-between gap-3 bg-white px-3 py-2.5 dark:bg-gray-800/40">
+                      <span className="min-w-0 text-cart-label">Delivery</span>
+                      <span className="shrink-0 text-right text-cart-summary-value">
+                        {finalDeliveryCharge === 0 ? (
+                          <span className="font-semibold text-green-600 dark:text-green-400">Free</span>
+                        ) : (
+                          formatPrice(finalDeliveryCharge)
+                        )}
                       </span>
                     </div>
+                    {isAuthenticated && walletBalance > 0 && (
+                      <div className="min-h-[80px] space-y-2 bg-gray-50 px-3 py-2.5 dark:bg-gray-900/30">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <Wallet className="h-4 w-4 shrink-0 text-gray-600 dark:text-gray-400" />
+                            <span className="text-cart-label">Wallet balance</span>
+                          </div>
+                          <span className="shrink-0 tabular-nums text-cart-summary-value">{formatPrice(walletBalance)}</span>
+                        </div>
+                        <label className="flex cursor-pointer items-start gap-2">
+                          <input
+                            type="checkbox"
+                            checked={applyWalletDiscount}
+                            onChange={(e) => setApplyWalletDiscount(e.target.checked)}
+                            className="mt-0.5 h-4 w-4 shrink-0 rounded text-pink-600 focus:ring-pink-500 dark:text-pink-400 dark:focus:ring-pink-400"
+                          />
+                          <span className="text-cart-meta text-gray-700 dark:text-gray-300">
+                            Use wallet (up to {formatPrice(maxWalletDiscount)}, 10% of order)
+                          </span>
+                        </label>
+                        <div
+                          className={`flex items-center justify-between border-t border-gray-200 pt-2 transition-opacity duration-200 dark:border-gray-700 ${applyWalletDiscount && walletDiscount > 0 ? 'opacity-100' : 'opacity-0 h-[22px]'}`}
+                        >
+                          <span className="text-cart-label">Wallet discount</span>
+                          <span className="text-cart-summary-value text-pink-700 dark:text-pink-400">
+                            {applyWalletDiscount && walletDiscount > 0 ? `-${formatPrice(walletDiscount)}` : '-₹0'}
+                          </span>
+                        </div>
+                      </div>
                     )}
                   </div>
-                )}
-
-                {/* 5. Final Total */}
-                <div className="border-t-2 border-gray-300 dark:border-gray-600 pt-3 mt-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-cart-total-label">Amount to pay</span>
-                    <span className="text-cart-grand-total">{formatPrice(total)}</span>
-                  </div>
-                  </div>
+                </div>
+                <div className="mt-3 flex items-end justify-between gap-3 border-t-2 border-gray-300 pt-4 dark:border-gray-600">
+                  <span className="text-cart-total-label leading-tight">Amount to pay</span>
+                  <span className="text-checkout-due-amount leading-none">{formatPrice(total)}</span>
                 </div>
               </div>
+            </div>
 
             {/* Footer with Security Badge */}
-            <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700">
-                <p className="text-xs text-center text-gray-500 dark:text-gray-400">
-                  🔒 Secure checkout • Your payment information is safe
-                </p>
+            <div className="border-t border-gray-200 px-4 py-3 dark:border-gray-700">
+              <div className="flex items-center justify-center gap-1.5 text-cart-page-meta">
+                <Lock className="h-3.5 w-3.5 shrink-0 text-green-600 dark:text-green-400" aria-hidden />
+                <span>Secure checkout · Your payment information is safe</span>
               </div>
+            </div>
             </div>
         </>
       )}

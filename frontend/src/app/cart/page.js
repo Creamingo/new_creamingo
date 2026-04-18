@@ -505,7 +505,8 @@ export default function CartPage() {
   }, [cartItems]);
   const dealCartItems = useMemo(() => cartItems.filter((item) => item.is_deal_item), [cartItems]);
   const regularCartItems = useMemo(() => cartItems.filter((item) => !item.is_deal_item), [cartItems]);
-  
+  const multipleMainCartItems = regularCartItems.length > 1;
+
   // Subtotal excludes deal items
   const subtotal = regularItemsTotal;
   const promoDiscount = appliedPromo?.discount || 0;
@@ -1751,8 +1752,8 @@ export default function CartPage() {
             {/* LEFT SECTION: Cart Items (70% equivalent) */}
             <div className="space-y-5 sm:space-y-6">
               {topAvailableOffers.length > 0 && (
-                <div className="rounded-lg border border-pink-200/80 bg-white p-2.5 shadow-sm dark:border-pink-800/70 dark:bg-gray-800">
-                  <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="rounded-lg border border-pink-200/80 bg-white p-2 shadow-sm dark:border-pink-800/70 dark:bg-gray-800">
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <div className="rounded-md bg-pink-100 p-1 dark:bg-pink-900/30">
                         <Tag className="h-4 w-4 text-pink-600 dark:text-pink-400" />
@@ -1775,7 +1776,7 @@ export default function CartPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     {visibleOfferCards.map((promo) => {
                       const isApplied = appliedPromo?.code === promo.code;
                       const isDisabled = isApplyingPromo || (!promo.eligible && !isApplied);
@@ -1797,18 +1798,18 @@ export default function CartPage() {
                       return (
                         <div
                           key={promo.id || promo.code}
-                          className={`rounded-md border px-2.5 py-1.5 active:scale-[0.99] ${
+                          className={`rounded-md border px-2 py-1 active:scale-[0.99] ${
                             isApplied
                               ? 'border-pink-200 bg-pink-50/90 dark:border-pink-800 dark:bg-pink-900/25'
                               : 'border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-700/40'
                           }`}
                         >
-                          <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center justify-between gap-2">
                             <div className="min-w-0 flex-1">
-                              <p className={`truncate ${cartType.savingsRowTitle}`}>
+                              <p className={`truncate leading-tight ${cartType.savingsRowTitle}`}>
                                 {discountLabel} on orders above {formatPrice(promo.minOrder)}
                               </p>
-                              <p className={`mt-0.5 ${cartType.meta} font-medium ${statusClass}`}>
+                              <p className={`mt-px leading-tight ${cartType.meta} font-medium ${statusClass}`}>
                                 {statusText}
                               </p>
                             </div>
@@ -1817,7 +1818,7 @@ export default function CartPage() {
                               <button
                                 type="button"
                                 onClick={handleRemovePromo}
-                                className="cart-touch-target ui-focus-visible flex w-[72px] shrink-0 rounded-md border border-pink-200 bg-white px-2 text-xs font-semibold text-pink-700 hover:bg-pink-50 dark:border-pink-800 dark:bg-gray-800 dark:text-pink-300 dark:hover:bg-pink-900/20 sm:h-7"
+                                className="ui-focus-visible flex h-7 w-[72px] shrink-0 items-center justify-center rounded-md border border-pink-200 bg-white px-2 text-xs font-semibold text-pink-700 hover:bg-pink-50 dark:border-pink-800 dark:bg-gray-800 dark:text-pink-300 dark:hover:bg-pink-900/20"
                               >
                                 Remove
                               </button>
@@ -1826,10 +1827,10 @@ export default function CartPage() {
                                 type="button"
                                 onClick={() => handleSuggestedPromo(promo)}
                                 disabled={isDisabled}
-                                className={`cart-touch-target ui-focus-visible flex w-[72px] shrink-0 rounded-md px-2 text-xs font-semibold transition-colors sm:h-7 ${
+                                className={`ui-focus-visible flex h-7 w-[72px] shrink-0 items-center justify-center rounded-md px-2 text-xs font-semibold transition-colors ${
                                   promo.eligible
                                     ? 'border border-pink-300 bg-white text-pink-700 hover:bg-pink-50 disabled:bg-pink-100 dark:border-pink-700 dark:bg-gray-800 dark:text-pink-300 dark:hover:bg-pink-900/20'
-                                    : 'bg-gray-200 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400'
+                                    : 'cursor-not-allowed bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
                                 }`}
                               >
                                 {isApplyingPromo ? '...' : promo.eligible ? 'Apply' : 'More'}
@@ -1840,7 +1841,7 @@ export default function CartPage() {
                       );
                     })}
                     {visibleOfferCards.length === 0 && (
-                      <div className="rounded-md border border-gray-200 bg-gray-50/80 px-2.5 py-2 dark:border-gray-700 dark:bg-gray-700/40">
+                      <div className="rounded-md border border-gray-200 bg-gray-50/80 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-700/40">
                         <p className={`${cartType.metaStrong} text-gray-800 dark:text-gray-100`}>
                           No coupons ready to apply yet.
                         </p>
@@ -1848,7 +1849,7 @@ export default function CartPage() {
                       </div>
                     )}
                   </div>
-                  <div className="mt-2 space-y-2">
+                  <div className="mt-1.5 space-y-1.5">
                     {appliedPromo && appliedPromoSource === 'manual_input' && (
                       <div
                         className={`inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-blue-700 dark:border-blue-800 dark:bg-blue-900/25 dark:text-blue-300 ${cartType.metaStrong}`}
@@ -1858,7 +1859,7 @@ export default function CartPage() {
                     )}
 
                     {appliedPromo && betterEligibleOffer && (
-                      <div className="flex items-center justify-between gap-2 rounded-md border border-pink-200 bg-pink-50/70 px-2.5 py-1.5 dark:border-pink-800 dark:bg-pink-900/20">
+                      <div className="flex items-center justify-between gap-2 rounded-md border border-pink-200 bg-pink-50/70 px-2 py-1 dark:border-pink-800 dark:bg-pink-900/20">
                         <p className={`${cartType.meta} font-medium text-pink-700 dark:text-pink-300`}>
                           Better offer available:{' '}
                           {String(betterEligibleOffer.discount_type || '').toLowerCase() === 'percentage'
@@ -1949,7 +1950,7 @@ export default function CartPage() {
                       </button>
                     </div>
 
-                    <div className="max-h-[calc(88dvh-70px)] space-y-2 overflow-y-auto p-3">
+                    <div className="max-h-[calc(88dvh-70px)] space-y-1 overflow-y-auto p-3">
                       {nextBestOffer && (
                         <div className="rounded-md border border-pink-200 bg-pink-50/70 px-2.5 py-2 dark:border-pink-700 dark:bg-pink-900/20">
                           <p className={`${cartType.metaStrong} text-pink-700 dark:text-pink-300`}>
@@ -1990,7 +1991,7 @@ export default function CartPage() {
                         return (
                           <div
                             key={`modal-${promo.id || promo.code}`}
-                            className={`rounded-md border px-2.5 py-2 ${
+                            className={`rounded-md border px-2 py-1.5 ${
                               isApplied
                                 ? 'border-pink-200 bg-pink-50/90 dark:border-pink-800 dark:bg-pink-900/25'
                                 : isBestEligible
@@ -1998,21 +1999,21 @@ export default function CartPage() {
                                 : 'border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-700/40'
                             }`}
                           >
-                            <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center justify-between gap-2">
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2">
-                                  <p className={`truncate ${cartType.savingsRowTitle}`}>
+                                  <p className={`truncate leading-tight ${cartType.savingsRowTitle}`}>
                                     {discountLabel} on orders above {formatPrice(promo.minOrder)}
                                   </p>
                                 </div>
-                                <div className="mt-0.5 flex items-center justify-between gap-2">
+                                <div className="mt-px flex items-center justify-between gap-2">
                                   <p
-                                    className={`${cartType.meta} font-medium ${promo.eligible ? 'text-pink-700 dark:text-pink-300' : 'text-gray-500 dark:text-gray-400'}`}
+                                    className={`leading-tight ${cartType.meta} font-medium ${promo.eligible ? 'text-pink-700 dark:text-pink-300' : 'text-gray-500 dark:text-gray-400'}`}
                                   >
                                     {promo.eligible ? 'Ready to apply the best coupon' : `Add ${formatRoundedAmount(promo.shortBy)} more`}
                                   </p>
                                   {isBestEligible && (
-                                    <span className={`${cartType.metaStrong} text-pink-600 dark:text-pink-300`}>
+                                    <span className={`shrink-0 leading-tight ${cartType.metaStrong} text-pink-600 dark:text-pink-300`}>
                                       Best deal
                                     </span>
                                   )}
@@ -2023,7 +2024,7 @@ export default function CartPage() {
                                 <button
                                   type="button"
                                   onClick={handleRemovePromo}
-                                  className="cart-touch-target ui-focus-visible flex h-8 w-[76px] shrink-0 rounded-md border border-pink-200 bg-white px-2 text-xs font-semibold text-pink-700 hover:bg-pink-50 dark:border-pink-800 dark:bg-gray-800 dark:text-pink-300 dark:hover:bg-pink-900/20 sm:h-8"
+                                  className="ui-focus-visible flex h-8 w-[76px] shrink-0 items-center justify-center rounded-md border border-pink-200 bg-white px-2 text-xs font-semibold text-pink-700 hover:bg-pink-50 dark:border-pink-800 dark:bg-gray-800 dark:text-pink-300 dark:hover:bg-pink-900/20"
                                 >
                                   Remove
                                 </button>
@@ -2032,7 +2033,7 @@ export default function CartPage() {
                                   type="button"
                                   onClick={() => handleSuggestedPromo(promo)}
                                   disabled={isDisabled}
-                                  className={`cart-touch-target ui-focus-visible flex h-8 w-[76px] shrink-0 rounded-md px-2 text-xs font-semibold transition-colors sm:h-8 ${
+                                  className={`ui-focus-visible flex h-8 w-[76px] shrink-0 items-center justify-center rounded-md px-2 text-xs font-semibold transition-colors ${
                                     isBestEligible
                                       ? 'bg-gradient-to-r from-pink-600 to-rose-600 text-white hover:from-pink-700 hover:to-rose-700 disabled:from-pink-300 disabled:to-rose-300 dark:from-pink-700 dark:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600'
                                       : promo.eligible
@@ -2201,7 +2202,13 @@ export default function CartPage() {
 
               {/* Regular Items */}
               {regularCartItems.length > 0 && (
-                <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent sm:dark:bg-transparent">
+                <div
+                  className={
+                    multipleMainCartItems
+                      ? 'space-y-4 overflow-visible rounded-xl border border-gray-200 bg-gray-100 p-2.5 dark:border-gray-700 dark:bg-gray-900/40 sm:p-3 lg:p-4'
+                      : 'overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent sm:dark:bg-transparent'
+                  }
+                >
                   {regularCartItems.map((item, index) => {
                     // Number sequentially across all main products (continue after deal items)
                     const dealItemsCount = dealCartItems.length;
@@ -2239,11 +2246,9 @@ export default function CartPage() {
                       <div
                         id={`cart-item-${item.id}`}
                         key={item.id}
-                        className={`relative overflow-hidden sm:mb-5 ${
-                          index !== regularCartItems.length - 1
-                            ? 'border-b border-gray-200/90 dark:border-gray-700/90 sm:border-0'
-                            : ''
-                        }`}
+                        className={
+                          multipleMainCartItems ? 'relative overflow-hidden' : 'relative overflow-hidden sm:mb-5'
+                        }
                         onTouchStart={(e) => handleTouchStart(e, item.id)}
                         onTouchMove={(e) => handleTouchMove(e, item.id)}
                         onTouchEnd={(e) => handleTouchEnd(e, item.id)}
@@ -2257,9 +2262,23 @@ export default function CartPage() {
                         )}
                         
                         <div
-                          className={`bg-transparent sm:bg-white sm:dark:bg-gray-800 rounded-none sm:rounded-xl border-0 sm:border sm:border-gray-200 sm:dark:border-gray-700 sm:border-l-4 sm:border-l-gray-200 sm:dark:border-l-gray-600 p-3 sm:p-4 lg:p-6 transition-all duration-300 ${
-                          isRemoving ? 'opacity-50 scale-95' : 'sm:hover:shadow-lg sm:dark:hover:shadow-xl sm:dark:hover:shadow-black/30 sm:hover:border-gray-300 sm:dark:hover:border-gray-500'
-                        }`}
+                          className={
+                            multipleMainCartItems
+                              ? `rounded-xl border border-gray-300 p-3 shadow-sm transition-all duration-300 dark:border-gray-600 sm:p-4 lg:p-6 ${
+                                  index % 2 === 1
+                                    ? 'bg-gray-50 dark:bg-gray-800/90'
+                                    : 'bg-white dark:bg-gray-800'
+                                } ${
+                                  isRemoving
+                                    ? 'opacity-50 scale-95'
+                                    : 'hover:shadow-md hover:border-gray-400 dark:hover:border-gray-500 dark:hover:shadow-black/20'
+                                }`
+                              : `bg-transparent sm:bg-white sm:dark:bg-gray-800 rounded-none sm:rounded-xl border-0 sm:border sm:border-gray-200 sm:dark:border-gray-700 sm:border-l-4 sm:border-l-gray-200 sm:dark:border-l-gray-600 p-3 sm:p-4 lg:p-6 transition-all duration-300 ${
+                                  isRemoving
+                                    ? 'opacity-50 scale-95'
+                                    : 'sm:hover:shadow-lg sm:dark:hover:shadow-xl sm:dark:hover:shadow-black/30 sm:hover:border-gray-300 sm:dark:hover:border-gray-500'
+                                }`
+                          }
                           style={{
                             transform: `translateX(${swipeOffset}px)`,
                             transition: swipeState[item.id]?.isSwiping ? 'none' : 'transform 0.3s ease-out'

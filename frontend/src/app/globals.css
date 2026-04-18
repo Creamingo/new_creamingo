@@ -694,7 +694,7 @@ input[type="date"] {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Commerce typography & a11y tokens — cart, checkout, PDP summaries          */
+/* Commerce typography & a11y tokens — cart, checkout, PDP, form fields       */
 /* -------------------------------------------------------------------------- */
 @layer components {
   .heading-page {
@@ -799,6 +799,28 @@ input[type="date"] {
 
   .text-cart-grand-total {
     @apply text-xl font-bold tabular-nums text-pink-700 dark:text-pink-400 sm:text-2xl sm:font-extrabold;
+  }
+
+  /* Checkout order summary — final amount (stronger than cart grand total in dense panels) */
+  .text-checkout-due-amount {
+    @apply text-2xl font-extrabold tabular-nums tracking-tight text-pink-700 dark:text-pink-400 sm:text-3xl;
+  }
+
+  /* Checkout / forms — same scale as cart meta & labels (P4) */
+  .text-form-helper {
+    @apply text-xs leading-snug text-gray-500 dark:text-gray-400;
+  }
+
+  .text-form-legal {
+    @apply text-[11px] leading-relaxed text-gray-500 dark:text-gray-400 sm:text-xs;
+  }
+
+  .text-form-error {
+    @apply text-xs font-medium leading-snug text-red-600 dark:text-red-400;
+  }
+
+  .text-form-context {
+    @apply text-sm leading-snug text-gray-600 dark:text-gray-300;
   }
 
   .ui-focus-visible {
