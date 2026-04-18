@@ -2390,14 +2390,16 @@ function CheckoutPageContent({ isClient }) {
         <div className="mb-4 sm:mb-6">
           <button
             onClick={() => router.push('/cart')}
-            className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-600 dark:hover:text-pink-400 transition-colors mb-3 sm:mb-4"
+            className="ui-focus-visible mb-3 flex min-h-[44px] items-center gap-2 rounded-lg text-gray-600 transition-colors hover:text-pink-700 dark:text-gray-400 dark:hover:text-pink-400 sm:mb-4"
           >
             <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
             <span className="text-sm sm:text-base font-medium">Back to Cart</span>
           </button>
           
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">Checkout</h1>
-          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-0.5 sm:mt-1">Complete your order details</p>
+          <h1 className="heading-page">Checkout</h1>
+          <p className="text-cart-subtitle mt-0.5 text-gray-600 dark:text-gray-400 sm:mt-1">
+            Complete your order details
+          </p>
         </div>
 
         {error && (
@@ -3313,7 +3315,7 @@ function CheckoutPageContent({ isClient }) {
                 <div className="p-1.5 rounded-lg bg-pink-100 dark:bg-pink-900/30">
                   <ShoppingBag className="w-4 h-4 text-pink-600 dark:text-pink-400" />
                 </div>
-                <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">Order Summary</h2>
+                <h2 className="heading-section">Order summary</h2>
               </div>
 
               {/* Cart Items - Organized by Type */}
@@ -3556,10 +3558,8 @@ function CheckoutPageContent({ isClient }) {
                 {/* 5. Final Total (Amount to Pay) */}
                 <div className="border-t-2 border-pink-200 dark:border-pink-800 pt-2.5 mt-2.5 bg-gradient-to-r from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20 rounded-lg p-3 -mx-1">
                   <div className="flex justify-between items-center">
-                    <span className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">Amount to Pay</span>
-                    <span className="text-xl sm:text-2xl font-extrabold text-pink-600 dark:text-pink-400">
-                      {formatPrice(total)}
-                    </span>
+                    <span className="text-cart-total-label">Amount to pay</span>
+                    <span className="text-cart-grand-total">{formatPrice(total)}</span>
                   </div>
                 </div>
               </div>
@@ -3754,7 +3754,7 @@ function CheckoutPageContent({ isClient }) {
             
             {/* Header */}
             <div className="px-4 pb-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Order Summary</h2>
+              <h2 className="heading-section">Order summary</h2>
               <button
                 onClick={() => setShowOrderSummarySheet(false)}
                 className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
@@ -4004,10 +4004,8 @@ function CheckoutPageContent({ isClient }) {
                 {/* 5. Final Total */}
                 <div className="border-t-2 border-gray-300 dark:border-gray-600 pt-3 mt-4">
                   <div className="flex justify-between items-center">
-                    <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">Amount to Pay</span>
-                    <span className="text-2xl font-bold text-pink-600 dark:text-pink-400">
-                      {formatPrice(total)}
-                    </span>
+                    <span className="text-cart-total-label">Amount to pay</span>
+                    <span className="text-cart-grand-total">{formatPrice(total)}</span>
                   </div>
                   </div>
                 </div>

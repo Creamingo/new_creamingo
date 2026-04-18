@@ -21,7 +21,8 @@ import {
   MoreVertical,
   AlertTriangle,
   Clock,
-  ShoppingCart
+  ShoppingCart,
+  Lock
 } from 'lucide-react';
 import { useCart } from '../../contexts/CartContext';
 import { usePinCode } from '../../contexts/PinCodeContext';
@@ -137,6 +138,49 @@ const getDescriptiveLabel = (item, groupIndex, itemIndex) => {
   // Fallback to item number
   return `Item ${itemIndex + 1}`;
 };
+
+/** Maps to shared `@layer components` tokens in `src/app/globals.css` (heading-page, text-cart-meta, …). */
+const cartType = {
+  pageTitle: 'heading-page',
+  pageSubtitle: 'text-cart-subtitle',
+  pageMeta: 'text-cart-page-meta',
+  section: 'heading-section',
+  sectionMuted: 'text-cart-section-muted',
+  subsection: 'heading-subsection',
+  cardTitle: 'text-cart-card-title',
+  cardTitleLg: 'text-cart-card-title-lg',
+  body: 'text-cart-body',
+  bodyStrong: 'text-cart-body-strong',
+  label: 'text-cart-label',
+  meta: 'text-cart-meta',
+  metaStrong: 'text-cart-meta-strong',
+  pill: 'text-cart-pill',
+  upsellCardTitle: 'text-cart-upsell-title',
+  upsellBlurb: 'text-cart-upsell-blurb',
+  upsellSectionTitle: 'text-cart-upsell-section',
+  cornerPromoBadge: 'text-cart-corner-badge',
+  savingsRowTitle: 'text-cart-savings-title',
+  numeric: 'tabular-nums',
+  summaryRow: 'text-cart-summary-row',
+  summaryValue: 'text-cart-summary-value',
+  summaryTotalLabel: 'text-cart-total-label',
+  summaryTotalValue: 'text-cart-grand-total',
+  panelTitle: 'text-cart-panel-title',
+  modalTitle: 'text-cart-modal-title',
+  modalMeta: 'text-cart-modal-meta',
+};
+
+function CartItemTotalCaption({ hasCombos }) {
+  if (!hasCombos) {
+    return <>Item total</>;
+  }
+  return (
+    <>
+      <span className="sm:hidden">Total (incl. add-ons)</span>
+      <span className="hidden sm:inline">Item total (incl. add-ons)</span>
+    </>
+  );
+}
 
 export default function CartPage() {
   const router = useRouter();
@@ -1033,7 +1077,6 @@ export default function CartPage() {
           localStorage.setItem('applied_promo', JSON.stringify(refreshedPromo));
         }
       } catch (error) {
-        const reason = getFriendlyPromoError(error?.message);
         const removedCode = appliedPromo.code;
         setAppliedPromo(null);
         setAppliedPromoSource('');
@@ -1041,11 +1084,13 @@ export default function CartPage() {
         setPromoCode('');
         setPreviewDiscount(null);
         setPromoValidationState(null);
-        setPromoError(reason);
-        setPromoStatus({ type: 'error', message: reason });
+        setPromoError('');
+        setPromoStatus(null);
 
+        const raw = String(error?.message || '').toLowerCase();
+        const failureTag = raw.includes('minimum order') ? 'below_minimum' : 'validation_failed';
         promoCodeTrackingApi.trackAbandon(removedCode, subtotal, {
-          failure_reason: `cart_change_invalidated:${reason}`,
+          failure_reason: `cart_change_invalidated:${failureTag}`,
         });
       }
     }, 450);
@@ -1434,20 +1479,25 @@ export default function CartPage() {
         <div className="mb-3 sm:mb-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 dark:text-gray-100">Shopping Cart</h1>
-              <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mt-0.5" suppressHydrationWarning>
+              <h1 className={cartType.pageTitle}>Shopping Cart</h1>
+              <p className={`${cartType.pageSubtitle} mt-0.5`} suppressHydrationWarning>
                 {!mounted || !isInitialized ? (
                   <span>0 items</span>
                 ) : (
                   <>
-                    {totalItemCount} {totalItemCount === 1 ? 'item' : 'items'} in your cart
+                    <span className="block sm:inline">
+                      {totalItemCount} {totalItemCount === 1 ? 'item' : 'items'} in your cart
+                    </span>
                     {(itemCounts.mainProducts > 0 || itemCounts.comboItems > 0 || itemCounts.dealItems > 0) && (
-                      <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
-                        ({itemCounts.mainProducts > 0 && `${itemCounts.mainProducts} main product${itemCounts.mainProducts !== 1 ? 's' : ''}`}
+                      <span className={`mt-1 block sm:mt-0 sm:inline sm:ml-1 ${cartType.pageMeta}`}>
+                        <span className="sm:hidden">Includes </span>
+                        <span className="hidden sm:inline">(</span>
+                        {itemCounts.mainProducts > 0 && `${itemCounts.mainProducts} main product${itemCounts.mainProducts !== 1 ? 's' : ''}`}
                         {itemCounts.mainProducts > 0 && itemCounts.comboItems > 0 && ', '}
                         {itemCounts.comboItems > 0 && `${itemCounts.comboItems} combo item${itemCounts.comboItems !== 1 ? 's' : ''}`}
                         {(itemCounts.mainProducts > 0 || itemCounts.comboItems > 0) && itemCounts.dealItems > 0 && ', '}
-                        {itemCounts.dealItems > 0 && `${itemCounts.dealItems} deal item${itemCounts.dealItems !== 1 ? 's' : ''}`})
+                        {itemCounts.dealItems > 0 && `${itemCounts.dealItems} deal item${itemCounts.dealItems !== 1 ? 's' : ''}`}
+                        <span className="hidden sm:inline">)</span>
                       </span>
                     )}
                   </>
@@ -1457,7 +1507,7 @@ export default function CartPage() {
             {(mounted && isInitialized && cartItems.length > 0) && (
               <button
                 onClick={handleContinueShopping}
-                className="hidden md:flex items-center gap-2 px-4 py-2 text-pink-600 dark:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-900/30 rounded-lg transition-colors"
+                className="ui-focus-visible hidden min-h-[44px] items-center gap-2 rounded-lg px-4 py-2 text-pink-700 transition-colors hover:bg-pink-50 dark:text-pink-300 dark:hover:bg-pink-900/30 md:flex"
               >
                 <ShoppingBag className="w-5 h-5" />
                 Continue Shopping
@@ -1474,8 +1524,8 @@ export default function CartPage() {
               <div className="w-24 h-24 mx-auto mb-6 flex items-center justify-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500 dark:border-pink-400"></div>
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Loading your cart...</h2>
-              <p className="text-gray-600 dark:text-gray-300 mb-8">Please wait while we load your items</p>
+              <h2 className={`${cartType.section} mb-2 text-center`}>Loading your cart...</h2>
+              <p className={`${cartType.body} mb-8 text-center`}>Please wait while we load your items</p>
             </div>
           </div>
         ) : cartItems.length === 0 ? (
@@ -1483,11 +1533,11 @@ export default function CartPage() {
           <>
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm dark:shadow-xl dark:shadow-black/20 border border-gray-200 dark:border-gray-700 p-12 text-center">
               <ShoppingBag className="w-24 h-24 mx-auto mb-6 text-gray-300 dark:text-gray-600" />
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Your cart is empty</h2>
-              <p className="text-gray-600 dark:text-gray-300 mb-8">Add some delicious cakes to get started!</p>
+              <h2 className={`${cartType.section} mb-2 text-center`}>Your cart is empty</h2>
+              <p className={`${cartType.body} mb-8 text-center`}>Add some delicious cakes to get started!</p>
               <button
                 onClick={handleContinueShopping}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white rounded-lg hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all duration-200 font-semibold shadow-lg dark:shadow-xl dark:shadow-black/30 hover:shadow-xl"
+                className="ui-focus-visible inline-flex min-h-[48px] items-center gap-2 rounded-lg bg-gradient-to-r from-pink-600 to-rose-600 px-6 py-3 font-semibold text-white shadow-lg transition-all duration-200 hover:from-pink-700 hover:to-rose-700 hover:shadow-xl dark:from-pink-700 dark:to-rose-700 dark:shadow-xl dark:shadow-black/30 dark:hover:from-pink-600 dark:hover:to-rose-600"
               >
                 <ShoppingBag className="w-5 h-5" />
                 Start Shopping
@@ -1500,8 +1550,10 @@ export default function CartPage() {
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <Package className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-                    <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Saved for Later</h2>
-                    <span className="text-sm sm:text-base text-gray-500 dark:text-gray-300">({savedItems.length} {savedItems.length === 1 ? 'item' : 'items'})</span>
+                    <h2 className={cartType.section}>Saved for Later</h2>
+                    <span className={`${cartType.sectionMuted} shrink-0`}>
+                      ({savedItems.length} {savedItems.length === 1 ? 'item' : 'items'})
+                    </span>
                   </div>
                 </div>
 
@@ -1540,7 +1592,7 @@ export default function CartPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-4">
                               <div className="flex-1">
-                                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1.5">
+                                <h3 className={`${cartType.cardTitleLg} mb-1.5`}>
                                   {item.product.name}
                                 </h3>
                                 
@@ -1584,8 +1636,8 @@ export default function CartPage() {
                                 {/* Item Total */}
                                 <div className="mb-2 pt-2 border-t border-gray-100 dark:border-gray-700">
                                   <div className="flex items-center justify-between mb-1">
-                                    <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">
-                                      {item.combos && item.combos.length > 0 ? 'Item Total (Product + Combo)' : 'Total: '}
+                                    <span className={`${cartType.meta} font-medium text-gray-700 dark:text-gray-300 sm:text-sm`}>
+                                      <CartItemTotalCaption hasCombos={Boolean(item.combos && item.combos.length > 0)} />
                                     </span>
                                     <div className="flex items-center gap-1.5">
                                       {item.combos && item.combos.length > 0 ? (
@@ -1594,7 +1646,7 @@ export default function CartPage() {
                                             {formatPrice(itemPrice)}
                                           </span>
                                           <span className="text-xs text-gray-400 dark:text-gray-500">+</span>
-                                          <span className="text-base sm:text-lg font-semibold text-purple-600 dark:text-purple-400">
+                                          <span className="text-base sm:text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                                             {formatPrice(comboTotal)}
                                           </span>
                                         </>
@@ -1616,8 +1668,10 @@ export default function CartPage() {
                                 {item.combos && item.combos.length > 0 && (
                                   <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
                                     <div className="flex items-center gap-2 mb-1.5">
-                                      <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                                      <span className="text-sm sm:text-base font-medium text-purple-600 dark:text-purple-400">Combo Items</span>
+                                      <Sparkles className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                                      <span className={`${cartType.subsection} text-gray-600 dark:text-gray-300 sm:text-base`}>
+                                        Add-ons
+                                      </span>
                                     </div>
                                     <div className="space-y-1.5">
                                       {item.combos.map((combo, index) => {
@@ -1632,7 +1686,7 @@ export default function CartPage() {
                                           className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/60 rounded-lg p-2 border border-gray-200 dark:border-gray-700"
                                         >
                                           <div className="flex items-center gap-2">
-                                            <Package className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                                            <Package className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                                             <span className="text-sm sm:text-base font-medium text-gray-900 dark:text-gray-100">
                                               {combo.product_name}
                                             </span>
@@ -1644,7 +1698,7 @@ export default function CartPage() {
                                                   {formatPrice(originalTotal)}
                                                 </span>
                                               )}
-                                          <span className="text-sm sm:text-base font-semibold text-purple-600 dark:text-purple-400">
+                                          <span className="text-sm sm:text-base font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                                                 {formatPrice(comboTotal)}
                                           </span>
                                         </div>
@@ -1703,18 +1757,18 @@ export default function CartPage() {
                       <div className="rounded-md bg-pink-100 p-1 dark:bg-pink-900/30">
                         <Tag className="h-4 w-4 text-pink-600 dark:text-pink-400" />
                       </div>
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                        Your Available Savings
-                      </p>
+                      <p className={cartType.panelTitle}>Your Available Savings</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-pink-50 px-2 py-0.5 text-[10px] font-semibold text-pink-600 dark:bg-pink-900/30 dark:text-pink-300">
+                      <span
+                        className={`rounded-full bg-pink-50 px-2 py-0.5 text-pink-600 dark:bg-pink-900/30 dark:text-pink-300 ${cartType.pill}`}
+                      >
                         {availableOffers.length} offers
                       </span>
                       <button
                         type="button"
                         onClick={() => setShowOffersModal(true)}
-                        className="text-sm font-bold text-blue-600 hover:text-blue-700 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
+                        className={`${cartType.bodyStrong} ui-focus-visible rounded px-0.5 text-blue-700 underline-offset-2 hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300`}
                       >
                         View all
                       </button>
@@ -1735,9 +1789,9 @@ export default function CartPage() {
                           ? 'Ready to apply the best coupon'
                           : `Add ${formatRoundedAmount(promo.shortBy)} more`;
                       const statusClass = isApplied
-                        ? 'text-green-600 dark:text-green-400'
+                        ? 'text-pink-700 dark:text-pink-300'
                         : promo.eligible
-                          ? 'text-green-600 dark:text-green-400'
+                          ? 'text-pink-700 dark:text-pink-300'
                           : 'text-gray-500 dark:text-gray-400';
 
                       return (
@@ -1745,16 +1799,16 @@ export default function CartPage() {
                           key={promo.id || promo.code}
                           className={`rounded-md border px-2.5 py-1.5 active:scale-[0.99] ${
                             isApplied
-                              ? 'border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-900/20'
+                              ? 'border-pink-200 bg-pink-50/90 dark:border-pink-800 dark:bg-pink-900/25'
                               : 'border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-700/40'
                           }`}
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100 leading-tight">
+                              <p className={`truncate ${cartType.savingsRowTitle}`}>
                                 {discountLabel} on orders above {formatPrice(promo.minOrder)}
                               </p>
-                              <p className={`mt-0.5 text-[10px] font-medium ${statusClass}`}>
+                              <p className={`mt-0.5 ${cartType.meta} font-medium ${statusClass}`}>
                                 {statusText}
                               </p>
                             </div>
@@ -1763,7 +1817,7 @@ export default function CartPage() {
                               <button
                                 type="button"
                                 onClick={handleRemovePromo}
-                                className="h-7 w-[72px] flex-shrink-0 rounded-md border border-green-300 bg-white px-2 text-xs font-semibold text-green-700 hover:bg-green-50 dark:border-green-700 dark:bg-gray-800 dark:text-green-300 dark:hover:bg-green-900/20"
+                                className="cart-touch-target ui-focus-visible flex w-[72px] shrink-0 rounded-md border border-pink-200 bg-white px-2 text-xs font-semibold text-pink-700 hover:bg-pink-50 dark:border-pink-800 dark:bg-gray-800 dark:text-pink-300 dark:hover:bg-pink-900/20 sm:h-7"
                               >
                                 Remove
                               </button>
@@ -1772,7 +1826,7 @@ export default function CartPage() {
                                 type="button"
                                 onClick={() => handleSuggestedPromo(promo)}
                                 disabled={isDisabled}
-                                className={`h-7 w-[72px] flex-shrink-0 rounded-md px-2 text-xs font-semibold transition-colors ${
+                                className={`cart-touch-target ui-focus-visible flex w-[72px] shrink-0 rounded-md px-2 text-xs font-semibold transition-colors sm:h-7 ${
                                   promo.eligible
                                     ? 'border border-pink-300 bg-white text-pink-700 hover:bg-pink-50 disabled:bg-pink-100 dark:border-pink-700 dark:bg-gray-800 dark:text-pink-300 dark:hover:bg-pink-900/20'
                                     : 'bg-gray-200 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400'
@@ -1787,25 +1841,25 @@ export default function CartPage() {
                     })}
                     {visibleOfferCards.length === 0 && (
                       <div className="rounded-md border border-gray-200 bg-gray-50/80 px-2.5 py-2 dark:border-gray-700 dark:bg-gray-700/40">
-                        <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">
+                        <p className={`${cartType.metaStrong} text-gray-800 dark:text-gray-100`}>
                           No coupons ready to apply yet.
                         </p>
-                        <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
-                          Tap “View all” to see upcoming offers.
-                        </p>
+                        <p className={`mt-0.5 ${cartType.meta}`}>Tap “View all” to see upcoming offers.</p>
                       </div>
                     )}
                   </div>
                   <div className="mt-2 space-y-2">
                     {appliedPromo && appliedPromoSource === 'manual_input' && (
-                      <div className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-900/25 dark:text-blue-300">
+                      <div
+                        className={`inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-blue-700 dark:border-blue-800 dark:bg-blue-900/25 dark:text-blue-300 ${cartType.metaStrong}`}
+                      >
                         Manual code applied
                       </div>
                     )}
 
                     {appliedPromo && betterEligibleOffer && (
                       <div className="flex items-center justify-between gap-2 rounded-md border border-pink-200 bg-pink-50/70 px-2.5 py-1.5 dark:border-pink-800 dark:bg-pink-900/20">
-                        <p className="text-[11px] font-medium text-pink-700 dark:text-pink-300">
+                        <p className={`${cartType.meta} font-medium text-pink-700 dark:text-pink-300`}>
                           Better offer available:{' '}
                           {String(betterEligibleOffer.discount_type || '').toLowerCase() === 'percentage'
                             ? `${betterEligibleOffer.discount_value}% OFF`
@@ -1816,7 +1870,7 @@ export default function CartPage() {
                           type="button"
                           onClick={() => handleSuggestedPromo(betterEligibleOffer)}
                           disabled={isApplyingPromo}
-                          className="h-7 shrink-0 rounded-md bg-pink-600 px-2.5 text-[11px] font-semibold text-white hover:bg-pink-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-pink-700 dark:hover:bg-pink-600"
+                          className="h-7 shrink-0 rounded-md bg-pink-600 px-2.5 text-xs font-semibold text-white hover:bg-pink-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-pink-700 dark:hover:bg-pink-600"
                         >
                           {isApplyingPromo ? '...' : 'Switch now'}
                         </button>
@@ -1864,7 +1918,7 @@ export default function CartPage() {
 
                     {(promoStatus?.type === 'error' || promoError) && (
                       <div
-                        className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] font-medium text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300"
+                        className={`rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5 font-medium text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300 ${cartType.meta}`}
                       >
                         {promoStatus?.message || promoError}
                       </div>
@@ -1882,12 +1936,8 @@ export default function CartPage() {
                   <div className="relative z-[91] max-h-[88dvh] w-full overflow-hidden rounded-t-2xl bg-white shadow-2xl dark:bg-gray-900 sm:max-w-lg sm:rounded-2xl">
                     <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-gray-700">
                       <div>
-                        <p className="text-base font-semibold text-gray-900 dark:text-gray-100">
-                          Available offers
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          Apply now or unlock next savings
-                        </p>
+                        <p className={cartType.modalTitle}>Available offers</p>
+                        <p className={cartType.modalMeta}>Apply now or unlock next savings</p>
                       </div>
                       <button
                         type="button"
@@ -1902,12 +1952,14 @@ export default function CartPage() {
                     <div className="max-h-[calc(88dvh-70px)] space-y-2 overflow-y-auto p-3">
                       {nextBestOffer && (
                         <div className="rounded-md border border-pink-200 bg-pink-50/70 px-2.5 py-2 dark:border-pink-700 dark:bg-pink-900/20">
-                          <p className="text-[11px] font-bold text-pink-700 dark:text-pink-300">
+                          <p className={`${cartType.metaStrong} text-pink-700 dark:text-pink-300`}>
                             🎯 Add {formatRoundedAmount(nextBestOffer.shortBy)} more to unlock{' '}
                             {formatRoundedAmount(nextBestUnlockSavings)} OFF
                           </p>
                           <div className="mt-1.5">
-                            <div className="mb-1 flex items-center justify-between text-[10px] font-medium text-pink-700/80 dark:text-pink-300/80">
+                            <div
+                              className={`mb-1 flex items-center justify-between font-medium text-pink-700/80 dark:text-pink-300/80 ${cartType.meta}`}
+                            >
                               <span>
                                 {formatRoundedAmount(subtotal)} / {formatRoundedAmount(nextBestOffer.minOrder)}
                               </span>
@@ -1940,7 +1992,7 @@ export default function CartPage() {
                             key={`modal-${promo.id || promo.code}`}
                             className={`rounded-md border px-2.5 py-2 ${
                               isApplied
-                                ? 'border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-900/20'
+                                ? 'border-pink-200 bg-pink-50/90 dark:border-pink-800 dark:bg-pink-900/25'
                                 : isBestEligible
                                 ? 'border-pink-500 bg-pink-50 dark:border-pink-500 dark:bg-pink-900/20'
                                 : 'border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-700/40'
@@ -1949,16 +2001,18 @@ export default function CartPage() {
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2">
-                                  <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100 leading-tight">
+                                  <p className={`truncate ${cartType.savingsRowTitle}`}>
                                     {discountLabel} on orders above {formatPrice(promo.minOrder)}
                                   </p>
                                 </div>
                                 <div className="mt-0.5 flex items-center justify-between gap-2">
-                                  <p className={`text-[11px] font-medium ${promo.eligible ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                                  <p
+                                    className={`${cartType.meta} font-medium ${promo.eligible ? 'text-pink-700 dark:text-pink-300' : 'text-gray-500 dark:text-gray-400'}`}
+                                  >
                                     {promo.eligible ? 'Ready to apply the best coupon' : `Add ${formatRoundedAmount(promo.shortBy)} more`}
                                   </p>
                                   {isBestEligible && (
-                                    <span className="text-[11px] font-semibold text-pink-600 dark:text-pink-300">
+                                    <span className={`${cartType.metaStrong} text-pink-600 dark:text-pink-300`}>
                                       Best deal
                                     </span>
                                   )}
@@ -1969,7 +2023,7 @@ export default function CartPage() {
                                 <button
                                   type="button"
                                   onClick={handleRemovePromo}
-                                  className="h-8 w-[76px] flex-shrink-0 rounded-md border border-green-300 bg-white px-2 text-xs font-semibold text-green-700 hover:bg-green-50 dark:border-green-700 dark:bg-gray-800 dark:text-green-300 dark:hover:bg-green-900/20"
+                                  className="cart-touch-target ui-focus-visible flex h-8 w-[76px] shrink-0 rounded-md border border-pink-200 bg-white px-2 text-xs font-semibold text-pink-700 hover:bg-pink-50 dark:border-pink-800 dark:bg-gray-800 dark:text-pink-300 dark:hover:bg-pink-900/20 sm:h-8"
                                 >
                                   Remove
                                 </button>
@@ -1978,12 +2032,12 @@ export default function CartPage() {
                                   type="button"
                                   onClick={() => handleSuggestedPromo(promo)}
                                   disabled={isDisabled}
-                                  className={`h-8 w-[76px] flex-shrink-0 rounded-md px-2 text-xs font-semibold transition-colors ${
+                                  className={`cart-touch-target ui-focus-visible flex h-8 w-[76px] shrink-0 rounded-md px-2 text-xs font-semibold transition-colors sm:h-8 ${
                                     isBestEligible
                                       ? 'bg-gradient-to-r from-pink-600 to-rose-600 text-white hover:from-pink-700 hover:to-rose-700 disabled:from-pink-300 disabled:to-rose-300 dark:from-pink-700 dark:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600'
                                       : promo.eligible
                                       ? 'border border-pink-300 bg-white text-pink-700 hover:bg-pink-50 disabled:bg-pink-100 dark:border-pink-700 dark:bg-gray-800 dark:text-pink-300 dark:hover:bg-pink-900/20'
-                                      : 'bg-gray-200 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400'
+                                      : 'cursor-not-allowed bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
                                   }`}
                                 >
                                   {isApplyingPromo ? '...' : promo.eligible ? 'Apply' : 'More'}
@@ -2005,9 +2059,9 @@ export default function CartPage() {
               {/* Deal Items - Grid Layout for Mobile */}
               {dealCartItems.length > 0 && (
                 <div className="mb-4 sm:mb-6">
-                  <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 mb-2 sm:mb-3 flex items-center gap-2">
+                  <h2 className={`${cartType.section} mb-2 flex items-center gap-2 sm:mb-3`}>
                     <Gift className="w-4 h-4 sm:w-5 sm:h-5 text-pink-600 dark:text-pink-400" />
-                    Deal Items
+                    Deal items
                   </h2>
                   <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 sm:grid sm:grid-cols-1 sm:gap-5 sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent sm:dark:bg-transparent">
                     {dealCartItems.map((item, index) => {
@@ -2066,9 +2120,9 @@ export default function CartPage() {
                               className="w-full h-full object-cover"
                               loading="lazy"
                             />
-                            {/* Product Number Label */}
-                            <div className="absolute top-0 left-0 bg-gradient-to-r from-blue-600 to-blue-500 dark:from-blue-500 dark:to-blue-600 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded-br-md shadow-sm z-10 leading-tight">
-                              Product {productNumber}
+                            {/* Item index — subtle so the photo stays hero */}
+                            <div className="absolute left-0 top-0 z-10 rounded-br-md bg-black/45 px-1 py-px text-[9px] font-medium tracking-tight text-white/95 backdrop-blur-[1px] sm:px-1.5 sm:py-0.5 sm:text-[10px]">
+                              Item {productNumber}
                             </div>
                             {/* Deal Badge */}
                             <div className="absolute bottom-1 right-1 sm:bottom-2 sm:right-2 bg-gradient-to-r from-pink-600 to-rose-600 text-white text-xs sm:text-sm font-bold px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md shadow-lg flex items-center gap-0.5 sm:gap-1 z-10">
@@ -2084,7 +2138,7 @@ export default function CartPage() {
                                 <div className="p-1.5 rounded-lg bg-pink-100 dark:bg-pink-900/30 flex-shrink-0">
                                   <Gift className="w-4 h-4 text-pink-600 dark:text-pink-400" />
                                 </div>
-                                <h3 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100 line-clamp-2 flex-1">
+                                <h3 className={`${cartType.cardTitle} line-clamp-2 flex-1`}>
                                   {item.product.name}
                                 </h3>
                               </div>
@@ -2100,7 +2154,9 @@ export default function CartPage() {
                             
                             {/* Price & Details */}
                             <div className="flex items-center gap-2 mb-2 flex-wrap">
-                              <span className="text-base sm:text-lg font-bold text-green-600 dark:text-green-400">
+                              <span
+                                className={`text-base font-bold tabular-nums text-gray-900 dark:text-gray-100 sm:text-lg`}
+                              >
                                 {formatPrice(itemPrice)}
                               </span>
                               {itemPrice < (item.product.base_price || item.variant?.price) && (
@@ -2123,9 +2179,11 @@ export default function CartPage() {
                                 </span>
                               </div>
                               <div className="text-right">
-                                <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 font-medium">
-                                  {item.combos && item.combos.length > 0 ? 'Total (incl. combo): ' : 'Total: '}
-                                </span>
+                                <span
+                                  className={`${cartType.meta} font-medium text-gray-600 dark:text-gray-300 sm:text-sm`}
+                                >
+                                  <CartItemTotalCaption hasCombos={Boolean(item.combos && item.combos.length > 0)} />
+                                </span>{' '}
                                 <span className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">
                                   {formatPrice(totalItemPrice)}
                                 </span>
@@ -2199,8 +2257,8 @@ export default function CartPage() {
                         )}
                         
                         <div
-                          className={`bg-transparent sm:bg-white sm:dark:bg-gray-800 rounded-none sm:rounded-xl border-0 sm:border sm:border-gray-200 sm:dark:border-gray-700 sm:border-l-4 sm:border-l-blue-500 sm:dark:border-l-blue-400 p-3 sm:p-4 lg:p-6 transition-all duration-300 ${
-                          isRemoving ? 'opacity-50 scale-95' : 'sm:hover:shadow-lg sm:dark:hover:shadow-xl sm:dark:hover:shadow-black/30 sm:hover:border-blue-300 sm:dark:hover:border-blue-600'
+                          className={`bg-transparent sm:bg-white sm:dark:bg-gray-800 rounded-none sm:rounded-xl border-0 sm:border sm:border-gray-200 sm:dark:border-gray-700 sm:border-l-4 sm:border-l-gray-200 sm:dark:border-l-gray-600 p-3 sm:p-4 lg:p-6 transition-all duration-300 ${
+                          isRemoving ? 'opacity-50 scale-95' : 'sm:hover:shadow-lg sm:dark:hover:shadow-xl sm:dark:hover:shadow-black/30 sm:hover:border-gray-300 sm:dark:hover:border-gray-500'
                         }`}
                           style={{
                             transform: `translateX(${swipeOffset}px)`,
@@ -2211,9 +2269,8 @@ export default function CartPage() {
                           <div className="flex flex-row gap-2 sm:hidden">
                           {/* Product Image */}
                             <div className="relative w-20 h-20 bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 rounded-lg overflow-hidden flex-shrink-0">
-                              {/* Product Number Label */}
-                              <div className="absolute top-0 left-0 bg-gradient-to-r from-blue-600 to-blue-500 dark:from-blue-500 dark:to-blue-600 text-white text-[9px] font-bold px-1 py-0.5 rounded-br-md shadow-sm z-10 leading-tight">
-                                Product {productNumber}
+                              <div className="absolute left-0 top-0 z-10 rounded-br-md bg-black/45 px-1 py-px text-[9px] font-medium tracking-tight text-white/95 backdrop-blur-[1px] sm:px-1.5 sm:py-0.5 sm:text-[10px]">
+                                Item {productNumber}
                               </div>
                               <img
                                 src={resolveImageUrl(item.product.image_url)}
@@ -2227,7 +2284,7 @@ export default function CartPage() {
                           <div className="flex-1 min-w-0">
                               <div className="flex items-start justify-between gap-1.5 mb-1">
                                 <div className="flex-1 min-w-0">
-                                  <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 line-clamp-2 mb-1.5 leading-tight">
+                                  <h3 className={`${cartType.cardTitle} line-clamp-2 mb-1.5 leading-tight`}>
                                   {item.product.name}
                                 </h3>
                                 
@@ -2236,13 +2293,15 @@ export default function CartPage() {
                                     <p className="text-xs font-medium text-gray-700 dark:text-gray-300 leading-tight mt-0.5">
                                       {itemWeight && (
                                         <>
-                                          Weight: <span className="text-pink-600 dark:text-pink-400 font-semibold">{itemWeight}</span>
+                                          Weight:{' '}
+                                          <span className="font-semibold text-gray-800 dark:text-gray-200">{itemWeight}</span>
                                         </>
                                       )}
                                       {itemWeight && item.tier && <span className="mx-1 text-gray-400">•</span>}
                                   {item.tier && (
                                         <>
-                                          Tier: <span className="text-pink-600 dark:text-pink-400 font-semibold">{item.tier}</span>
+                                          Tier:{' '}
+                                          <span className="font-semibold text-gray-800 dark:text-gray-200">{item.tier}</span>
                                         </>
                                       )}
                                     </p>
@@ -2307,8 +2366,8 @@ export default function CartPage() {
                                 {/* Item Total */}
                                 <div className="mt-3 pt-2 border-t border-gray-100 dark:border-gray-700">
                                   <div className="flex items-center justify-between">
-                                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                                      {item.combos && item.combos.length > 0 ? 'Item Total (Product + Combo)' : 'Item Total:'}
+                                    <span className={`${cartType.meta} font-medium text-gray-700 dark:text-gray-300`}>
+                                      <CartItemTotalCaption hasCombos={Boolean(item.combos && item.combos.length > 0)} />
                                     </span>
                                     <div className="flex items-center gap-1.5">
                                       {item.combos && item.combos.length > 0 ? (
@@ -2317,7 +2376,7 @@ export default function CartPage() {
                                             {formatPrice(itemPrice)}
                                           </span>
                                           <span className="text-xs text-gray-400 dark:text-gray-500">+</span>
-                                          <span className="text-sm font-semibold text-purple-600 dark:text-purple-400">
+                                          <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                                             {formatPrice(comboTotal)}
                                           </span>
                                         </>
@@ -2338,13 +2397,15 @@ export default function CartPage() {
                             <div className="sm:hidden mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 w-full">
                               <div className="flex items-center justify-between mb-1.5">
                                 <div className="flex items-center gap-1.5">
-                                  <Sparkles className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-                                  <span className="text-sm font-medium text-purple-600 dark:text-purple-400">Combo Items</span>
+                                  <Sparkles className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
+                                  <span className={`${cartType.subsection} text-gray-600 dark:text-gray-300`}>
+                                    Add-ons
+                                  </span>
                                 </div>
                                 {/* Show More/Less Button - Always show when combo items exist */}
                                 <button
                                   onClick={() => toggleItemExpansion(item.id)}
-                                  className="flex items-center gap-1 text-sm text-pink-600 dark:text-pink-400 hover:text-pink-700 dark:hover:text-pink-300 transition-colors"
+                                  className="flex items-center gap-1 text-sm font-medium text-pink-600 hover:text-pink-700 dark:text-pink-400 dark:hover:text-pink-300"
                                 >
                                   {isExpanded ? (
                                     <>
@@ -2376,7 +2437,7 @@ export default function CartPage() {
                                   >
                                     {/* Combo Item Title */}
                                     <div className="flex items-center gap-2 min-w-0 w-full">
-                                      <Package className="w-4 h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
+                                      <Package className="w-4 h-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
                                       <span className="text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap overflow-x-auto no-scrollbar">
                                         {combo.product_name}
                                       </span>
@@ -2412,7 +2473,7 @@ export default function CartPage() {
                                             {formatPrice(originalTotal)}
                                           </span>
                                         )}
-                                        <span className="text-sm font-semibold text-purple-600 dark:text-purple-400">
+                                        <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                                           {formatPrice(comboTotal)}
                                         </span>
                                       </div>
@@ -2438,9 +2499,8 @@ export default function CartPage() {
                           <div className="hidden sm:flex sm:flex-row gap-4">
                             {/* Product Image */}
                             <div className="relative w-24 h-24 bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 rounded-lg overflow-hidden flex-shrink-0">
-                            {/* Product Number Label */}
-                            <div className="absolute top-0 left-0 bg-gradient-to-r from-blue-600 to-blue-500 dark:from-blue-500 dark:to-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-br-md shadow-sm z-10 leading-tight">
-                              Product {productNumber}
+                            <div className="absolute left-0 top-0 z-10 rounded-br-md bg-black/45 px-1 py-px text-[9px] font-medium tracking-tight text-white/95 backdrop-blur-[1px] sm:px-1.5 sm:py-0.5 sm:text-[10px]">
+                              Item {productNumber}
                             </div>
                               <img
                                 src={resolveImageUrl(item.product.image_url)}
@@ -2458,11 +2518,11 @@ export default function CartPage() {
                                 <div className="hidden sm:block">
                               <div className="flex items-start justify-between gap-2 mb-2">
                                 <div className="flex items-start gap-2 flex-1 min-w-0">
-                                  <div className="p-1.5 sm:p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex-shrink-0">
-                                    <Package className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" />
+                                  <div className="rounded-lg bg-gray-100 p-1.5 dark:bg-gray-700/80 sm:p-2 flex-shrink-0">
+                                    <Package className="h-4 w-4 shrink-0 text-gray-600 dark:text-gray-300 sm:h-5 sm:w-5" />
                                   </div>
                                   <div className="flex-1 min-w-0">
-                                    <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight">
+                                    <h3 className={`${cartType.cardTitleLg} line-clamp-2 leading-tight`}>
                                       {item.product.name}
                                     </h3>
                                     
@@ -2471,13 +2531,15 @@ export default function CartPage() {
                                       <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 mt-1 leading-tight">
                                         {itemWeight && (
                                           <>
-                                            Weight: <span className="text-blue-600 dark:text-blue-400 font-semibold">{itemWeight}</span>
+                                            Weight:{' '}
+                                            <span className="font-semibold text-gray-800 dark:text-gray-200">{itemWeight}</span>
                                           </>
                                         )}
                                         {itemWeight && item.tier && <span className="mx-2 text-gray-400">•</span>}
                                         {item.tier && (
                                           <>
-                                            Tier: <span className="text-blue-600 dark:text-blue-400 font-semibold">{item.tier}</span>
+                                            Tier:{' '}
+                                            <span className="font-semibold text-gray-800 dark:text-gray-200">{item.tier}</span>
                                           </>
                                         )}
                                       </p>
@@ -2486,7 +2548,8 @@ export default function CartPage() {
                                     {/* Flavor - Separate line if available */}
                                     {item.flavor && (
                                       <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-0.5 leading-tight">
-                                        Flavor: <span className="text-blue-600 dark:text-blue-400 font-semibold">{item.flavor.name}</span>
+                                        Flavor:{' '}
+                                        <span className="font-semibold text-gray-800 dark:text-gray-200">{item.flavor.name}</span>
                                       </p>
                                     )}
                                   </div>
@@ -2551,8 +2614,8 @@ export default function CartPage() {
                               {/* Item Total */}
                               <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
                                 <div className="flex items-center justify-between">
-                                  <span className="text-sm sm:text-base text-gray-600 dark:text-gray-400 font-medium">
-                                    {item.combos && item.combos.length > 0 ? 'Item Total (Product + Combo)' : 'Item Total:'}
+                                  <span className={`${cartType.label} text-gray-600 dark:text-gray-400`}>
+                                    <CartItemTotalCaption hasCombos={Boolean(item.combos && item.combos.length > 0)} />
                                   </span>
                                   <div className="flex items-center gap-2">
                                     {item.combos && item.combos.length > 0 ? (
@@ -2561,7 +2624,7 @@ export default function CartPage() {
                                           {formatPrice(itemPrice)}
                                         </span>
                                         <span className="text-sm text-gray-400 dark:text-gray-500">+</span>
-                                        <span className="text-base sm:text-lg font-semibold text-purple-600 dark:text-purple-400">
+                                        <span className="text-base sm:text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                                           {formatPrice(comboTotal)}
                                         </span>
                                       </>
@@ -2581,13 +2644,15 @@ export default function CartPage() {
                                 <div className="hidden sm:block mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 w-full">
                                 <div className="flex items-center justify-between mb-1.5">
                                   <div className="flex items-center gap-1.5">
-                                    <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-600 dark:text-purple-400" />
-                                    <span className="text-sm sm:text-base font-medium text-purple-600 dark:text-purple-400">Combo Items</span>
+                                    <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500 dark:text-gray-400" />
+                                    <span className={`${cartType.subsection} text-gray-600 dark:text-gray-300 sm:text-base`}>
+                                      Add-ons
+                                    </span>
                                   </div>
                                   {/* Show More/Less Button - Always show when combo items exist */}
                                   <button
                                     onClick={() => toggleItemExpansion(item.id)}
-                                    className="flex items-center gap-1 text-sm sm:text-base text-pink-600 dark:text-pink-400 hover:text-pink-700 dark:hover:text-pink-300 transition-colors"
+                                    className="flex items-center gap-1 text-sm font-medium text-pink-600 hover:text-pink-700 dark:text-pink-400 dark:hover:text-pink-300 sm:text-base"
                                   >
                                     {isExpanded ? (
                                       <>
@@ -2619,7 +2684,7 @@ export default function CartPage() {
                                       >
                                         {/* Combo Item Title */}
                                         <div className="flex items-center gap-2 min-w-0 w-full">
-                                          <Package className="w-4 h-4 sm:w-4 sm:h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
+                                          <Package className="w-4 h-4 sm:w-4 sm:h-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
                                           <span className="text-sm sm:text-base font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap overflow-x-auto no-scrollbar">
                                             {combo.product_name}
                                           </span>
@@ -2655,7 +2720,7 @@ export default function CartPage() {
                                                 {formatPrice(originalTotal)}
                                               </span>
                                             )}
-                                            <span className="text-sm sm:text-base font-semibold text-purple-600 dark:text-purple-400">
+                                            <span className="text-sm sm:text-base font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                                               {formatPrice(comboTotal)}
                                             </span>
                                           </div>
@@ -2782,12 +2847,14 @@ export default function CartPage() {
                 <div className="mt-7 sm:mt-9 pt-6 sm:pt-8 border-t border-gray-200 dark:border-gray-700">
                   <button
                     onClick={() => setIsSavedForLaterOpen(!isSavedForLaterOpen)}
-                    className="flex items-center justify-between w-full mb-3 sm:mb-4"
+                    className="ui-focus-visible mb-3 flex w-full items-center justify-between rounded-lg sm:mb-4"
                   >
                     <div className="flex items-center gap-2">
                       <Package className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 dark:text-gray-300" />
-                      <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">Saved for Later</h2>
-                      <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-300">({savedItems.length} {savedItems.length === 1 ? 'item' : 'items'})</span>
+                      <h2 className={cartType.section}>Saved for Later</h2>
+                      <span className={`${cartType.sectionMuted} shrink-0`}>
+                        ({savedItems.length} {savedItems.length === 1 ? 'item' : 'items'})
+                      </span>
                     </div>
                     {isSavedForLaterOpen ? (
                       <ChevronUp className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 dark:text-gray-300" />
@@ -2846,7 +2913,7 @@ export default function CartPage() {
                                       <Package className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 dark:text-gray-400" />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                      <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 line-clamp-2">
+                                      <h3 className={`${cartType.cardTitle} line-clamp-2 sm:text-lg`}>
                                         {item.product.name}
                                       </h3>
                                       
@@ -2900,7 +2967,9 @@ export default function CartPage() {
                                     )}
                                   </div>
                                     <div className="text-right">
-                                      <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">Total: </span>
+                                      <span className={`${cartType.meta} font-medium text-gray-600 dark:text-gray-300 sm:text-sm`}>
+                                        <CartItemTotalCaption hasCombos={Boolean(item.combos && item.combos.length > 0)} />
+                                      </span>{' '}
                                       <span className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">
                                       {formatPrice(totalItemPrice)}
                                     </span>
@@ -2911,8 +2980,10 @@ export default function CartPage() {
                                   {item.combos && item.combos.length > 0 && (
                                   <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
                                       <div className="flex items-center gap-1.5 mb-1.5">
-                                        <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-600 dark:text-purple-400" />
-                                        <span className="text-xs sm:text-sm font-medium text-purple-600 dark:text-purple-400">Combo Items</span>
+                                        <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500 dark:text-gray-400" />
+                                        <span className={`${cartType.subsection} text-gray-600 dark:text-gray-300 sm:text-sm`}>
+                                          Add-ons
+                                        </span>
                                       </div>
                                       <div className="space-y-1.5">
                                         {item.combos.map((combo, index) => {
@@ -2927,7 +2998,7 @@ export default function CartPage() {
                                             className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/60 rounded-lg px-2 py-1.5 border border-gray-200 dark:border-gray-700"
                                           >
                                               <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                                <Package className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
+                                                <Package className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
                                                 <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                                                 {combo.product_name}
                                               </span>
@@ -2935,11 +3006,11 @@ export default function CartPage() {
                                             </div>
                                               <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
                                                 {hasDiscount && (
-                                                  <span className="text-[10px] sm:text-xs text-gray-400 dark:text-gray-500 line-through">
+                                                  <span className={`${cartType.meta} line-through text-gray-400 dark:text-gray-500 sm:text-xs`}>
                                                     {formatPrice(originalTotal)}
                                                   </span>
                                                 )}
-                                                <span className="text-xs sm:text-sm font-medium text-purple-600 dark:text-purple-400">
+                                                <span className="text-xs sm:text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100">
                                                   {formatPrice(comboTotal)}
                                             </span>
                                           </div>
@@ -2980,23 +3051,23 @@ export default function CartPage() {
 
             {/* RIGHT SECTION: Summary Box (30% equivalent) */}
             <div className="lg:sticky lg:top-24 h-fit lg:min-w-0 lg:max-w-full">
-              <div className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-pink-500 dark:border-pink-400 border border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-xl dark:shadow-black/30 p-4 sm:p-5 lg:p-6 space-y-3 sm:space-y-4 lg:min-w-0 lg:max-w-full">
+              <div className="space-y-3 rounded-xl border border-gray-200 border-l-4 border-l-pink-500 bg-white p-4 shadow-sm dark:border-gray-700 dark:border-l-pink-400 dark:bg-gray-800 dark:shadow-md dark:shadow-black/20 sm:space-y-4 sm:p-5 lg:max-w-full lg:min-w-0 lg:p-6">
                 {/* Header with Icon */}
                 <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
                   <div className="p-1.5 rounded-lg bg-pink-100 dark:bg-pink-900/30">
                     <ShoppingBag className="w-4 h-4 text-pink-600 dark:text-pink-400" />
                   </div>
-                  <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">Order Summary</h2>
+                  <h2 className={cartType.section}>Order summary</h2>
                 </div>
 
                 {/* Free Delivery Progress Indicator */}
                 {!isFreeDeliveryEligible && subtotal > 0 && (
                   <div className="bg-gradient-to-r from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20 rounded-lg p-3 sm:p-4 border border-pink-200 dark:border-pink-800">
                     <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-                      <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200">
-                        Free Delivery Progress
+                      <span className={`${cartType.metaStrong} sm:text-sm text-gray-700 dark:text-gray-200`}>
+                        Free delivery progress
                       </span>
-                      <span className="text-xs sm:text-sm font-bold text-pink-600 dark:text-pink-400">
+                      <span className={`${cartType.metaStrong} sm:text-sm text-pink-600 dark:text-pink-400`}>
                         {formatPrice(amountToFreeDelivery)} away
                       </span>
                     </div>
@@ -3006,70 +3077,78 @@ export default function CartPage() {
                         style={{ width: `${freeDeliveryProgress}%` }}
                       />
                     </div>
-                    <p className="text-[11px] text-gray-600 dark:text-gray-300 mt-1">
+                    <p className={`${cartType.meta} mt-1 text-gray-600 dark:text-gray-300`}>
                       Add {formatPrice(amountToFreeDelivery)} more to unlock free delivery!
                     </p>
                   </div>
                 )}
 
                 {isFreeDeliveryEligible && (
-                  <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 sm:p-4 border border-green-200 dark:border-green-800">
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 sm:p-4 dark:border-gray-600 dark:bg-gray-800/50">
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 dark:text-green-400 flex-shrink-0" />
-                      <span className="text-xs sm:text-sm font-semibold text-green-700 dark:text-green-300">
-                        🎉 You've unlocked Free Delivery!
+                      <CheckCircle className="h-4 w-4 shrink-0 text-pink-500 dark:text-pink-400 sm:h-5 sm:w-5" />
+                      <span className={`${cartType.bodyStrong} text-gray-800 dark:text-gray-100 sm:text-sm`}>
+                        {"You've unlocked free delivery"}
                       </span>
                     </div>
                   </div>
                 )}
 
                 {/* Price Breakdown */}
-                <div className="space-y-2 pt-2 border-t-2 border-gray-200 dark:border-gray-700">
-                  <div className="flex justify-between items-center py-1">
-                    <span className="text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300">Subtotal ({regularItemsCount} {regularItemsCount === 1 ? 'item' : 'items'})</span>
-                    <span className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">{formatPrice(subtotal)}</span>
+                <div className="space-y-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                  <div className="flex justify-between items-center gap-3 py-1">
+                    <span className={cartType.summaryRow}>
+                      Subtotal ({regularItemsCount} {regularItemsCount === 1 ? 'item' : 'items'})
+                    </span>
+                    <span className={`${cartType.summaryValue} ${cartType.numeric}`}>{formatPrice(subtotal)}</span>
                   </div>
 
                   {/* Deal Price - Separate line for deal items */}
                   {dealItemsTotal > 0 && (
-                    <div className="flex justify-between items-center py-1">
-                      <span className="flex items-center gap-1.5 text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300">
-                        <Gift className="w-4 h-4 text-pink-600 dark:text-pink-400" />
-                        <span>Deal Price</span>
+                    <div className="flex justify-between items-center gap-3 py-1">
+                      <span className={`flex items-center gap-1.5 ${cartType.summaryRow}`}>
+                        <Gift className="h-4 w-4 shrink-0 text-pink-500 dark:text-pink-400" />
+                        <span>Deal price</span>
                       </span>
-                      <span className="text-sm sm:text-base font-semibold text-green-600 dark:text-green-400">{formatPrice(dealItemsTotal)}</span>
+                      <span className={`${cartType.summaryValue} ${cartType.numeric}`}>
+                        {formatPrice(dealItemsTotal)}
+                      </span>
                     </div>
                   )}
 
                   {/* Promo Discount */}
                   {appliedPromo && (
-                    <div className="flex items-center justify-between text-green-700 dark:text-green-400 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg p-2 border border-green-200 dark:border-green-800">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 dark:bg-green-400"></div>
-                        <span className="text-sm sm:text-base font-semibold">
+                    <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 p-2 dark:border-gray-600 dark:bg-gray-800/60">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-pink-500 dark:bg-pink-400" />
+                        <span className={`${cartType.bodyStrong} truncate sm:text-base`}>
                           {appliedPromo.code} applied
                         </span>
                       </div>
-                      <span className="text-sm sm:text-base font-bold">-{formatPrice(promoDiscount)}</span>
+                      <span
+                        className={`${cartType.bodyStrong} shrink-0 sm:text-base ${cartType.numeric} text-pink-600 dark:text-pink-400`}
+                      >
+                        -{formatPrice(promoDiscount)}
+                      </span>
                     </div>
                   )}
 
                   {/* Delivery Charge */}
-                  <div className="flex justify-between items-center py-1">
-                    <span className="text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300">Delivery Charge</span>
-                    <span className="text-sm sm:text-base font-semibold">
+                  <div className="flex justify-between items-center gap-3 py-1">
+                    <span className={cartType.summaryRow}>Delivery</span>
+                    <span className={`${cartType.summaryValue} ${cartType.numeric}`}>
                       {isFreeDeliveryEligible ? (
-                        <span className="text-green-600 dark:text-green-400 font-bold">FREE</span>
+                        <span className="font-semibold text-pink-600 dark:text-pink-400">Free</span>
                       ) : (
-                        <span className="text-gray-900 dark:text-gray-100">{formatPrice(deliveryCharge)}</span>
+                        <span>{formatPrice(deliveryCharge)}</span>
                       )}
                     </span>
                   </div>
 
-                  <div className="border-t-2 border-pink-200 dark:border-pink-800 pt-2.5 mt-2.5 bg-gradient-to-r from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20 rounded-lg p-3 -mx-1">
-                    <div className="flex justify-between items-center">
-                      <span className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">Total</span>
-                      <span className="text-xl sm:text-2xl font-extrabold text-pink-600 dark:text-pink-400">
+                  <div className="-mx-1 mt-2.5 rounded-lg border border-pink-200/90 bg-gradient-to-r from-pink-50 to-rose-50 p-3 pt-2.5 dark:border-pink-800/80 dark:from-pink-900/25 dark:to-rose-900/20">
+                    <div className="flex justify-between items-center gap-3">
+                      <span className={cartType.summaryTotalLabel}>Total</span>
+                      <span className={`${cartType.summaryTotalValue} ${cartType.numeric}`}>
                         {formatPrice(total)}
                       </span>
                     </div>
@@ -3081,9 +3160,9 @@ export default function CartPage() {
                 {/* Checkout Button - Hidden on mobile, shown on desktop */}
                 <button
                   onClick={handleCheckout}
-                  className="hidden lg:block w-full min-h-[48px] py-2 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white rounded-lg hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all duration-200 font-semibold text-base sm:text-lg shadow-lg dark:shadow-xl dark:shadow-black/30 hover:shadow-xl transform hover:scale-[1.02]"
+                  className="ui-focus-visible hidden min-h-[48px] w-full rounded-lg bg-gradient-to-r from-pink-600 to-rose-600 py-2 text-base font-semibold text-white shadow-lg transition-all duration-200 hover:scale-[1.02] hover:from-pink-700 hover:to-rose-700 hover:shadow-xl dark:from-pink-700 dark:to-rose-700 dark:shadow-xl dark:shadow-black/30 dark:hover:from-pink-600 dark:hover:to-rose-600 sm:text-lg lg:block"
                 >
-                  PROCEED TO CHECKOUT
+                  Proceed to checkout
                 </button>
 
                 {/* Security Badge - Hidden on mobile, shown on desktop */}
@@ -3098,13 +3177,13 @@ export default function CartPage() {
               <div className="mt-8 sm:mt-10 mb-0 bg-gradient-to-br from-pink-50/80 to-rose-50/60 dark:from-pink-900/10 dark:to-rose-900/10 rounded-xl border border-pink-200/60 dark:border-pink-800/50 shadow-md dark:shadow-xl dark:shadow-black/20 p-4 sm:p-6 lg:overflow-hidden lg:min-w-0 lg:max-w-full lg:w-full">
                 <button
                   onClick={() => setIsYouMayAlsoLikeOpen(!isYouMayAlsoLikeOpen)}
-                  className="flex items-center justify-between w-full mb-2 sm:mb-4 group/header"
+                  className="ui-focus-visible group/header mb-2 flex w-full items-center justify-between rounded-lg sm:mb-4"
                 >
                   <div className="flex items-center gap-2.5">
                     <div className="p-1.5 rounded-lg bg-pink-100 dark:bg-pink-900/40">
                       <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-pink-600 dark:text-pink-400" />
                     </div>
-                    <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">You May Also Like</h3>
+                    <h3 className={cartType.section}>You may also like</h3>
                 </div>
                   {isYouMayAlsoLikeOpen ? (
                     <ChevronUp className="w-4 h-4 text-pink-500 dark:text-pink-400" />
@@ -3114,19 +3193,19 @@ export default function CartPage() {
                 </button>
                 {isYouMayAlsoLikeOpen && (
                   <>
-                    <p className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 mb-4 sm:mb-5">
+                    <p className={`${cartType.body} mb-4 text-gray-700 dark:text-gray-300 sm:mb-5`}>
                       Add these popular items to complete your order
                     </p>
                     
                     {suggestedSectionsLoading ? (
                       <div className="text-center py-6 sm:py-8">
                         <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-pink-600"></div>
-                        <p className="text-xs sm:text-sm text-gray-400 dark:text-gray-500 mt-2">Loading suggestions...</p>
+                        <p className={`${cartType.meta} mt-2 sm:text-sm`}>Loading suggestions...</p>
                       </div>
                     ) : (suggestedSections.addOns.length === 0 && suggestedSections.gift.length === 0 && suggestedSections.smallTreats.length === 0) ? (
                       <div className="text-center py-6 sm:py-8 text-gray-400 dark:text-gray-400">
                         <Package className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 opacity-50" />
-                        <p className="text-xs sm:text-sm">No suggestions available at the moment</p>
+                        <p className={`${cartType.meta} sm:text-sm`}>No suggestions available at the moment</p>
                       </div>
                     ) : (
                       <div className="space-y-6 sm:space-y-7">
@@ -3137,10 +3216,10 @@ export default function CartPage() {
                               <div className="p-1 rounded-md bg-amber-100 dark:bg-amber-800/40">
                                 <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
                               </div>
-                              <h4 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">Make Your Cake Extra Special</h4>
+                              <h4 className={cartType.upsellSectionTitle}>Make your cake extra special</h4>
                             </div>
                             <p className="text-xs text-amber-800/80 dark:text-amber-200/80 mb-0.5">Candles, balloons, toppers</p>
-                            <p className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mb-3">Make the moment memorable—add to your cake in one tap.</p>
+                            <p className={`${cartType.upsellBlurb} mb-3`}>Make the moment memorable—add to your cake in one tap.</p>
                             <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
                               <div className="flex gap-3 sm:gap-4 pb-2">
                                 {suggestedSections.addOns.map((item) => {
@@ -3177,9 +3256,9 @@ export default function CartPage() {
                                         <img src={resolveImageUrl(item.image_url)} alt={item.name} className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-200" loading="lazy" />
                                       </div>
                                       <div className="p-2 space-y-1">
-                                        <h4 className="text-[11px] sm:text-xs font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight min-h-[2rem]">{item.name}</h4>
+                                        <h4 className={cartType.upsellCardTitle}>{item.name}</h4>
                                         <p className="text-xs font-bold text-amber-700 dark:text-amber-400">{formatPrice(price)}</p>
-                                        <button onClick={handleAddAddOn} className="w-full py-1.5 text-[11px] sm:text-xs font-semibold rounded-lg border-2 border-amber-500 dark:border-amber-500 text-amber-700 dark:text-amber-300 bg-amber-50/80 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-800/30 hover:border-amber-600 transition-colors active:scale-[0.98]">
+                                        <button onClick={handleAddAddOn} className={`w-full rounded-lg border-2 border-amber-500 py-1.5 font-semibold text-amber-700 transition-colors hover:border-amber-600 hover:bg-amber-100 active:scale-[0.98] dark:border-amber-500 dark:bg-amber-900/20 dark:text-amber-300 dark:hover:bg-amber-800/30 ${cartType.metaStrong}`}>
                                           + Include
                                         </button>
                                       </div>
@@ -3198,10 +3277,10 @@ export default function CartPage() {
                               <div className="p-1 rounded-md bg-emerald-100 dark:bg-emerald-800/40">
                                 <Gift className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                               </div>
-                              <h4 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">Complete Your Gift</h4>
+                              <h4 className={cartType.upsellSectionTitle}>Complete your gift</h4>
                             </div>
                             <p className="text-xs text-emerald-800/80 dark:text-emerald-200/80 mb-0.5">Flowers, chocolates, teddy, dry fruits</p>
-                            <p className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mb-3">Pair with your cake for a complete, gift-ready surprise.</p>
+                            <p className={`${cartType.upsellBlurb} mb-3`}>Pair with your cake for a complete, gift-ready surprise.</p>
                             <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
                               <div className="flex gap-3 sm:gap-4 pb-2">
                                 {suggestedSections.gift.map((product) => {
@@ -3212,7 +3291,7 @@ export default function CartPage() {
                                   return (
                                     <div key={product.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] lg:w-[160px] bg-white dark:bg-gray-800 rounded-xl border border-emerald-200/70 dark:border-emerald-600/40 overflow-hidden shadow-md hover:shadow-lg hover:border-emerald-300 dark:hover:border-emerald-500/60 transition-all duration-200 group">
                                       {hasDiscount && (
-                                        <div className="absolute top-0 right-0 bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-bl-md z-10">
+                                        <div className={`absolute right-0 top-0 z-10 rounded-bl-md bg-rose-500 px-1.5 py-0.5 text-white ${cartType.cornerPromoBadge}`}>
                                           {Math.round(((originalPrice - product.discounted_price) / originalPrice) * 100)}% OFF
                                         </div>
                                       )}
@@ -3220,18 +3299,18 @@ export default function CartPage() {
                                         <img src={resolveImageUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" loading="lazy" />
                                       </div>
                                       <div className="p-2 space-y-1">
-                                        <h4 className="text-[11px] sm:text-xs font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight min-h-[2rem] cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors" onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
+                                        <h4 className={`${cartType.upsellCardTitle} cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400`} onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
                                         {productWeight && (
                                           <div className="flex items-center gap-1">
                                             <Package className="w-3 h-3 text-emerald-500 dark:text-emerald-400" />
-                                            <span className="text-[10px] text-gray-600 dark:text-gray-400">{productWeight}</span>
+                                            <span className={cartType.meta}>{productWeight}</span>
                                           </div>
                                         )}
                                         <div className="flex items-baseline gap-1.5 flex-wrap">
                                           <span className="text-xs font-bold text-pink-600 dark:text-pink-400">{formatPrice(productPrice)}</span>
-                                          {hasDiscount && <span className="text-[10px] text-gray-400 line-through">{formatPrice(originalPrice)}</span>}
+                                          {hasDiscount && <span className={`${cartType.meta} line-through text-gray-400`}>{formatPrice(originalPrice)}</span>}
                                         </div>
-                                        <button onClick={() => addToCart({ product, quantity: 1, variant: null, flavor: null, tier: null, combos: [], deliverySlot: null, cakeMessage: '' })} className="w-full py-1.5 text-[11px] sm:text-xs font-semibold rounded-lg border-2 border-emerald-500 dark:border-emerald-500 text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-800/30 hover:border-emerald-600 transition-colors active:scale-[0.98]">
+                                        <button onClick={() => addToCart({ product, quantity: 1, variant: null, flavor: null, tier: null, combos: [], deliverySlot: null, cakeMessage: '' })} className={`w-full rounded-lg border-2 border-emerald-500 py-1.5 font-semibold text-emerald-700 transition-colors hover:border-emerald-600 hover:bg-emerald-100 active:scale-[0.98] dark:border-emerald-500 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-800/30 ${cartType.metaStrong}`}>
                                           + Add
                                         </button>
                                       </div>
@@ -3250,10 +3329,10 @@ export default function CartPage() {
                               <div className="p-1 rounded-md bg-rose-100 dark:bg-rose-800/40">
                                 <Package className="w-4 h-4 text-rose-600 dark:text-rose-400 flex-shrink-0" />
                               </div>
-                              <h4 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">Small Treats for Guests</h4>
+                              <h4 className={cartType.upsellSectionTitle}>Small treats for guests</h4>
                             </div>
                             <p className="text-xs text-rose-800/80 dark:text-rose-200/80 mb-0.5">Brownies, pastries, mini desserts</p>
-                            <p className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mb-3">Light bites everyone will love—easy to add.</p>
+                            <p className={`${cartType.upsellBlurb} mb-3`}>Light bites everyone will love—easy to add.</p>
                             <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
                               <div className="flex gap-3 sm:gap-4 pb-2">
                                 {suggestedSections.smallTreats.map((product) => {
@@ -3264,7 +3343,7 @@ export default function CartPage() {
                                   return (
                                     <div key={product.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] lg:w-[160px] bg-white dark:bg-gray-800 rounded-xl border border-rose-200/70 dark:border-rose-600/40 overflow-hidden shadow-md hover:shadow-lg hover:border-rose-300 dark:hover:border-rose-500/60 transition-all duration-200 group">
                                       {hasDiscount && (
-                                        <div className="absolute top-0 right-0 bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-bl-md z-10">
+                                        <div className={`absolute right-0 top-0 z-10 rounded-bl-md bg-rose-500 px-1.5 py-0.5 text-white ${cartType.cornerPromoBadge}`}>
                                           {Math.round(((originalPrice - product.discounted_price) / originalPrice) * 100)}% OFF
                                         </div>
                                       )}
@@ -3272,18 +3351,18 @@ export default function CartPage() {
                                         <img src={resolveImageUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" loading="lazy" />
                                       </div>
                                       <div className="p-2 space-y-1">
-                                        <h4 className="text-[11px] sm:text-xs font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight min-h-[2rem] cursor-pointer hover:text-rose-600 dark:hover:text-rose-400 transition-colors" onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
+                                        <h4 className={`${cartType.upsellCardTitle} cursor-pointer hover:text-rose-600 dark:hover:text-rose-400`} onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
                                         {productWeight && (
                                           <div className="flex items-center gap-1">
                                             <Package className="w-3 h-3 text-rose-500 dark:text-rose-400" />
-                                            <span className="text-[10px] text-gray-600 dark:text-gray-400">{productWeight}</span>
+                                            <span className={cartType.meta}>{productWeight}</span>
                                           </div>
                                         )}
                                         <div className="flex items-baseline gap-1.5 flex-wrap">
                                           <span className="text-xs font-bold text-pink-600 dark:text-pink-400">{formatPrice(productPrice)}</span>
-                                          {hasDiscount && <span className="text-[10px] text-gray-400 line-through">{formatPrice(originalPrice)}</span>}
+                                          {hasDiscount && <span className={`${cartType.meta} line-through text-gray-400`}>{formatPrice(originalPrice)}</span>}
                                         </div>
-                                        <button onClick={() => addToCart({ product, quantity: 1, variant: null, flavor: null, tier: null, combos: [], deliverySlot: null, cakeMessage: '' })} className="w-full py-1.5 text-[11px] sm:text-xs font-semibold rounded-lg border-2 border-rose-500 dark:border-rose-500 text-rose-700 dark:text-rose-300 bg-rose-50/80 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-800/30 hover:border-rose-600 transition-colors active:scale-[0.98]">
+                                        <button onClick={() => addToCart({ product, quantity: 1, variant: null, flavor: null, tier: null, combos: [], deliverySlot: null, cakeMessage: '' })} className={`w-full rounded-lg border-2 border-rose-500 py-1.5 font-semibold text-rose-700 transition-colors hover:border-rose-600 hover:bg-rose-100 active:scale-[0.98] dark:border-rose-500 dark:bg-rose-900/20 dark:text-rose-300 dark:hover:bg-rose-800/30 ${cartType.metaStrong}`}>
                                           + Add Extra
                                         </button>
                                       </div>
@@ -3323,19 +3402,19 @@ export default function CartPage() {
         });
 
         return commonSlot && allSameSlot ? (
-          <div className="lg:hidden fixed left-0 right-0 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-t border-green-200 dark:border-green-800 shadow-lg dark:shadow-black/30 z-39 bottom-[8.5rem]">
-            <div className="max-w-7xl mx-auto px-3 py-2">
+          <div className="fixed bottom-[8.5rem] left-0 right-0 z-39 border-t border-gray-200 bg-gray-50/95 dark:border-gray-600 dark:bg-gray-800/95 lg:hidden">
+            <div className="mx-auto max-w-7xl px-3 py-2">
               <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <Clock className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" />
-                  <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 truncate">
-                    <span className="font-semibold">Delivery:</span>{' '}
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <Clock className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400" />
+                  <span className="truncate text-xs text-gray-700 dark:text-gray-300 sm:text-sm">
+                    <span className="font-semibold text-gray-800 dark:text-gray-200">Delivery:</span>{' '}
                     {formatDeliveryDate(commonSlot.date || commonSlot.deliveryDate)} • {formatTimeSlot(commonSlot)}
                   </span>
                 </div>
                 <button
                   onClick={() => router.push('/checkout')}
-                  className="text-xs font-semibold text-green-700 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 underline underline-offset-2 flex-shrink-0"
+                  className="shrink-0 text-xs font-semibold text-pink-600 underline underline-offset-2 hover:text-pink-700 dark:text-pink-400 dark:hover:text-pink-300"
                 >
                   Change
                 </button>
@@ -3348,29 +3427,38 @@ export default function CartPage() {
       {/* Mobile Sticky Checkout Bar - compact height; action button matches PDP (52px) */}
       {mounted && isInitialized && cartItems.length > 0 && (
         <div className="lg:hidden fixed left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-black/40 z-40 bottom-0">
-          <div className="max-w-7xl mx-auto px-2 py-1">
+          <div className="max-w-7xl mx-auto px-2 py-1.5">
             {/* Total Box and Checkout Button Row */}
-            <div className="flex items-center gap-2 mb-0.5">
-              <div className="w-[28vw] min-w-[86px] h-[48px] bg-gradient-to-br from-pink-50 to-rose-50 dark:from-pink-900/25 dark:to-rose-900/20 rounded-lg px-2 py-1 border border-pink-400/80 dark:border-pink-500/60 shadow-[0_1px_6px_rgba(236,72,153,0.12)] dark:shadow-black/20 flex items-center justify-center shrink-0">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="flex h-[48px] min-w-[86px] w-[28vw] shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 dark:border-gray-600 dark:bg-gray-800/80">
                 <div className="flex flex-col items-center justify-center text-center leading-tight">
-                  <p className="text-[13px] font-extrabold text-pink-600 dark:text-pink-400">{formatPrice(total)}</p>
-                  <span className="text-[10px] font-medium text-gray-600 dark:text-gray-300">{cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'}</span>
+                  <p className={`text-[13px] font-semibold tabular-nums text-gray-900 dark:text-gray-100`}>
+                    {formatPrice(total)}
+                  </p>
+                  <span className={`${cartType.meta} font-medium text-gray-600 dark:text-gray-300`}>
+                    {cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'}
+                  </span>
                 </div>
               </div>
               <button
                 onClick={handleCheckout}
-                className="flex-1 min-h-[46px] h-[46px] py-1.5 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all font-bold text-[13px] shadow-lg dark:shadow-xl dark:shadow-black/30 active:scale-[0.98] flex items-center justify-center gap-1.5"
+                className="ui-focus-visible flex h-[48px] min-h-[48px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-pink-600 to-rose-600 py-1.5 text-[13px] font-bold text-white shadow-lg transition-all hover:from-pink-700 hover:to-rose-700 active:scale-[0.98] dark:from-pink-700 dark:to-rose-700 dark:shadow-xl dark:shadow-black/30 dark:hover:from-pink-600 dark:hover:to-rose-600"
               >
-                <span>PROCEED TO CHECKOUT</span>
+                <span>Proceed to checkout</span>
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
-            {/* Helper line - compact */}
-            <div className="flex items-center justify-center gap-2 min-h-[14px]">
+            {/* Helper line — readable minimum size on small screens */}
+            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 px-0.5 pb-0.5 text-center leading-snug">
               {!isFreeDeliveryEligible && (
-                <p className="text-[8px] text-gray-500 dark:text-gray-400">Add {formatPrice(amountToFreeDelivery)} more for free delivery</p>
+                <p className={`${cartType.meta} text-gray-500 dark:text-gray-400 sm:text-sm`}>
+                  Add {formatPrice(amountToFreeDelivery)} more for free delivery
+                </p>
               )}
-              <p className="text-[8px] text-gray-400 dark:text-gray-500">🔒 Secure checkout</p>
+              <p className={`flex items-center justify-center gap-1 ${cartType.meta} text-gray-400 dark:text-gray-500 sm:text-sm`}>
+                <Lock className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
+                <span>Secure checkout</span>
+              </p>
             </div>
           </div>
         </div>
@@ -3511,8 +3599,8 @@ export default function CartPage() {
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
               {duplicateGroups.map((group, groupIndex) => (
                 <div key={groupIndex} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
-                  <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
-                    <Package className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <h3 className="mb-3 flex items-center gap-2 font-semibold text-gray-900 dark:text-gray-100">
+                    <Package className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                     {group.productName}
                   </h3>
                   <div className="space-y-3">
@@ -3529,7 +3617,7 @@ export default function CartPage() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-2">
-                              <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2.5 py-1 rounded-md border border-blue-200 dark:border-blue-700">
+                              <span className="rounded-md border border-gray-200 bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700 dark:border-gray-600 dark:bg-gray-700/80 dark:text-gray-200">
                                 {getDescriptiveLabel(item, groupIndex, itemIndex)}
                               </span>
                             </div>
@@ -3544,7 +3632,7 @@ export default function CartPage() {
                               )}
                               {item.combos && item.combos.length > 0 && (
                                 <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-                                  <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                                  <Sparkles className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
                                   <span>{item.combos.length} add-on{item.combos.length > 1 ? 's' : ''}</span>
                                 </div>
                               )}
