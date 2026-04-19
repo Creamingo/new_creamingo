@@ -5,9 +5,51 @@ import { MapContainer, TileLayer, Marker, Circle, useMap, useMapEvents } from 'r
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-const OSM_TILE = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-const OSM_ATTR =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+/* Default: Carto Voyager (no API key). Optional: MapTiler or Mapbox via NEXT_PUBLIC_* — see .env.example */
+const CARTO_TILE = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+const CARTO_ATTR =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+
+/**
+ * Raster tiles for Leaflet. Priority: MapTiler → Mapbox → Carto (free, no key).
+ * Keys must be NEXT_PUBLIC_* so the browser can load tiles (same as any client map SDK).
+ */
+function getCheckoutBasemapTileConfig() {
+  const maptilerKey =
+    typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_MAPTILER_API_KEY?.trim() : '';
+  if (maptilerKey) {
+    const mapId = process.env.NEXT_PUBLIC_MAPTILER_MAP_ID?.trim() || 'streets-v2';
+    return {
+      url: `https://api.maptiler.com/maps/${mapId}/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(maptilerKey)}`,
+      attribution:
+        '&copy; <a href="https://www.maptiler.com/copyright/" target="_blank" rel="noreferrer">MapTiler</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 22,
+      detectRetina: true,
+    };
+  }
+
+  const mapboxToken =
+    typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN?.trim() : '';
+  if (mapboxToken) {
+    const stylePath =
+      process.env.NEXT_PUBLIC_MAPBOX_STYLE_PATH?.trim() || 'mapbox/streets-v12';
+    return {
+      url: `https://api.mapbox.com/styles/v1/${stylePath}/tiles/256/{z}/{x}/{y}{r}?access_token=${encodeURIComponent(mapboxToken)}`,
+      attribution:
+        '&copy; <a href="https://www.mapbox.com/about/maps/" target="_blank" rel="noreferrer">Mapbox</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 22,
+      detectRetina: true,
+    };
+  }
+
+  return {
+    url: CARTO_TILE,
+    attribution: CARTO_ATTR,
+    maxZoom: 20,
+    detectRetina: true,
+    subdomains: 'abcd',
+  };
+}
 
 function fixLeafletDefaultIconsOnce() {
   delete L.Icon.Default.prototype._getIconUrl;
@@ -80,6 +122,8 @@ export default function CheckoutDeliveryMap({
   const showOverlay = showTapHint && !readOnly;
   const tapHintLabel = hasMarker ? 'Tap to move pin' : 'Tap map to place pin';
 
+  const basemap = getCheckoutBasemapTileConfig();
+
   return (
     <div
       role="region"
@@ -90,13 +134,19 @@ export default function CheckoutDeliveryMap({
         <MapContainer
           center={[centerLat, centerLng]}
           zoom={zoom}
-          className="relative z-0 h-[min(260px,45vh)] w-full"
+          className="relative z-0 h-[min(143px,24.75vh)] w-full sm:h-[min(260px,45vh)]"
           scrollWheelZoom={!readOnly}
           dragging
           doubleClickZoom={!readOnly}
           zoomControl
         >
-          <TileLayer attribution={OSM_ATTR} url={OSM_TILE} />
+          <TileLayer
+            attribution={basemap.attribution}
+            url={basemap.url}
+            maxZoom={basemap.maxZoom}
+            detectRetina={basemap.detectRetina}
+            {...(basemap.subdomains ? { subdomains: basemap.subdomains } : {})}
+          />
           <RecenterWhenViewChanges centerLat={centerLat} centerLng={centerLng} zoom={zoom} />
           {showAccuracy ? (
             <Circle

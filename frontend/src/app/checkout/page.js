@@ -45,7 +45,7 @@ const CheckoutDeliveryMap = dynamic(() => import('../../components/CheckoutDeliv
   ssr: false,
   loading: () => (
     <div
-      className="flex h-[min(260px,45vh)] w-full items-center justify-center rounded-lg border border-gray-200 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/80"
+      className="flex h-[min(143px,24.75vh)] w-full items-center justify-center rounded-lg border border-gray-200 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/80 sm:h-[min(260px,45vh)]"
       role="status"
       aria-live="polite"
     >
@@ -443,6 +443,119 @@ function buildLastUsedAddressPayload(address) {
 }
 
 /**
+ * Segment immediately before the city token in Nominatim `display_name` (often area/colony when `address.suburb` is empty).
+ */
+function areaFromDisplayName(displayName, cityBase, stateName) {
+  if (!displayName || !cityBase || typeof displayName !== 'string') return null;
+  const norm = (s) => (s && String(s).trim().toLowerCase()) || '';
+  const parts = displayName.split(',').map((s) => s.trim()).filter(Boolean);
+  const idx = parts.findIndex((p) => norm(p) === norm(cityBase));
+  if (idx <= 0) return null;
+  const candidate = parts[idx - 1];
+  if (!candidate || candidate.length > 48) return null;
+  if (/^\d{5,7}$/.test(candidate)) return null;
+  if (/^(india|भारत)$/i.test(candidate)) return null;
+  if (norm(candidate) === norm(cityBase)) return null;
+  if (stateName && norm(candidate) === norm(stateName)) return null;
+  return candidate;
+}
+
+/** Nominatim `address` (+ optional full geojson row) → "City, locality" + optional "Near … road" (checkout map preview). */
+function buildPlaceLinesFromNominatimAddress(address, geo = null) {
+  if (!address || typeof address !== 'object') return null;
+
+  const norm = (s) => (s && String(s).trim().toLowerCase()) || '';
+
+  const coreCity = address.city || address.town || address.municipality;
+  const fallbackCity = address.state_district || address.county;
+  const cityBase = coreCity || fallbackCity || address.state;
+
+  let area =
+    address.suburb ||
+    address.neighbourhood ||
+    address.city_district ||
+    address.district ||
+    address.borough ||
+    address.quarter ||
+    address.hamlet ||
+    address.village ||
+    address.locality;
+
+  if (area && cityBase && norm(area) === norm(cityBase)) {
+    area = null;
+  }
+
+  if (!area && cityBase && geo?.display_name) {
+    area = areaFromDisplayName(geo.display_name, cityBase, address.state);
+    if (area && norm(area) === norm(cityBase)) {
+      area = null;
+    }
+  }
+
+  let primaryLine = null;
+  if (cityBase && area) {
+    primaryLine = `${cityBase}, ${area}`;
+  } else if (area) {
+    primaryLine = area;
+  } else if (cityBase) {
+    primaryLine = cityBase;
+  } else if (address.state) {
+    primaryLine = address.state;
+  }
+
+  if (!primaryLine) return null;
+
+  const road =
+    address.road ||
+    address.pedestrian ||
+    address.residential ||
+    address.path ||
+    address.footway;
+  const landmarkHint =
+    address.amenity || address.shop || address.hospital || address.college || address.school;
+  const nearSubject = road || landmarkHint;
+  const nearLine = nearSubject ? `Near ${nearSubject}` : null;
+  const storageName = nearLine
+    ? `${primaryLine} — ${nearLine.replace(/^Near\s+/i, '')}`
+    : primaryLine;
+
+  return { primaryLine, nearLine, storageName };
+}
+
+async function reverseGeocodeLatLng(lat, lng) {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`,
+      {
+        headers: {
+          'User-Agent': 'CreamingoDeliveryApp/1.0 (https://creamingo.com; checkout)',
+          'Accept-Language': 'en',
+        },
+      }
+    );
+    if (!response.ok) throw new Error('Reverse geocoding failed');
+    const data = await response.json();
+    return buildPlaceLinesFromNominatimAddress(data.address, data);
+  } catch (error) {
+    console.error('Reverse geocoding error:', error);
+    return null;
+  }
+}
+
+/** Split `storageName` from `reverseGeocodeLatLng` back into primary + near line. */
+function parseStoredLocationLabel(name) {
+  if (!name || typeof name !== 'string') return { primaryLine: null, nearLine: null };
+  const trimmed = name.trim();
+  const sep = ' — ';
+  const idx = trimmed.indexOf(sep);
+  if (idx === -1) return { primaryLine: trimmed, nearLine: null };
+  const primaryLine = trimmed.slice(0, idx).trim();
+  const rest = trimmed.slice(idx + sep.length).trim();
+  const nearLine = rest ? `Near ${rest}` : null;
+  return { primaryLine, nearLine };
+}
+
+/**
  * P1 — Checkout layout & section chrome (single card scale + auth gate accent).
  * P0/P1 foundations: use these for every main block so mobile/desktop stay consistent.
  */
@@ -485,6 +598,13 @@ function CheckoutPageContent({ isClient }) {
   const [showSuccessIndicator, setShowSuccessIndicator] = useState(false);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [locationName, setLocationName] = useState(null);
+  /** Second line under map preview, e.g. "Near Medical College Road" (from Nominatim). */
+  const [locationNearLine, setLocationNearLine] = useState(null);
+  /** Pin drag: show updating / brief updated state above the map. */
+  const [pinGeocodePhase, setPinGeocodePhase] = useState('idle');
+  const pinGeocodeTimerRef = useRef(null);
+  const pinGeocodeHideUpdatedRef = useRef(null);
+  const pinGeocodeSeqRef = useRef(0);
   const [locationAccuracy, setLocationAccuracy] = useState(null);
   const [locationWarning, setLocationWarning] = useState(null);
   /** Forward-geocoded center for empty-state map (delivery PIN / service area). */
@@ -556,9 +676,11 @@ function CheckoutPageContent({ isClient }) {
         }
       }));
       
-      // Restore locationName if location exists and has a stored name
+      // Restore map preview lines if location has a stored label
       if (customer.address?.location?.name) {
-        setLocationName(customer.address.location.name);
+        const parsed = parseStoredLocationLabel(customer.address.location.name);
+        setLocationName(parsed.primaryLine);
+        setLocationNearLine(parsed.nearLine);
       }
     }
   }, [customer, isAuthenticated, currentPinCode]);
@@ -683,41 +805,46 @@ function CheckoutPageContent({ isClient }) {
     }
   };
 
-  // Auto-reverse geocode when location exists but locationName is missing
+  // Hydrate map preview from stored `location.name`, or reverse-geocode when coords exist without a label
   useEffect(() => {
     const location = formData.address?.location;
-    if (location && typeof location.lat === 'number' && typeof location.lng === 'number') {
-      // If location has a stored name, use it
-      if (location.name) {
-        setLocationName(prev => prev || location.name);
-      }
-      // If location doesn't have a name, reverse geocode (only once per location)
-      else {
-        // Add a small delay to respect rate limits
-        const timer = setTimeout(async () => {
-          const name = await reverseGeocode(location.lat, location.lng);
-          if (name) {
-            setLocationName(name);
-            // Store the name in the location object for persistence
-            setFormData(prev => ({
-              ...prev,
-              address: {
-                ...prev.address,
-                location: {
-                  ...prev.address.location,
-                  name: name
-                }
-              }
-            }));
-          }
-        }, 1000); // 1 second delay to respect Nominatim rate limits
-        
-        return () => clearTimeout(timer);
-      }
-    } else if (!location) {
-      // Clear locationName if location is removed
+    if (!location || typeof location.lat !== 'number' || typeof location.lng !== 'number') {
       setLocationName(null);
+      setLocationNearLine(null);
+      setPinGeocodePhase('idle');
+      return;
     }
+
+    if (location.name) {
+      const parsed = parseStoredLocationLabel(location.name);
+      setLocationName(parsed.primaryLine);
+      setLocationNearLine(parsed.nearLine);
+      return;
+    }
+
+    if (location.source === 'map_pick') {
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      const place = await reverseGeocodeLatLng(location.lat, location.lng);
+      if (place) {
+        setLocationName(place.primaryLine);
+        setLocationNearLine(place.nearLine);
+        setFormData((prev) => ({
+          ...prev,
+          address: {
+            ...prev.address,
+            location: {
+              ...prev.address.location,
+              name: place.storageName,
+            },
+          },
+        }));
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
   }, [formData.address?.location]);
 
   // Load last used address on mount if customer is not authenticated or doesn't have address
@@ -752,11 +879,12 @@ function CheckoutPageContent({ isClient }) {
           },
         }));
         if (normalizedLoc?.name) {
-          setLocationName(normalizedLoc.name);
-        } else if (normalizedLoc) {
-          setLocationName(null);
+          const parsed = parseStoredLocationLabel(normalizedLoc.name);
+          setLocationName(parsed.primaryLine);
+          setLocationNearLine(parsed.nearLine);
         } else {
           setLocationName(null);
+          setLocationNearLine(null);
         }
         if (normalizedLoc && typeof normalizedLoc.accuracy === 'number' && Number.isFinite(normalizedLoc.accuracy)) {
           setLocationAccuracy(normalizedLoc.accuracy);
@@ -925,6 +1053,7 @@ function CheckoutPageContent({ isClient }) {
               }
             }));
             setLocationName(null);
+            setLocationNearLine(null);
           }
 
           if (parsed.selectedSlot) {
@@ -959,6 +1088,7 @@ function CheckoutPageContent({ isClient }) {
             }
           }));
           setLocationName(null);
+          setLocationNearLine(null);
         }
       }
     } catch (error) {
@@ -1770,51 +1900,6 @@ function CheckoutPageContent({ isClient }) {
     }
   };
 
-  // Reverse geocode coordinates to get city/locality name
-  const reverseGeocode = async (lat, lng) => {
-    try {
-      // Using OpenStreetMap Nominatim API (free, no API key required)
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-        {
-          headers: {
-            'User-Agent': 'CreamingoDeliveryApp/1.0' // Required by Nominatim
-          }
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Reverse geocoding failed');
-      }
-
-      const data = await response.json();
-      
-      // Extract city/locality from address components
-      const address = data.address || {};
-      const locality = address.locality || address.suburb || address.neighbourhood || address.village;
-      const city = address.city || address.town || address.county;
-      const state = address.state;
-      
-      // Build location name: prefer locality, then city, then state
-      let locationName = '';
-      if (locality) {
-        locationName = locality;
-        if (city && city !== locality) {
-          locationName += `, ${city}`;
-        }
-      } else if (city) {
-        locationName = city;
-      } else if (state) {
-        locationName = state;
-      }
-      
-      return locationName || null;
-    } catch (error) {
-      console.error('Reverse geocoding error:', error);
-      return null;
-    }
-  };
-
   // Browser geolocation (P7 inline feedback, P8 retry / cache-friendly options, P9 events)
   const handleUseMyLocation = () => {
     if (typeof window === 'undefined' || !navigator.geolocation) {
@@ -1827,6 +1912,8 @@ function CheckoutPageContent({ isClient }) {
 
     setIsFetchingLocation(true);
     setLocationName(null);
+    setLocationNearLine(null);
+    setPinGeocodePhase('idle');
     setLocationAccuracy(null);
     setLocationWarning(null);
     setDeliveryLocationFeedback(null);
@@ -1880,8 +1967,14 @@ function CheckoutPageContent({ isClient }) {
         setLocationAccuracy(accuracyInMeters);
         setLocationWarning(null);
 
-        const locationNameResult = await reverseGeocode(latitude, longitude);
-        setLocationName(locationNameResult);
+        const place = await reverseGeocodeLatLng(latitude, longitude);
+        if (place) {
+          setLocationName(place.primaryLine);
+          setLocationNearLine(place.nearLine);
+        } else {
+          setLocationName(null);
+          setLocationNearLine(null);
+        }
 
         setFormData((prev) => ({
           ...prev,
@@ -1892,7 +1985,7 @@ function CheckoutPageContent({ isClient }) {
               lng: longitude,
               accuracy: accuracyInMeters,
               source: 'browser_geolocation',
-              name: locationNameResult || null,
+              name: place?.storageName || null,
             },
           },
         }));
@@ -1900,26 +1993,21 @@ function CheckoutPageContent({ isClient }) {
 
         trackCheckoutEvent('checkout_location_granted', {
           accuracyM: accuracyInMeters ?? undefined,
-          hasPlaceName: Boolean(locationNameResult),
+          hasPlaceName: Boolean(place?.primaryLine),
         });
 
-        if (locationNameResult) {
-          setDeliveryLocationFeedback({
-            variant: 'success',
-            text: 'Location set ✓ Adjust pin if needed.',
-          });
-        } else {
-          setDeliveryLocationFeedback({
-            variant: 'neutral',
-            text: 'Coordinates saved. Tap the map to refine — place name unavailable.',
-          });
-        }
+        setDeliveryLocationFeedback({
+          variant: 'success',
+          text: 'Location set ✓ Adjust pin if needed.',
+        });
         setIsFetchingLocation(false);
       })
       .catch((geoError) => {
         console.error('Error fetching location:', geoError);
         setIsFetchingLocation(false);
         setLocationName(null);
+        setLocationNearLine(null);
+        setPinGeocodePhase('idle');
         setLocationAccuracy(null);
         setLocationWarning(null);
 
@@ -1953,31 +2041,80 @@ function CheckoutPageContent({ isClient }) {
   };
 
   /** Optional pin: user tapped the map to fine-tune coordinates (full address still required). */
-  const handleDeliveryMapPinMove = useCallback(
-    (lat, lng) => {
-      if (isFetchingLocation) return;
-      setDeliveryLocationFeedback(null);
-      setFormData((prev) => ({
-        ...prev,
-        address: {
-          ...prev.address,
-          location: {
-            lat,
-            lng,
-            accuracy: null,
-            source: 'map_pick',
-            name: null,
-          },
+  const handleDeliveryMapPinMove = useCallback((lat, lng) => {
+    if (isFetchingLocation) return;
+    setDeliveryLocationFeedback(null);
+    setPinGeocodePhase('updating');
+    setFormData((prev) => ({
+      ...prev,
+      address: {
+        ...prev.address,
+        location: {
+          lat,
+          lng,
+          accuracy: null,
+          source: 'map_pick',
+          name: null,
         },
-      }));
-      setLocationName(null);
-    },
-    [isFetchingLocation]
-  );
+      },
+    }));
+    setLocationName(null);
+    setLocationNearLine(null);
+
+    if (pinGeocodeTimerRef.current) {
+      clearTimeout(pinGeocodeTimerRef.current);
+    }
+    if (pinGeocodeHideUpdatedRef.current) {
+      clearTimeout(pinGeocodeHideUpdatedRef.current);
+      pinGeocodeHideUpdatedRef.current = null;
+    }
+    const seq = ++pinGeocodeSeqRef.current;
+    pinGeocodeTimerRef.current = setTimeout(async () => {
+      const place = await reverseGeocodeLatLng(lat, lng);
+      if (seq !== pinGeocodeSeqRef.current) return;
+      if (place) {
+        setLocationName(place.primaryLine);
+        setLocationNearLine(place.nearLine);
+        setFormData((prev) => ({
+          ...prev,
+          address: {
+            ...prev.address,
+            location: {
+              ...prev.address.location,
+              lat,
+              lng,
+              accuracy: null,
+              source: 'map_pick',
+              name: place.storageName,
+            },
+          },
+        }));
+        setPinGeocodePhase('updated');
+      } else {
+        setPinGeocodePhase('idle');
+      }
+      pinGeocodeHideUpdatedRef.current = setTimeout(() => {
+        pinGeocodeHideUpdatedRef.current = null;
+        if (seq === pinGeocodeSeqRef.current) {
+          setPinGeocodePhase('idle');
+        }
+      }, 2200);
+    }, 550);
+  }, [isFetchingLocation]);
 
   const handleClearDeliveryLocation = useCallback(() => {
     setDeliveryLocationFeedback(null);
     setShowDeliveryMapTapHint(false);
+    if (pinGeocodeTimerRef.current) {
+      clearTimeout(pinGeocodeTimerRef.current);
+      pinGeocodeTimerRef.current = null;
+    }
+    if (pinGeocodeHideUpdatedRef.current) {
+      clearTimeout(pinGeocodeHideUpdatedRef.current);
+      pinGeocodeHideUpdatedRef.current = null;
+    }
+    pinGeocodeSeqRef.current += 1;
+    setPinGeocodePhase('idle');
     setFormData((prev) => ({
       ...prev,
       address: {
@@ -1986,6 +2123,7 @@ function CheckoutPageContent({ isClient }) {
       },
     }));
     setLocationName(null);
+    setLocationNearLine(null);
     setLocationAccuracy(null);
     setLocationWarning(null);
   }, []);
@@ -2021,9 +2159,12 @@ function CheckoutPageContent({ isClient }) {
       },
     }));
     if (normalizedLoc?.name) {
-      setLocationName(normalizedLoc.name);
+      const parsed = parseStoredLocationLabel(normalizedLoc.name);
+      setLocationName(parsed.primaryLine);
+      setLocationNearLine(parsed.nearLine);
     } else {
       setLocationName(null);
+      setLocationNearLine(null);
     }
     if (normalizedLoc && typeof normalizedLoc.accuracy === 'number' && Number.isFinite(normalizedLoc.accuracy)) {
       setLocationAccuracy(normalizedLoc.accuracy);
@@ -2070,11 +2211,16 @@ function CheckoutPageContent({ isClient }) {
       },
     }));
     if (locForForm?.name) {
-      setLocationName(locForForm.name);
+      const parsed = parseStoredLocationLabel(locForForm.name);
+      setLocationName(parsed.primaryLine);
+      setLocationNearLine(parsed.nearLine);
     } else if (a.location && typeof a.location.name === 'string' && a.location.name.trim()) {
-      setLocationName(a.location.name.trim());
+      const parsed = parseStoredLocationLabel(a.location.name.trim());
+      setLocationName(parsed.primaryLine);
+      setLocationNearLine(parsed.nearLine);
     } else {
       setLocationName(null);
+      setLocationNearLine(null);
     }
     if (locForForm && typeof locForForm.accuracy === 'number' && Number.isFinite(locForForm.accuracy)) {
       setLocationAccuracy(locForForm.accuracy);
@@ -3620,7 +3766,7 @@ function CheckoutPageContent({ isClient }) {
                     >
                       {serviceAreaGeocodeStatus === 'loading' && (
                         <div
-                          className="flex h-[min(260px,45vh)] w-full items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/60"
+                          className="flex h-[min(143px,24.75vh)] w-full items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/60 sm:h-[min(260px,45vh)]"
                           role="status"
                           aria-live="polite"
                         >
@@ -3663,25 +3809,38 @@ function CheckoutPageContent({ isClient }) {
                         >
                           Map preview
                         </p>
-                        <div className="space-y-1">
-                          <p className="text-sm text-gray-700 dark:text-gray-300">
+                        <div className="space-y-1.5">
+                          <p className="text-sm leading-snug text-gray-700 dark:text-gray-300">
                             <span aria-hidden>📍</span>{' '}
-                            <span className="font-medium">Delivering to:</span>
+                            <span className="font-medium">Delivering to:</span>{' '}
+                            {pinGeocodePhase === 'updating' ? (
+                              <span className="font-semibold text-gray-500 dark:text-gray-400">
+                                Updating location…
+                              </span>
+                            ) : (
+                              <span className="break-words font-semibold text-gray-900 dark:text-gray-100">
+                                {locationName ||
+                                  `${formData.address.location.lat.toFixed(5)}, ${formData.address.location.lng.toFixed(5)}`}
+                              </span>
+                            )}
                           </p>
-                          <p className="text-cart-body-strong text-gray-900 dark:text-gray-100">
-                            {locationName ||
-                              `${formData.address.location.lat.toFixed(5)}, ${formData.address.location.lng.toFixed(5)}`}
-                          </p>
-                          <p className="text-form-helper text-amber-900 dark:text-amber-100/90">
-                            Approximate location — adjust pin for accuracy
-                          </p>
+                          {locationNearLine && pinGeocodePhase !== 'updating' ? (
+                            <p className="text-form-helper leading-snug text-gray-600 dark:text-gray-300">
+                              {locationNearLine}
+                            </p>
+                          ) : null}
+                          {pinGeocodePhase === 'updated' && locationName ? (
+                            <p className="text-xs font-medium text-green-700 dark:text-green-400" role="status">
+                              Updated — {locationName}
+                            </p>
+                          ) : null}
                         </div>
                       </div>
                       <CheckoutDeliveryMap
                         key={`pin-set-${formData.address.location.lat}-${formData.address.location.lng}`}
                         centerLat={formData.address.location.lat}
                         centerLng={formData.address.location.lng}
-                        zoom={17}
+                        zoom={18}
                         markerLat={formData.address.location.lat}
                         markerLng={formData.address.location.lng}
                         accuracyM={
@@ -3977,13 +4136,25 @@ function CheckoutPageContent({ isClient }) {
                       const itemPrice = item.deal_price || 1;
                       const itemTotal = itemPrice * item.quantity;
                       const totalItemPrice = item.totalPrice || itemTotal;
+                      const dealThumbSrc = resolveEntityImageUrl(item.product);
 
                       return (
                         <div
                           key={item.id}
-                          className="rounded-lg border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800 sm:p-3"
+                          className="flex gap-2 rounded-lg border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800 sm:gap-3 sm:p-3"
                         >
-                          <div className="flex-1 min-w-0">
+                          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-700 sm:h-20 sm:w-20">
+                            {dealThumbSrc ? (
+                              <Image
+                                src={dealThumbSrc}
+                                alt={item.product?.name || 'Deal product'}
+                                fill
+                                className="object-cover"
+                                sizes="80px"
+                              />
+                            ) : null}
+                          </div>
+                          <div className="min-w-0 flex-1">
                             <div className="mb-1.5 flex items-start justify-between gap-2">
                               <div className="min-w-0 flex-1">
                                 <h4 className="text-cart-card-title line-clamp-2 mb-1">
@@ -4484,13 +4655,25 @@ function CheckoutPageContent({ isClient }) {
                       const itemPrice = item.deal_price || 1;
                       const itemTotal = itemPrice * item.quantity;
                       const totalItemPrice = item.totalPrice || itemTotal;
+                      const dealThumbSrc = resolveEntityImageUrl(item.product);
 
                       return (
                         <div
                           key={item.id}
-                          className="rounded-lg border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800 sm:p-3"
+                          className="flex gap-2 rounded-lg border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800 sm:gap-3 sm:p-3"
                         >
-                          <div className="min-w-0">
+                          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-700 sm:h-20 sm:w-20">
+                            {dealThumbSrc ? (
+                              <Image
+                                src={dealThumbSrc}
+                                alt={item.product?.name || 'Deal product'}
+                                fill
+                                className="object-cover"
+                                sizes="80px"
+                              />
+                            ) : null}
+                          </div>
+                          <div className="min-w-0 flex-1">
                             <div className="mb-1.5 flex items-start justify-between gap-2">
                               <div className="min-w-0 flex-1">
                                 <h4 className="text-cart-card-title mb-1 line-clamp-2">
