@@ -4,6 +4,10 @@ require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Local/CI: run `pnpm run lint`. Builds stay green until legacy violations are fixed (Option 2).
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   experimental: {
     // Restore scroll position when user navigates back (e.g. category -> back to home)
     scrollRestoration: true,

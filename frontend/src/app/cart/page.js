@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { 
   ShoppingBag, 
@@ -266,7 +267,7 @@ export default function CartPage() {
         clearTimeout(autoUpdateTimerRef.current);
       }
     };
-  }, [isInitialized, cartItems.length, autoUpdateExpiredSlots]);
+  }, [isInitialized, cartItems, autoUpdateExpiredSlots]);
   
   const { 
     deliveryInfo, 
@@ -357,10 +358,9 @@ export default function CartPage() {
       }
     };
     fetchSuggestedProducts();
-  }, [mounted, isInitialized, cartItems.length]);
+  }, [mounted, isInitialized, cartItems]);
 
   // Fetch recommendation sections using rules (when to show flowers vs sweets vs small treats, limits)
-  const cartTotalForRules = useMemo(() => cartItems.reduce((sum, i) => sum + (i.totalPrice || 0), 0), [cartItems]);
   useEffect(() => {
     const extractProducts = (res) => res?.products || res?.data?.products || [];
     const cartProductIds = new Set(cartItems.map(item => item.product?.id));
@@ -419,7 +419,7 @@ export default function CartPage() {
       }
     };
     fetchSections();
-  }, [mounted, isInitialized, cartItems.length, cartTotalForRules]);
+  }, [mounted, isInitialized, cartItems]);
 
   // Expand all items by default when cart items change
   useEffect(() => {
@@ -488,7 +488,7 @@ export default function CartPage() {
 
   // Recalculate cart summary whenever cartItems changes
   // This ensures the Order Summary updates when quantity changes
-  const cartSummary = useMemo(() => getCartSummary(), [cartItems]);
+  const cartSummary = useMemo(() => getCartSummary(), [getCartSummary]);
   const deliveryCharge = deliveryInfo?.deliveryCharge || 0;
   
   // Separate regular items and deal items
@@ -1570,6 +1570,7 @@ export default function CartPage() {
                     const totalItemPrice = item.totalPrice || (itemTotal + comboTotal);
                     const isMoving = movingItemId === item.id;
                     const isRemovingSaved = removingSavedItemId === item.id;
+                    const savedLineThumbSrc = resolveImageUrl(item.product?.image_url);
 
                     return (
                       <div
@@ -1580,13 +1581,16 @@ export default function CartPage() {
                       >
                         <div className="flex flex-col sm:flex-row gap-4">
                           {/* Product Image */}
-                          <div className="w-full sm:w-24 h-24 bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 rounded-lg overflow-hidden flex-shrink-0">
-                            <img
-                              src={resolveImageUrl(item.product.image_url)}
-                              alt={item.product.name}
-                              className="w-full h-full object-cover"
-                              loading="lazy"
-                            />
+                          <div className="relative w-full sm:w-24 h-24 flex-shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30">
+                            {savedLineThumbSrc ? (
+                              <Image
+                                src={savedLineThumbSrc}
+                                alt={item.product.name}
+                                fill
+                                className="object-cover"
+                                sizes="(max-width: 640px) 100vw, 96px"
+                              />
+                            ) : null}
                           </div>
 
                           {/* Product Info */}
@@ -2082,6 +2086,7 @@ export default function CartPage() {
                         ? swipeState[item.id].currentX - swipeState[item.id].startX
                         : 0;
                       const dealSwipeOffset = Math.max(-150, Math.min(0, rawDealSwipeOffset)); // Clamp between -150px and 0
+                      const dealThumbSrc = resolveImageUrl(item.product?.image_url);
 
                       return (
                         <div
@@ -2114,13 +2119,16 @@ export default function CartPage() {
                         >
                             <div className="flex gap-3 sm:gap-4">
                           {/* Product Image with Deal Badge */}
-                          <div className="relative w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 rounded-lg overflow-hidden flex-shrink-0">
-                            <img
-                              src={resolveImageUrl(item.product.image_url)}
-                              alt={item.product.name}
-                              className="w-full h-full object-cover"
-                              loading="lazy"
-                            />
+                          <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 sm:h-24 sm:w-24">
+                            {dealThumbSrc ? (
+                              <Image
+                                src={dealThumbSrc}
+                                alt={item.product.name}
+                                fill
+                                className="object-cover"
+                                sizes="96px"
+                              />
+                            ) : null}
                             {/* Item index — subtle so the photo stays hero */}
                             <div className="absolute left-0 top-0 z-10 rounded-br-md bg-black/45 px-1 py-px text-[9px] font-medium tracking-tight text-white/95 backdrop-blur-[1px] sm:px-1.5 sm:py-0.5 sm:text-[10px]">
                               Item {productNumber}
@@ -2241,6 +2249,7 @@ export default function CartPage() {
                       ? swipeState[item.id].currentX - swipeState[item.id].startX
                       : 0;
                     const swipeOffset = Math.max(-150, Math.min(0, rawSwipeOffset)); // Clamp between -150px and 0
+                    const regularThumbSrc = resolveImageUrl(item.product?.image_url);
 
                     return (
                       <div
@@ -2287,16 +2296,19 @@ export default function CartPage() {
                           {/* Mobile: Image and Product Info Side by Side */}
                           <div className="flex flex-row gap-2 sm:hidden">
                           {/* Product Image */}
-                            <div className="relative w-20 h-20 bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 rounded-lg overflow-hidden flex-shrink-0">
+                            <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30">
                               <div className="absolute left-0 top-0 z-10 rounded-br-md bg-black/45 px-1 py-px text-[9px] font-medium tracking-tight text-white/95 backdrop-blur-[1px] sm:px-1.5 sm:py-0.5 sm:text-[10px]">
                                 Item {productNumber}
                               </div>
-                              <img
-                                src={resolveImageUrl(item.product.image_url)}
-                                alt={item.product.name}
-                                className="w-full h-full object-cover"
-                                loading="lazy"
-                              />
+                              {regularThumbSrc ? (
+                                <Image
+                                  src={regularThumbSrc}
+                                  alt={item.product.name}
+                                  fill
+                                  className="object-cover"
+                                  sizes="80px"
+                                />
+                              ) : null}
                             </div>
 
                             {/* Product Info - Compact Mobile Layout */}
@@ -2517,16 +2529,19 @@ export default function CartPage() {
                           {/* Desktop: Image and Product Info Container */}
                           <div className="hidden sm:flex sm:flex-row gap-4">
                             {/* Product Image */}
-                            <div className="relative w-24 h-24 bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 rounded-lg overflow-hidden flex-shrink-0">
+                            <div className="relative h-24 w-24 flex-shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30">
                             <div className="absolute left-0 top-0 z-10 rounded-br-md bg-black/45 px-1 py-px text-[9px] font-medium tracking-tight text-white/95 backdrop-blur-[1px] sm:px-1.5 sm:py-0.5 sm:text-[10px]">
                               Item {productNumber}
                             </div>
-                              <img
-                                src={resolveImageUrl(item.product.image_url)}
-                                alt={item.product.name}
-                                className="w-full h-full object-cover"
-                                loading="lazy"
-                              />
+                              {regularThumbSrc ? (
+                                <Image
+                                  src={regularThumbSrc}
+                                  alt={item.product.name}
+                                  fill
+                                  className="object-cover"
+                                  sizes="96px"
+                                />
+                              ) : null}
                             </div>
 
                             {/* Product Info & Combo Items Container */}
@@ -2803,7 +2818,11 @@ export default function CartPage() {
                                 {item.cakeMessage && (
                                         <div className="flex items-center gap-1.5 text-xs sm:text-sm text-gray-600 dark:text-gray-300">
                                           <Gift className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
-                                    <span className="italic">"{item.cakeMessage}"</span>
+                                    <span className="italic">
+                                      {'\u201C'}
+                                      {item.cakeMessage}
+                                      {'\u201D'}
+                                    </span>
                                   </div>
                                 )}
                               </div>
@@ -2905,6 +2924,7 @@ export default function CartPage() {
                         if (item.flavor) savedProductDetails.push(`Flavor: ${item.flavor.name}`);
                         if (item.tier) savedProductDetails.push(`Tier: ${item.tier}`);
                         const savedDetailsText = savedProductDetails.join(' • ');
+                        const collapsedSavedThumbSrc = resolveImageUrl(item.product?.image_url);
 
                       return (
                         <div
@@ -2915,13 +2935,16 @@ export default function CartPage() {
                         >
                             <div className="flex gap-3 sm:gap-4">
                             {/* Product Image */}
-                              <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 rounded-lg overflow-hidden flex-shrink-0">
-                              <img
-                                src={resolveImageUrl(item.product.image_url)}
-                                alt={item.product.name}
-                                className="w-full h-full object-cover"
-                                loading="lazy"
-                              />
+                              <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 sm:h-24 sm:w-24">
+                              {collapsedSavedThumbSrc ? (
+                                <Image
+                                  src={collapsedSavedThumbSrc}
+                                  alt={item.product.name}
+                                  fill
+                                  className="object-cover"
+                                  sizes="96px"
+                                />
+                              ) : null}
                             </div>
 
                             {/* Product Info */}
@@ -3269,10 +3292,19 @@ export default function CartPage() {
                                     updateCartItemCombos(firstCakeItem.id, updatedCombos);
                                     showSuccess('Added', `${item.name} added to your cake.`);
                                   };
+                                  const addOnThumbSrc = resolveImageUrl(item.image_url);
                                   return (
                                     <div key={item.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] bg-white dark:bg-gray-800 rounded-xl border border-amber-200/70 dark:border-amber-600/40 overflow-hidden shadow-md hover:shadow-lg hover:border-amber-300 dark:hover:border-amber-500/60 transition-all duration-200 group">
-                                      <div className="relative w-full h-[90px] sm:h-[100px] bg-amber-50/80 dark:bg-amber-900/20 overflow-hidden rounded-t-xl">
-                                        <img src={resolveImageUrl(item.image_url)} alt={item.name} className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-200" loading="lazy" />
+                                      <div className="relative h-[90px] w-full overflow-hidden rounded-t-xl bg-amber-50/80 dark:bg-amber-900/20 sm:h-[100px]">
+                                        {addOnThumbSrc ? (
+                                          <Image
+                                            src={addOnThumbSrc}
+                                            alt={item.name}
+                                            fill
+                                            className="object-contain p-2 transition-transform duration-200 group-hover:scale-105"
+                                            sizes="148px"
+                                          />
+                                        ) : null}
                                       </div>
                                       <div className="p-2 space-y-1">
                                         <h4 className={cartType.upsellCardTitle}>{item.name}</h4>
@@ -3307,6 +3339,7 @@ export default function CartPage() {
                                   const originalPrice = product.base_price;
                                   const hasDiscount = product.discounted_price && product.discounted_price < originalPrice;
                                   const productWeight = product.base_weight || product.variants?.[0]?.weight || null;
+                                  const giftThumbSrc = resolveImageUrl(product.image_url);
                                   return (
                                     <div key={product.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] lg:w-[160px] bg-white dark:bg-gray-800 rounded-xl border border-emerald-200/70 dark:border-emerald-600/40 overflow-hidden shadow-md hover:shadow-lg hover:border-emerald-300 dark:hover:border-emerald-500/60 transition-all duration-200 group">
                                       {hasDiscount && (
@@ -3314,8 +3347,16 @@ export default function CartPage() {
                                           {Math.round(((originalPrice - product.discounted_price) / originalPrice) * 100)}% OFF
                                         </div>
                                       )}
-                                      <div className="relative w-full h-[110px] sm:h-[120px] bg-emerald-50/70 dark:bg-emerald-900/20 cursor-pointer overflow-hidden rounded-t-xl" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
-                                        <img src={resolveImageUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" loading="lazy" />
+                                      <div className="relative h-[110px] w-full cursor-pointer overflow-hidden rounded-t-xl bg-emerald-50/70 dark:bg-emerald-900/20 sm:h-[120px]" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
+                                        {giftThumbSrc ? (
+                                          <Image
+                                            src={giftThumbSrc}
+                                            alt={product.name}
+                                            fill
+                                            className="object-cover transition-transform duration-200 group-hover:scale-105"
+                                            sizes="160px"
+                                          />
+                                        ) : null}
                                       </div>
                                       <div className="p-2 space-y-1">
                                         <h4 className={`${cartType.upsellCardTitle} cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400`} onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
@@ -3359,6 +3400,7 @@ export default function CartPage() {
                                   const originalPrice = product.base_price;
                                   const hasDiscount = product.discounted_price && product.discounted_price < originalPrice;
                                   const productWeight = product.base_weight || product.variants?.[0]?.weight || null;
+                                  const treatThumbSrc = resolveImageUrl(product.image_url);
                                   return (
                                     <div key={product.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] lg:w-[160px] bg-white dark:bg-gray-800 rounded-xl border border-rose-200/70 dark:border-rose-600/40 overflow-hidden shadow-md hover:shadow-lg hover:border-rose-300 dark:hover:border-rose-500/60 transition-all duration-200 group">
                                       {hasDiscount && (
@@ -3366,8 +3408,16 @@ export default function CartPage() {
                                           {Math.round(((originalPrice - product.discounted_price) / originalPrice) * 100)}% OFF
                                         </div>
                                       )}
-                                      <div className="relative w-full h-[110px] sm:h-[120px] bg-rose-50/70 dark:bg-rose-900/20 cursor-pointer overflow-hidden rounded-t-xl" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
-                                        <img src={resolveImageUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" loading="lazy" />
+                                      <div className="relative h-[110px] w-full cursor-pointer overflow-hidden rounded-t-xl bg-rose-50/70 dark:bg-rose-900/20 sm:h-[120px]" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
+                                        {treatThumbSrc ? (
+                                          <Image
+                                            src={treatThumbSrc}
+                                            alt={product.name}
+                                            fill
+                                            className="object-cover transition-transform duration-200 group-hover:scale-105"
+                                            sizes="160px"
+                                          />
+                                        ) : null}
                                       </div>
                                       <div className="p-2 space-y-1">
                                         <h4 className={`${cartType.upsellCardTitle} cursor-pointer hover:text-rose-600 dark:hover:text-rose-400`} onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
@@ -3623,16 +3673,21 @@ export default function CartPage() {
                     {group.productName}
                   </h3>
                   <div className="space-y-3">
-                    {group.items.map((item, itemIndex) => (
+                    {group.items.map((item, itemIndex) => {
+                      const dupThumbSrc = resolveImageUrl(item.product?.image_url);
+                      return (
                       <div key={item.id} className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-600 relative group">
                         <div className="flex items-start gap-3">
-                          <div className="w-12 h-12 rounded-lg overflow-hidden bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 flex-shrink-0">
-                            <img
-                              src={resolveImageUrl(item.product?.image_url)}
-                              alt={item.product?.name}
-                              className="w-full h-full object-cover"
-                              loading="lazy"
-                            />
+                          <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30">
+                            {dupThumbSrc ? (
+                              <Image
+                                src={dupThumbSrc}
+                                alt={item.product?.name || 'Product'}
+                                fill
+                                className="object-cover"
+                                sizes="48px"
+                              />
+                            ) : null}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-2">
@@ -3793,7 +3848,8 @@ export default function CartPage() {
                           <Trash2 className="w-4 h-4 sm:w-4 sm:h-4" />
                         </button>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
                     <p className="text-xs text-gray-600 dark:text-gray-400">

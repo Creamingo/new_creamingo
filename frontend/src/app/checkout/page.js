@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
+import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import { useRouter, usePathname } from 'next/navigation';
 import {
   ArrowLeft,
@@ -25,9 +27,9 @@ import {
   Package,
   Gift,
   Navigation,
+  Move,
   Eye,
-  EyeOff,
-  ExternalLink
+  EyeOff
 } from 'lucide-react';
 import { useCart } from '../../contexts/CartContext';
 import { usePinCode } from '../../contexts/PinCodeContext';
@@ -38,11 +40,27 @@ import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import MobileFooter from '../../components/MobileFooter';
 import DeliverySlotSelector from '../../components/DeliverySlotSelector';
+
+const CheckoutDeliveryMap = dynamic(() => import('../../components/CheckoutDeliveryMap'), {
+  ssr: false,
+  loading: () => (
+    <div
+      className="flex h-[min(260px,45vh)] w-full items-center justify-center rounded-lg border border-gray-200 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/80"
+      role="status"
+      aria-live="polite"
+    >
+      <Loader2 className="h-8 w-8 shrink-0 animate-spin text-pink-600 dark:text-pink-400" aria-hidden />
+      <span className="sr-only">Loading map</span>
+    </div>
+  ),
+});
 import deliverySlotApi from '../../api/deliverySlotApi';
 import orderApi from '../../api/orderApi';
 import settingsApi from '../../api/settingsApi';
 import customerAuthApi from '../../api/customerAuthApi';
 import { formatPrice } from '../../utils/priceFormatter';
+import { resolveImageUrl } from '../../utils/imageUrl';
+import { trackCheckoutEvent } from '../../utils/checkoutAnalytics';
 
 // Helper functions for formatting dates and times (same as cart page)
 const formatDeliveryDate = (date) => {
@@ -122,11 +140,318 @@ const formatTimeSlot = (deliverySlot) => {
   return 'N/A';
 };
 
-/** Shared checkout form section chrome (P3) */
+/** Module-level slot helpers (stable for react-hooks/exhaustive-deps; pure, no component state). */
+const parseDeliveryDate = (dateInput) => {
+  if (!dateInput) return null;
+
+  if (dateInput instanceof Date) {
+    return new Date(dateInput);
+  }
+  if (typeof dateInput === 'string') {
+    const dateParts = dateInput.split('-');
+    if (dateParts.length === 3) {
+      const year = parseInt(dateParts[0], 10);
+      const month = parseInt(dateParts[1], 10) - 1;
+      const day = parseInt(dateParts[2], 10);
+      if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+        return new Date(year, month, day);
+      }
+    }
+    return new Date(dateInput);
+  }
+  return null;
+};
+
+const isDeliverySlotExpired = (deliverySlot) => {
+  if (!deliverySlot || !deliverySlot.date) return false;
+
+  try {
+    let deliveryDate;
+    if (deliverySlot.date instanceof Date) {
+      deliveryDate = new Date(deliverySlot.date);
+    } else if (typeof deliverySlot.date === 'string') {
+      const dateParts = deliverySlot.date.split('-');
+      if (dateParts.length === 3) {
+        const year = parseInt(dateParts[0], 10);
+        const month = parseInt(dateParts[1], 10) - 1;
+        const day = parseInt(dateParts[2], 10);
+        if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+          deliveryDate = new Date(year, month, day);
+        } else {
+          deliveryDate = new Date(deliverySlot.date);
+        }
+      } else {
+        deliveryDate = new Date(deliverySlot.date);
+      }
+
+      if (isNaN(deliveryDate.getTime())) {
+        console.warn('Invalid delivery date format:', deliverySlot.date);
+        return false;
+      }
+    } else {
+      return false;
+    }
+
+    const now = new Date();
+
+    const deliveryDateOnly = new Date(
+      deliveryDate.getFullYear(),
+      deliveryDate.getMonth(),
+      deliveryDate.getDate()
+    );
+    const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const daysDiff = Math.floor((todayOnly - deliveryDateOnly) / (1000 * 60 * 60 * 24));
+    return daysDiff > 1;
+  } catch (e) {
+    console.error('Error checking delivery slot expiry:', e);
+    return false;
+  }
+};
+
+const isSlotExpiredForToday = (deliverySlot) => {
+  if (!deliverySlot || !deliverySlot.date) return false;
+
+  try {
+    const today = new Date();
+    let deliveryDate;
+
+    if (deliverySlot.date instanceof Date) {
+      deliveryDate = new Date(deliverySlot.date);
+    } else if (typeof deliverySlot.date === 'string') {
+      const dateParts = deliverySlot.date.split('-');
+      if (dateParts.length === 3) {
+        const year = parseInt(dateParts[0], 10);
+        const month = parseInt(dateParts[1], 10) - 1;
+        const day = parseInt(dateParts[2], 10);
+        if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+          deliveryDate = new Date(year, month, day);
+        } else {
+          deliveryDate = new Date(deliverySlot.date);
+        }
+      } else {
+        deliveryDate = new Date(deliverySlot.date);
+      }
+    } else {
+      return false;
+    }
+
+    const selectedDateOnly = new Date(deliveryDate.getFullYear(), deliveryDate.getMonth(), deliveryDate.getDate());
+    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    if (selectedDateOnly.getTime() !== todayOnly.getTime()) {
+      return false;
+    }
+
+    const now = new Date();
+    const currentTime = now.getHours() * 60 + now.getMinutes();
+
+    const slot = deliverySlot.slot;
+    if (!slot || !slot.startTime) return false;
+
+    try {
+      const [startHour, startMin] = slot.startTime.split(':').map(Number);
+      const slotStartTime = startHour * 60 + startMin;
+
+      return currentTime >= slotStartTime;
+    } catch (e) {
+      console.warn('Error parsing slot start time:', e);
+      return false;
+    }
+  } catch (e) {
+    console.error('Error checking slot expiration for today:', e);
+    return false;
+  }
+};
+
+const getSlotExpirationStatus = (deliverySlot) => {
+  if (!deliverySlot || !deliverySlot.date) return 'valid';
+
+  try {
+    const deliveryDate = parseDeliveryDate(deliverySlot.date);
+    if (!deliveryDate || isNaN(deliveryDate.getTime())) {
+      return 'valid';
+    }
+
+    const today = new Date();
+    const deliveryDateOnly = new Date(deliveryDate.getFullYear(), deliveryDate.getMonth(), deliveryDate.getDate());
+    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const daysDiff = Math.floor((todayOnly - deliveryDateOnly) / (1000 * 60 * 60 * 24));
+
+    if (daysDiff > 0) {
+      return 'expired';
+    }
+
+    if (daysDiff === 0 && isSlotExpiredForToday(deliverySlot)) {
+      return 'expired';
+    }
+
+    if (daysDiff === 0) {
+      const slot = deliverySlot.slot;
+      if (slot && slot.startTime) {
+        try {
+          const now = new Date();
+          const currentTime = now.getHours() * 60 + now.getMinutes();
+          const [startHour, startMin] = slot.startTime.split(':').map(Number);
+          const slotStartTime = startHour * 60 + startMin;
+          const minutesUntilSlot = slotStartTime - currentTime;
+
+          if (minutesUntilSlot < 0) {
+            return 'expired';
+          }
+
+          if (minutesUntilSlot > 0 && minutesUntilSlot < 120) {
+            return 'expiring_soon';
+          }
+        } catch (e) {
+          // Ignore errors
+        }
+      }
+    }
+
+    if (isDeliverySlotExpired(deliverySlot)) {
+      return 'expired';
+    }
+  } catch (e) {
+    console.error('Error checking slot expiration status:', e);
+  }
+
+  return 'valid';
+};
+
+const calculateCountdown = (deliverySlot) => {
+  if (!deliverySlot || !deliverySlot.date || !deliverySlot.slot?.startTime) {
+    return null;
+  }
+
+  try {
+    const today = new Date();
+    let deliveryDate;
+
+    if (deliverySlot.date instanceof Date) {
+      deliveryDate = new Date(deliverySlot.date);
+    } else if (typeof deliverySlot.date === 'string') {
+      const dateParts = deliverySlot.date.split('-');
+      if (dateParts.length === 3) {
+        const year = parseInt(dateParts[0], 10);
+        const month = parseInt(dateParts[1], 10) - 1;
+        const day = parseInt(dateParts[2], 10);
+        if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+          deliveryDate = new Date(year, month, day);
+        } else {
+          deliveryDate = new Date(deliverySlot.date);
+        }
+      } else {
+        deliveryDate = new Date(deliverySlot.date);
+      }
+    } else {
+      return null;
+    }
+
+    const selectedDateOnly = new Date(deliveryDate.getFullYear(), deliveryDate.getMonth(), deliveryDate.getDate());
+    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    if (selectedDateOnly.getTime() !== todayOnly.getTime()) {
+      return null;
+    }
+
+    const now = new Date();
+    const currentTime = now.getHours() * 60 + now.getMinutes();
+    const [startHour, startMin] = deliverySlot.slot.startTime.split(':').map(Number);
+    const slotStartTime = startHour * 60 + startMin;
+    const minutesUntilSlot = slotStartTime - currentTime;
+
+    if (minutesUntilSlot <= 0) {
+      return null;
+    }
+
+    return {
+      hours: Math.floor(minutesUntilSlot / 60),
+      minutes: minutesUntilSlot % 60
+    };
+  } catch (e) {
+    console.error('Error calculating countdown:', e);
+    return null;
+  }
+};
+
+const LAST_USED_ADDRESS_STORAGE_KEY = 'last_used_address';
+
+/** True if local last-used payload has text fields and/or a valid map pin. */
+function lastUsedAddressHasContent(parsed) {
+  if (!parsed || typeof parsed !== 'object') return false;
+  const hasText = [parsed.street, parsed.city, parsed.state].some(
+    (s) => typeof s === 'string' && s.trim().length > 0
+  );
+  return hasText || Boolean(normalizeSavedMapLocation(parsed.location));
+}
+
+function normalizeSavedMapLocation(loc) {
+  if (!loc || typeof loc !== 'object') return null;
+  const lat = Number(loc.lat);
+  const lng = Number(loc.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const accuracy = loc.accuracy;
+  const out = {
+    lat,
+    lng,
+    accuracy: typeof accuracy === 'number' && Number.isFinite(accuracy) ? accuracy : null,
+    source: typeof loc.source === 'string' && loc.source.trim() ? loc.source.trim() : 'saved_device',
+  };
+  if (typeof loc.name === 'string' && loc.name.trim()) {
+    out.name = loc.name.trim();
+  }
+  return out;
+}
+
+function readLastUsedAddressFromStorage() {
+  try {
+    if (typeof window === 'undefined') return null;
+    const raw = localStorage.getItem(LAST_USED_ADDRESS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return typeof parsed === 'object' && parsed !== null ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildLastUsedAddressPayload(address) {
+  if (!address || typeof address !== 'object') {
+    return {
+      street: '',
+      landmark: '',
+      city: '',
+      state: '',
+      zip_code: '',
+      country: 'India',
+    };
+  }
+  const base = {
+    street: address.street || '',
+    landmark: address.landmark || '',
+    city: address.city || '',
+    state: address.state || '',
+    zip_code: address.zip_code || '',
+    country: address.country || 'India',
+  };
+  const normalizedLoc = normalizeSavedMapLocation(address.location);
+  if (normalizedLoc) {
+    base.location = normalizedLoc;
+  }
+  return base;
+}
+
+/**
+ * P1 — Checkout layout & section chrome (single card scale + auth gate accent).
+ * P0/P1 foundations: use these for every main block so mobile/desktop stay consistent.
+ */
 const CHECKOUT_FORM_CARD =
   'rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800 overflow-hidden scroll-mt-24';
 const CHECKOUT_FORM_CARD_GATE =
   `${CHECKOUT_FORM_CARD} border-l-4 border-l-pink-500 dark:border-l-pink-400`;
+/** Main content column: prevents grid flex children from forcing horizontal scroll */
+const CHECKOUT_MAIN_COLUMN = 'min-w-0';
 const CHECKOUT_SECTION_HEADER_BTN =
   'ui-focus-visible flex w-full min-h-[44px] items-center justify-between p-3 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50 sm:p-4 lg:p-6 lg:pointer-events-none lg:hover:bg-transparent';
 const CHECKOUT_PRIMARY_BTN =
@@ -143,7 +468,7 @@ function CheckoutPageContent({ isClient }) {
   const router = useRouter();
   const pathname = usePathname();
   const { cartItems, getCartSummary, clearCart, isInitialized, autoUpdateExpiredSlots } = useCart();
-  const { showSuccess } = useToast();
+  const { showSuccess, showError } = useToast();
   const {
     deliveryInfo,
     currentPinCode,
@@ -162,6 +487,15 @@ function CheckoutPageContent({ isClient }) {
   const [locationName, setLocationName] = useState(null);
   const [locationAccuracy, setLocationAccuracy] = useState(null);
   const [locationWarning, setLocationWarning] = useState(null);
+  /** Forward-geocoded center for empty-state map (delivery PIN / service area). */
+  const [serviceAreaMapCenter, setServiceAreaMapCenter] = useState(null);
+  const [serviceAreaGeocodeStatus, setServiceAreaGeocodeStatus] = useState('idle');
+  /** Inline delivery-location messages (P7); do not rely only on the top error banner. */
+  const [deliveryLocationFeedback, setDeliveryLocationFeedback] = useState(null);
+  /** Map tap hint chip only after successful "Use my location" (avoids overlap with OSM / pre-GPS UX). */
+  const [showDeliveryMapTapHint, setShowDeliveryMapTapHint] = useState(false);
+  /** Snapshot of `last_used_address` for Option A quick-fill UI (hydrates after mount). */
+  const [deviceSavedAddressSnapshot, setDeviceSavedAddressSnapshot] = useState(null);
   const authSectionRef = useRef(null);
   const [authEmail, setAuthEmail] = useState('');
   const [authStep, setAuthStep] = useState('email');
@@ -384,7 +718,7 @@ function CheckoutPageContent({ isClient }) {
       // Clear locationName if location is removed
       setLocationName(null);
     }
-  }, [formData.address?.location?.lat, formData.address?.location?.lng, formData.address?.location?.name]);
+  }, [formData.address?.location]);
 
   // Load last used address on mount if customer is not authenticated or doesn't have address
   useEffect(() => {
@@ -395,9 +729,16 @@ function CheckoutPageContent({ isClient }) {
       (isAuthenticated && customer && (!customer.address || (!customer.address.street && !customer.address.city && !customer.address.state)));
     
     if (shouldLoadSavedAddress) {
-      const savedAddress = loadLastUsedAddress();
-      if (savedAddress && (!formData.address.street && !formData.address.city && !formData.address.state)) {
-        setFormData(prev => ({
+      const savedAddress = readLastUsedAddressFromStorage();
+      if (
+        savedAddress &&
+        lastUsedAddressHasContent(savedAddress) &&
+        !formData.address.street &&
+        !formData.address.city &&
+        !formData.address.state
+      ) {
+        const normalizedLoc = normalizeSavedMapLocation(savedAddress.location);
+        setFormData((prev) => ({
           ...prev,
           address: {
             ...prev.address,
@@ -405,11 +746,26 @@ function CheckoutPageContent({ isClient }) {
             landmark: savedAddress.landmark || prev.address.landmark,
             city: savedAddress.city || prev.address.city,
             state: savedAddress.state || prev.address.state,
-            zip_code: savedAddress.zip_code || prev.address.zip_code || currentPinCode || ''
-          }
+            zip_code: savedAddress.zip_code || prev.address.zip_code || currentPinCode || '',
+            country: savedAddress.country || prev.address.country || 'India',
+            location: normalizedLoc || prev.address.location,
+          },
         }));
+        if (normalizedLoc?.name) {
+          setLocationName(normalizedLoc.name);
+        } else if (normalizedLoc) {
+          setLocationName(null);
+        } else {
+          setLocationName(null);
+        }
+        if (normalizedLoc && typeof normalizedLoc.accuracy === 'number' && Number.isFinite(normalizedLoc.accuracy)) {
+          setLocationAccuracy(normalizedLoc.accuracy);
+        } else if (!normalizedLoc) {
+          setLocationAccuracy(null);
+        }
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: load last-used address once; deps would re-hydrate while user edits
   }, []); // Only run on mount
 
   const [selectedSlot, setSelectedSlot] = useState(null);
@@ -445,6 +801,24 @@ function CheckoutPageContent({ isClient }) {
   // Section navigation state
   const [showSectionNav, setShowSectionNav] = useState(false);
   const [activeSection, setActiveSection] = useState('customerInfo');
+
+  const prevShowSlotSelectorRef = useRef(false);
+  useEffect(() => {
+    if (showSlotSelector && !prevShowSlotSelectorRef.current) {
+      trackCheckoutEvent('checkout_slot_selector_opened', { pinCode: currentPinCode || null });
+    }
+    prevShowSlotSelectorRef.current = showSlotSelector;
+  }, [showSlotSelector, currentPinCode]);
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'hidden' && pathname === '/checkout') {
+        trackCheckoutEvent('checkout_step_backgrounded', { step: activeSection });
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [pathname, activeSection]);
   
   // Field-level errors for better placement
   const [fieldErrors, setFieldErrors] = useState({});
@@ -590,38 +964,26 @@ function CheckoutPageContent({ isClient }) {
     } catch (error) {
       console.error('Error loading saved form progress:', error);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: restore from localStorage once; deps would overwrite in-progress checkout
   }, []); // Only run on mount
   
-  // Save address to localStorage after successful order
+  // Save address to localStorage after successful order (text + optional map pin for Option A).
   const saveLastUsedAddress = (address) => {
     try {
-      const addressToSave = {
-        street: address.street || '',
-        landmark: address.landmark || '',
-        city: address.city || '',
-        state: address.state || '',
-        zip_code: address.zip_code || ''
-      };
-      localStorage.setItem('last_used_address', JSON.stringify(addressToSave));
-      console.log('Address saved to localStorage:', addressToSave);
+      const addressToSave = buildLastUsedAddressPayload(address);
+      localStorage.setItem(LAST_USED_ADDRESS_STORAGE_KEY, JSON.stringify(addressToSave));
+      setDeviceSavedAddressSnapshot(addressToSave);
     } catch (error) {
       console.error('Error saving address to localStorage:', error);
     }
   };
 
-  // Load last used address from localStorage
-  const loadLastUsedAddress = () => {
-    try {
-      const savedAddress = localStorage.getItem('last_used_address');
-      if (savedAddress) {
-        const parsed = JSON.parse(savedAddress);
-        return parsed;
-      }
-    } catch (error) {
-      console.error('Error loading saved address from localStorage:', error);
-    }
-    return null;
-  };
+  // Load last used address from localStorage (same shape as `saveLastUsedAddress` writes).
+  const loadLastUsedAddress = () => readLastUsedAddressFromStorage();
+
+  useEffect(() => {
+    setDeviceSavedAddressSnapshot(readLastUsedAddressFromStorage());
+  }, []);
   
   // Clear saved form progress after successful order
   const clearSavedFormProgress = () => {
@@ -671,281 +1033,16 @@ function CheckoutPageContent({ isClient }) {
 
   const cartSummary = getCartSummary();
 
-  // Check if delivery slot is expired (same logic as CartContext)
-  const isDeliverySlotExpired = (deliverySlot) => {
-    if (!deliverySlot || !deliverySlot.date) return false;
-    
-    try {
-      // Get delivery date - handle various formats
-      let deliveryDate;
-      if (deliverySlot.date instanceof Date) {
-        deliveryDate = new Date(deliverySlot.date);
-      } else if (typeof deliverySlot.date === 'string') {
-        // Handle YYYY-MM-DD format (stored in localStorage)
-        // Parse as local date to avoid timezone issues
-        const dateParts = deliverySlot.date.split('-');
-        if (dateParts.length === 3) {
-          const year = parseInt(dateParts[0], 10);
-          const month = parseInt(dateParts[1], 10) - 1; // Month is 0-indexed
-          const day = parseInt(dateParts[2], 10);
-          if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
-            deliveryDate = new Date(year, month, day);
-          } else {
-            // Fallback to standard parsing
-            deliveryDate = new Date(deliverySlot.date);
-          }
-        } else {
-          // Fallback to standard parsing for other formats
-          deliveryDate = new Date(deliverySlot.date);
-        }
-        
-        // Check if date is valid
-        if (isNaN(deliveryDate.getTime())) {
-          console.warn('Invalid delivery date format:', deliverySlot.date);
-          return false; // Can't determine expiry if date is invalid
-        }
-      } else {
-        return false; // Can't determine expiry
-      }
-
-      // Get current date/time in local timezone
-      const now = new Date();
-      
-      // Compare dates only (without time) using local timezone
-      // This avoids timezone issues when comparing dates
-      const deliveryDateOnly = new Date(
-        deliveryDate.getFullYear(), 
-        deliveryDate.getMonth(), 
-        deliveryDate.getDate()
-      );
-      const todayOnly = new Date(
-        now.getFullYear(), 
-        now.getMonth(), 
-        now.getDate()
-      );
-      
-      // Only consider expired if delivery date is more than 1 day in the past
-      // This is very conservative to avoid false positives
-      const daysDiff = Math.floor((todayOnly - deliveryDateOnly) / (1000 * 60 * 60 * 24));
-      return daysDiff > 1;
-    } catch (e) {
-      console.error('Error checking delivery slot expiry:', e);
-      return false; // On error, assume not expired
-    }
-  };
-
-  // Check if slot is expired for today (using start time)
-  const isSlotExpiredForToday = (deliverySlot) => {
-    if (!deliverySlot || !deliverySlot.date) return false;
-    
-    try {
-      const today = new Date();
-      let deliveryDate;
-      
-      if (deliverySlot.date instanceof Date) {
-        deliveryDate = new Date(deliverySlot.date);
-      } else if (typeof deliverySlot.date === 'string') {
-        const dateParts = deliverySlot.date.split('-');
-        if (dateParts.length === 3) {
-          const year = parseInt(dateParts[0], 10);
-          const month = parseInt(dateParts[1], 10) - 1;
-          const day = parseInt(dateParts[2], 10);
-          if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
-            deliveryDate = new Date(year, month, day);
-          } else {
-            deliveryDate = new Date(deliverySlot.date);
-          }
-        } else {
-          deliveryDate = new Date(deliverySlot.date);
-        }
-      } else {
-        return false;
-      }
-      
-      const selectedDateOnly = new Date(deliveryDate.getFullYear(), deliveryDate.getMonth(), deliveryDate.getDate());
-      const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      
-      // Only check expiration for today's date
-      if (selectedDateOnly.getTime() !== todayOnly.getTime()) {
-        return false;
-      }
-      
-      const now = new Date();
-      const currentTime = now.getHours() * 60 + now.getMinutes();
-      
-      // Get slot start time
-      const slot = deliverySlot.slot;
-      if (!slot || !slot.startTime) return false;
-      
-      try {
-        const [startHour, startMin] = slot.startTime.split(':').map(Number);
-        const slotStartTime = startHour * 60 + startMin;
-        
-        return currentTime >= slotStartTime;
-      } catch (e) {
-        console.warn('Error parsing slot start time:', e);
-        return false;
-      }
-    } catch (e) {
-      console.error('Error checking slot expiration for today:', e);
-      return false;
-    }
-  };
-
-  // Helper function to parse delivery date
-  const parseDeliveryDate = (dateInput) => {
-    if (!dateInput) return null;
-    
-    if (dateInput instanceof Date) {
-      return new Date(dateInput);
-    } else if (typeof dateInput === 'string') {
-      const dateParts = dateInput.split('-');
-      if (dateParts.length === 3) {
-        const year = parseInt(dateParts[0], 10);
-        const month = parseInt(dateParts[1], 10) - 1;
-        const day = parseInt(dateParts[2], 10);
-        if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
-          return new Date(year, month, day);
-        }
-      }
-      return new Date(dateInput);
-    }
-    return null;
-  };
-
-  // Get slot expiration status: 'expired' | 'expiring_soon' | 'valid'
-  const getSlotExpirationStatus = (deliverySlot) => {
-    if (!deliverySlot || !deliverySlot.date) return 'valid';
-    
-    try {
-      const deliveryDate = parseDeliveryDate(deliverySlot.date);
-      if (!deliveryDate || isNaN(deliveryDate.getTime())) {
-        return 'valid';
-      }
-      
-      const today = new Date();
-      const deliveryDateOnly = new Date(deliveryDate.getFullYear(), deliveryDate.getMonth(), deliveryDate.getDate());
-      const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const daysDiff = Math.floor((todayOnly - deliveryDateOnly) / (1000 * 60 * 60 * 24));
-      
-      // Check if date is in the past (yesterday or earlier)
-      if (daysDiff > 0) {
-        return 'expired';
-      }
-      
-      // Check if expired for today (time passed)
-      if (daysDiff === 0 && isSlotExpiredForToday(deliverySlot)) {
-        return 'expired';
-      }
-      
-      // Check if expiring soon (< 2 hours for today's slots)
-      if (daysDiff === 0) {
-        const slot = deliverySlot.slot;
-        if (slot && slot.startTime) {
-          try {
-            const now = new Date();
-            const currentTime = now.getHours() * 60 + now.getMinutes();
-            const [startHour, startMin] = slot.startTime.split(':').map(Number);
-            const slotStartTime = startHour * 60 + startMin;
-            const minutesUntilSlot = slotStartTime - currentTime;
-            
-            // If slot has already started (negative minutes), it's expired
-            if (minutesUntilSlot < 0) {
-              return 'expired';
-            }
-            
-            // If less than 2 hours (120 minutes) remaining, it's expiring soon
-            if (minutesUntilSlot > 0 && minutesUntilSlot < 120) {
-              return 'expiring_soon';
-            }
-          } catch (e) {
-            // Ignore errors
-          }
-        }
-      }
-      
-      // Also check the conservative expiration check (more than 1 day in past)
-      if (isDeliverySlotExpired(deliverySlot)) {
-        return 'expired';
-      }
-    } catch (e) {
-      console.error('Error checking slot expiration status:', e);
-    }
-    
-    return 'valid';
-  };
-
-  // Calculate countdown timer for today's slots
-  const calculateCountdown = (deliverySlot) => {
-    if (!deliverySlot || !deliverySlot.date || !deliverySlot.slot?.startTime) {
-      return null;
-    }
-    
-    try {
-      const today = new Date();
-      let deliveryDate;
-      
-      if (deliverySlot.date instanceof Date) {
-        deliveryDate = new Date(deliverySlot.date);
-      } else if (typeof deliverySlot.date === 'string') {
-        const dateParts = deliverySlot.date.split('-');
-        if (dateParts.length === 3) {
-          const year = parseInt(dateParts[0], 10);
-          const month = parseInt(dateParts[1], 10) - 1;
-          const day = parseInt(dateParts[2], 10);
-          if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
-            deliveryDate = new Date(year, month, day);
-          } else {
-            deliveryDate = new Date(deliverySlot.date);
-          }
-        } else {
-          deliveryDate = new Date(deliverySlot.date);
-        }
-      } else {
-        return null;
-      }
-      
-      const selectedDateOnly = new Date(deliveryDate.getFullYear(), deliveryDate.getMonth(), deliveryDate.getDate());
-      const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      
-      // Only calculate countdown for today's slots
-      if (selectedDateOnly.getTime() !== todayOnly.getTime()) {
-        return null;
-      }
-      
-      const now = new Date();
-      const currentTime = now.getHours() * 60 + now.getMinutes();
-      const [startHour, startMin] = deliverySlot.slot.startTime.split(':').map(Number);
-      const slotStartTime = startHour * 60 + startMin;
-      const minutesUntilSlot = slotStartTime - currentTime;
-      
-      if (minutesUntilSlot <= 0) {
-        return null; // Slot has already started
-      }
-      
-      return {
-        hours: Math.floor(minutesUntilSlot / 60),
-        minutes: minutesUntilSlot % 60
-      };
-    } catch (e) {
-      console.error('Error calculating countdown:', e);
-      return null;
-    }
-  };
-
-  // Check if cart items already have delivery slots selected
-  const getCartDeliverySlot = () => {
+  const getCartDeliverySlot = useCallback(() => {
     if (cartItems.length > 0 && cartItems[0].deliverySlot) {
       const slot = cartItems[0].deliverySlot;
-      // Check if the slot is expired
       if (isDeliverySlotExpired(slot)) {
-        // Return null if expired, so user needs to select a new slot
         return null;
       }
       return slot;
     }
     return null;
-  };
+  }, [cartItems]);
 
   const cartDeliverySlot = getCartDeliverySlot();
 
@@ -1385,7 +1482,7 @@ function CheckoutPageContent({ isClient }) {
         clearTimeout(autoUpdateTimerRef.current);
       }
     };
-  }, [isInitialized, cartItems.length, autoUpdateExpiredSlots, selectedSlot, currentPinCode]);
+  }, [isInitialized, cartItems, getCartDeliverySlot, autoUpdateExpiredSlots, selectedSlot, currentPinCode]);
 
   const deliveryCharge = deliveryInfo?.deliveryCharge || 0;
   const subtotal = cartSummary.totalPrice;
@@ -1535,12 +1632,13 @@ function CheckoutPageContent({ isClient }) {
     }
   }, [appliedPromo]);
 
-  // Redirect if cart is empty
+  // Redirect if cart is empty (after cart has hydrated — avoids flash / wrong redirect during init)
   useEffect(() => {
-    if (cartItems.length === 0 && !loading) {
+    if (!isInitialized) return;
+    if (cartItems.length === 0 && !loading && !isRedirecting) {
       router.push('/cart');
     }
-  }, [cartItems, router, loading]);
+  }, [cartItems, router, loading, isRedirecting, isInitialized]);
 
   // Track when error is shown and check if form is complete
   useEffect(() => {
@@ -1717,10 +1815,13 @@ function CheckoutPageContent({ isClient }) {
     }
   };
 
-  // Let user share their precise location (using free browser geolocation API)
+  // Browser geolocation (P7 inline feedback, P8 retry / cache-friendly options, P9 events)
   const handleUseMyLocation = () => {
     if (typeof window === 'undefined' || !navigator.geolocation) {
-      setError('Location services are not available in this browser. Please enter your address manually.');
+      setDeliveryLocationFeedback({
+        variant: 'error',
+        text: 'Location is not available in this browser. Enter your address below or drop a pin on the map.',
+      });
       return;
     }
 
@@ -1728,75 +1829,334 @@ function CheckoutPageContent({ isClient }) {
     setLocationName(null);
     setLocationAccuracy(null);
     setLocationWarning(null);
-    setError(''); // Clear any previous errors
+    setDeliveryLocationFeedback(null);
+    setError('');
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude, accuracy } = position.coords || {};
+    const requestPosition = (options) =>
+      new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, options);
+      });
 
-        // Safeguard: only update if we received valid coordinates
-        if (typeof latitude === 'number' && typeof longitude === 'number') {
-          // Validate and check accuracy
-          let accuracyInMeters = typeof accuracy === 'number' ? accuracy : null;
-          
-          // Validate accuracy - reject obviously invalid values (>100km is clearly wrong)
-          // Typical accuracy ranges: GPS (5-10m), WiFi/cell (100-1000m), IP-based (1000-50000m)
-          if (accuracyInMeters && (accuracyInMeters > 100000 || accuracyInMeters < 0)) {
-            // Invalid accuracy value - ignore it
-            accuracyInMeters = null;
-            console.warn('Invalid accuracy value received:', accuracy);
+    const run = async () => {
+      const attempts = [
+        { enableHighAccuracy: true, timeout: 14000, maximumAge: 120000 },
+        { enableHighAccuracy: false, timeout: 12000, maximumAge: 300000 },
+      ];
+      let lastError;
+      for (let i = 0; i < attempts.length; i += 1) {
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          return await requestPosition(attempts[i]);
+        } catch (err) {
+          lastError = err;
+          if (err?.code === 1) {
+            throw err;
           }
-          
-          setLocationAccuracy(accuracyInMeters);
-          setLocationWarning(null); // No accuracy warning shown in UI; user enters full address below
+          if (i < attempts.length - 1) {
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise((r) => setTimeout(r, 450));
+          }
+        }
+      }
+      throw lastError;
+    };
 
-          // Reverse geocode to get city/locality name (with delay to respect rate limits)
-          const locationNameResult = await reverseGeocode(latitude, longitude);
-          setLocationName(locationNameResult);
-
-          setFormData((prev) => ({
-            ...prev,
-            address: {
-              ...prev.address,
-              location: {
-                lat: latitude,
-                lng: longitude,
-                accuracy: accuracyInMeters,
-                source: 'browser_geolocation',
-                name: locationNameResult || null // Store the name for persistence
-              }
-            }
-          }));
+    run()
+      .then(async (position) => {
+        const { latitude, longitude, accuracy } = position.coords || {};
+        if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+          setIsFetchingLocation(false);
+          setDeliveryLocationFeedback({
+            variant: 'error',
+            text: 'Got a response without usable coordinates. Try again or place a pin on the map.',
+          });
+          return;
         }
 
+        let accuracyInMeters = typeof accuracy === 'number' ? accuracy : null;
+        if (accuracyInMeters && (accuracyInMeters > 100000 || accuracyInMeters < 0)) {
+          accuracyInMeters = null;
+        }
+        setLocationAccuracy(accuracyInMeters);
+        setLocationWarning(null);
+
+        const locationNameResult = await reverseGeocode(latitude, longitude);
+        setLocationName(locationNameResult);
+
+        setFormData((prev) => ({
+          ...prev,
+          address: {
+            ...prev.address,
+            location: {
+              lat: latitude,
+              lng: longitude,
+              accuracy: accuracyInMeters,
+              source: 'browser_geolocation',
+              name: locationNameResult || null,
+            },
+          },
+        }));
+        setShowDeliveryMapTapHint(true);
+
+        trackCheckoutEvent('checkout_location_granted', {
+          accuracyM: accuracyInMeters ?? undefined,
+          hasPlaceName: Boolean(locationNameResult),
+        });
+
+        if (locationNameResult) {
+          setDeliveryLocationFeedback({
+            variant: 'success',
+            text: 'Location set ✓ Adjust pin if needed.',
+          });
+        } else {
+          setDeliveryLocationFeedback({
+            variant: 'neutral',
+            text: 'Coordinates saved. Tap the map to refine — place name unavailable.',
+          });
+        }
         setIsFetchingLocation(false);
-      },
-      (geoError) => {
+      })
+      .catch((geoError) => {
         console.error('Error fetching location:', geoError);
         setIsFetchingLocation(false);
         setLocationName(null);
         setLocationAccuracy(null);
         setLocationWarning(null);
-        
-        let errorMessage = 'Unable to detect your location. ';
-        if (geoError.code === geoError.PERMISSION_DENIED) {
-          errorMessage += 'Please allow location access in your browser settings.';
-        } else if (geoError.code === geoError.POSITION_UNAVAILABLE) {
-          errorMessage += 'Location information is unavailable. Please enter the address manually.';
-        } else if (geoError.code === geoError.TIMEOUT) {
-          errorMessage += 'Location request timed out. Please try again or enter the address manually.';
+
+        const code = geoError?.code;
+        if (code === 1) {
+          trackCheckoutEvent('checkout_location_denied', { reason: 'permission_denied' });
+          setDeliveryLocationFeedback({
+            variant: 'error',
+            text: 'Location access was blocked. Allow it in browser settings if you want, or drop a pin on the map—we only use this to help the driver find you.',
+          });
+        } else if (code === 2) {
+          trackCheckoutEvent('checkout_location_denied', { reason: 'position_unavailable' });
+          setDeliveryLocationFeedback({
+            variant: 'error',
+            text: 'Your device could not determine location. Try again, place a pin on the map, or continue with your typed address.',
+          });
+        } else if (code === 3) {
+          trackCheckoutEvent('checkout_location_denied', { reason: 'timeout' });
+          setDeliveryLocationFeedback({
+            variant: 'error',
+            text: 'Location timed out. Try again, or set the pin on the map instead.',
+          });
         } else {
-          errorMessage += 'Please check permission settings or enter the address manually.';
+          trackCheckoutEvent('checkout_location_error', { reason: 'unknown' });
+          setDeliveryLocationFeedback({
+            variant: 'error',
+            text: 'Could not read your location. Use the map pin or enter your address manually.',
+          });
         }
-        setError(errorMessage);
-      },
-      {
-        enableHighAccuracy: true, // Request GPS if available
-        timeout: 20000, // Increased timeout to allow GPS to get fix
-        maximumAge: 0 // Force fresh location - don't use cached data
-      }
-    );
+      });
   };
+
+  /** Optional pin: user tapped the map to fine-tune coordinates (full address still required). */
+  const handleDeliveryMapPinMove = useCallback(
+    (lat, lng) => {
+      if (isFetchingLocation) return;
+      setDeliveryLocationFeedback(null);
+      setFormData((prev) => ({
+        ...prev,
+        address: {
+          ...prev.address,
+          location: {
+            lat,
+            lng,
+            accuracy: null,
+            source: 'map_pick',
+            name: null,
+          },
+        },
+      }));
+      setLocationName(null);
+    },
+    [isFetchingLocation]
+  );
+
+  const handleClearDeliveryLocation = useCallback(() => {
+    setDeliveryLocationFeedback(null);
+    setShowDeliveryMapTapHint(false);
+    setFormData((prev) => ({
+      ...prev,
+      address: {
+        ...prev.address,
+        location: null,
+      },
+    }));
+    setLocationName(null);
+    setLocationAccuracy(null);
+    setLocationWarning(null);
+  }, []);
+
+  const profileAddressAvailable = useMemo(() => {
+    if (!isAuthenticated || !customer?.address) return false;
+    const a = customer.address;
+    return Boolean(
+      (typeof a.street === 'string' && a.street.trim()) ||
+        (typeof a.city === 'string' && a.city.trim()) ||
+        (typeof a.state === 'string' && a.state.trim())
+    );
+  }, [isAuthenticated, customer]);
+
+  const applyLastUsedAddress = useCallback(() => {
+    const saved = readLastUsedAddressFromStorage();
+    if (!lastUsedAddressHasContent(saved)) {
+      showError('No saved address', 'We could not find a previous delivery address on this device.');
+      return;
+    }
+    const normalizedLoc = normalizeSavedMapLocation(saved.location);
+    setFormData((prev) => ({
+      ...prev,
+      address: {
+        ...prev.address,
+        street: saved.street || '',
+        landmark: saved.landmark || '',
+        city: saved.city || '',
+        state: saved.state || '',
+        zip_code: saved.zip_code || prev.address.zip_code || currentPinCode || '',
+        country: saved.country || prev.address.country || 'India',
+        location: normalizedLoc || null,
+      },
+    }));
+    if (normalizedLoc?.name) {
+      setLocationName(normalizedLoc.name);
+    } else {
+      setLocationName(null);
+    }
+    if (normalizedLoc && typeof normalizedLoc.accuracy === 'number' && Number.isFinite(normalizedLoc.accuracy)) {
+      setLocationAccuracy(normalizedLoc.accuracy);
+    } else {
+      setLocationAccuracy(null);
+    }
+    setDeliveryLocationFeedback(null);
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next['address.street'];
+      delete next['address.city'];
+      delete next['address.state'];
+      delete next['address.zip_code'];
+      return next;
+    });
+    trackCheckoutEvent('checkout_quick_fill_last_device_address', {
+      hasPin: Boolean(normalizedLoc),
+    });
+    showSuccess('Address applied', 'Last delivery address from this device has been filled in.');
+  }, [currentPinCode, showError, showSuccess]);
+
+  const applyProfileAddress = useCallback(() => {
+    if (!isAuthenticated || !customer?.address) return;
+    const a = customer.address;
+    if (
+      !(typeof a.street === 'string' && a.street.trim()) &&
+      !(typeof a.city === 'string' && a.city.trim()) &&
+      !(typeof a.state === 'string' && a.state.trim())
+    ) {
+      return;
+    }
+    const locForForm = normalizeSavedMapLocation(a.location);
+    setFormData((prev) => ({
+      ...prev,
+      address: {
+        ...prev.address,
+        street: a.street || '',
+        landmark: a.landmark || '',
+        city: a.city || '',
+        state: a.state || '',
+        zip_code: a.zip_code || prev.address.zip_code || currentPinCode || '',
+        country: a.country || prev.address.country || 'India',
+        location: locForForm,
+      },
+    }));
+    if (locForForm?.name) {
+      setLocationName(locForForm.name);
+    } else if (a.location && typeof a.location.name === 'string' && a.location.name.trim()) {
+      setLocationName(a.location.name.trim());
+    } else {
+      setLocationName(null);
+    }
+    if (locForForm && typeof locForForm.accuracy === 'number' && Number.isFinite(locForForm.accuracy)) {
+      setLocationAccuracy(locForForm.accuracy);
+    } else {
+      setLocationAccuracy(null);
+    }
+    setDeliveryLocationFeedback(null);
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next['address.street'];
+      delete next['address.city'];
+      delete next['address.state'];
+      delete next['address.zip_code'];
+      return next;
+    });
+    trackCheckoutEvent('checkout_quick_fill_profile_address', { hasPin: Boolean(locForForm) });
+    showSuccess('Address applied', 'Your account delivery address has been filled in.');
+  }, [isAuthenticated, customer, currentPinCode, showSuccess]);
+
+  // Approximate map center from delivery PIN (Nominatim; debounced for usage policy).
+  useEffect(() => {
+    if (!currentPinCode || !isValidPinCode) {
+      setServiceAreaMapCenter(null);
+      setServiceAreaGeocodeStatus('idle');
+      return;
+    }
+
+    let cancelled = false;
+    setServiceAreaGeocodeStatus('loading');
+    setServiceAreaMapCenter(null);
+
+    const timer = setTimeout(async () => {
+      const headers = {
+        'User-Agent': 'CreamingoCheckout/1.0 (https://creamingo.com; delivery pin map)',
+      };
+      const tryFetch = async (url) => {
+        const res = await fetch(url, { headers });
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (!Array.isArray(data) || !data[0] || data[0].lat == null || data[0].lon == null) return null;
+        const lat = parseFloat(data[0].lat);
+        const lng = parseFloat(data[0].lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        return { lat, lng };
+      };
+
+      try {
+        const pin = String(currentPinCode).trim();
+        const postalUrl = `https://nominatim.openstreetmap.org/search?format=json&countrycodes=in&postalcode=${encodeURIComponent(pin)}&limit=1`;
+        const fallbackUrl = `https://nominatim.openstreetmap.org/search?format=json&countrycodes=in&q=${encodeURIComponent(`${pin} India`)}&limit=1`;
+        let pair = await tryFetch(postalUrl);
+        if (!pair && !cancelled) {
+          await new Promise((r) => setTimeout(r, 1100));
+          if (cancelled) return;
+          pair = await tryFetch(fallbackUrl);
+        }
+        if (cancelled) return;
+        if (pair) {
+          setServiceAreaMapCenter(pair);
+          setServiceAreaGeocodeStatus('ok');
+        } else {
+          setServiceAreaMapCenter(null);
+          setServiceAreaGeocodeStatus('error');
+        }
+      } catch {
+        if (!cancelled) {
+          setServiceAreaMapCenter(null);
+          setServiceAreaGeocodeStatus('error');
+        }
+      }
+    }, 900);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [currentPinCode, isValidPinCode]);
+
+  const hasDeliveryLocationPin =
+    Boolean(formData.address?.location) &&
+    typeof formData.address?.location?.lat === 'number' &&
+    typeof formData.address?.location?.lng === 'number';
 
   const handleSlotSelect = (slot) => {
     // Clear any existing error messages when selecting a new slot
@@ -2394,27 +2754,65 @@ function CheckoutPageContent({ isClient }) {
     }
   };
 
-  // Don't show empty cart message if we're redirecting after successful order
-  if (cartItems.length === 0 && !isRedirecting) {
+  // Cart still loading from storage / context — avoid empty-checkout UI or redirect race (P0)
+  if (!isInitialized) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen overflow-x-hidden bg-gray-50 dark:bg-gray-900">
         <Header />
-        <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 200px)' }}>
-          <div className="text-center">
-            <ShoppingBag className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Your cart is empty</h2>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">Add items to your cart before checkout</p>
-            <button
-              onClick={() => router.push('/')}
-              className="px-6 py-2 bg-pink-600 dark:bg-pink-700 text-white rounded-lg hover:bg-pink-700 dark:hover:bg-pink-600 transition-colors"
-            >
-              Continue Shopping
-            </button>
+        <div className="mx-auto max-w-7xl overflow-x-hidden px-3 py-6 sm:px-4 lg:px-8">
+          <div className="mb-6 h-8 w-48 animate-pulse rounded-lg bg-gray-200 dark:bg-gray-800" />
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_400px]">
+            <div className="min-w-0 space-y-4">
+              <div className="h-40 animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800" />
+              <div className="h-32 animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800" />
+            </div>
+            <div className="hidden h-64 animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800 lg:block" />
           </div>
         </div>
-        {/* Footer: Hidden visually for better UX, but kept in DOM for SEO */}
-        <div className="hidden">
-        <Footer />
+        <div className="hidden" aria-hidden>
+          <Footer />
+        </div>
+      </div>
+    );
+  }
+
+  // Confirmed empty cart (not mid–order success redirect)
+  if (cartItems.length === 0 && !isRedirecting) {
+    return (
+      <div className="min-h-screen overflow-x-hidden bg-gray-50 dark:bg-gray-900">
+        <Header />
+        <div
+          className="flex items-center justify-center px-4"
+          style={{ minHeight: 'calc(100vh - 200px)' }}
+          role="status"
+          aria-live="polite"
+        >
+          <div className="max-w-md text-center">
+            <ShoppingBag className="mx-auto mb-4 h-16 w-16 text-gray-300 dark:text-gray-600" aria-hidden />
+            <h2 className="mb-2 text-xl font-bold text-gray-900 dark:text-gray-100">Your cart is empty</h2>
+            <p className="mb-6 text-cart-body text-gray-600 dark:text-gray-400">
+              Add something to your cart to continue checkout, or return to your cart.
+            </p>
+            <div className="flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:justify-center">
+              <button
+                type="button"
+                onClick={() => router.push('/cart')}
+                className="ui-focus-visible min-h-[44px] rounded-lg bg-pink-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-pink-700 dark:bg-pink-700 dark:hover:bg-pink-600"
+              >
+                Go to cart
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push('/')}
+                className="ui-focus-visible min-h-[44px] rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
+              >
+                Continue shopping
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="hidden" aria-hidden>
+          <Footer />
         </div>
       </div>
     );
@@ -2423,17 +2821,22 @@ function CheckoutPageContent({ isClient }) {
   // Show loading/redirecting state while redirecting
   if (isRedirecting) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen overflow-x-hidden bg-gray-50 dark:bg-gray-900">
         <Header />
-        <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 200px)' }}>
+        <div
+          className="flex items-center justify-center px-4"
+          style={{ minHeight: 'calc(100vh - 200px)' }}
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
           <div className="text-center">
-            <Loader2 className="w-12 h-12 mx-auto mb-4 text-pink-600 dark:text-pink-400 animate-spin" />
-            <p className="text-gray-600 dark:text-gray-400">Redirecting to order confirmation...</p>
+            <Loader2 className="mx-auto mb-4 h-12 w-12 animate-spin text-pink-600 dark:text-pink-400" aria-hidden />
+            <p className="text-cart-body text-gray-600 dark:text-gray-400">Redirecting to order confirmation…</p>
           </div>
         </div>
-        {/* Footer: Hidden visually for better UX, but kept in DOM for SEO */}
-        <div className="hidden">
-        <Footer />
+        <div className="hidden" aria-hidden>
+          <Footer />
         </div>
       </div>
     );
@@ -2443,13 +2846,14 @@ function CheckoutPageContent({ isClient }) {
   // This prevents showing the cart page briefly
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen overflow-x-hidden bg-gray-50 dark:bg-gray-900">
       <Header />
       
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 lg:py-8 pb-24 lg:pb-8">
+      <div className="mx-auto max-w-7xl overflow-x-hidden px-3 py-4 pb-24 sm:px-4 sm:py-6 lg:px-8 lg:pb-8">
         {/* Page Header */}
         <div className="mb-4 sm:mb-6">
           <button
+            type="button"
             onClick={() => router.push('/cart')}
             className="ui-focus-visible mb-3 flex min-h-[44px] items-center gap-2 rounded-lg text-gray-600 transition-colors hover:text-pink-700 dark:text-gray-400 dark:hover:text-pink-400 sm:mb-4"
           >
@@ -2466,8 +2870,11 @@ function CheckoutPageContent({ isClient }) {
         </div>
 
         {error && (
-          <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2 sm:gap-3">
-            <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+          <div
+            className="mb-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20 sm:mb-6 sm:gap-3 sm:p-4"
+            role="alert"
+          >
+            <AlertCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400 sm:h-5 sm:w-5" aria-hidden />
             <p className="text-cart-body text-red-800 dark:text-red-200">{error}</p>
           </div>
         )}
@@ -2563,9 +2970,9 @@ function CheckoutPageContent({ isClient }) {
           return null;
         })()}
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-4 sm:gap-6 lg:gap-8">
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-[1fr_400px] lg:gap-8">
           {/* LEFT SECTION: Form */}
-          <div className="space-y-4 sm:space-y-6">
+          <div className={`space-y-4 sm:space-y-6 ${CHECKOUT_MAIN_COLUMN}`}>
             {!isAuthenticated && (
               <div className="space-y-2 sm:space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
@@ -3100,68 +3507,206 @@ function CheckoutPageContent({ isClient }) {
               {/* Content - Collapsible on Mobile */}
               <div className={`px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6 transition-all duration-300 lg:block ${expandedSections.deliveryAddress ? 'block' : 'hidden'}`}>
               <div className="space-y-3 sm:space-y-4">
+              {(lastUsedAddressHasContent(deviceSavedAddressSnapshot) || profileAddressAvailable) && (
+                <div className="rounded-lg border border-gray-200 bg-white px-3 py-3 dark:border-gray-600 dark:bg-gray-800/80">
+                  <p className="text-cart-label font-semibold text-gray-900 dark:text-gray-100">
+                    Quick fill
+                  </p>
+                  <p className="mt-1 text-form-helper text-gray-600 dark:text-gray-400">
+                    Use a saved address on this device or from your account. You can still edit everything below.
+                  </p>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    {lastUsedAddressHasContent(deviceSavedAddressSnapshot) ? (
+                      <button
+                        type="button"
+                        onClick={applyLastUsedAddress}
+                        className={`${CHECKOUT_SECONDARY_BTN} sm:min-w-0 sm:flex-1 sm:px-3`}
+                      >
+                        Use last delivery address
+                      </button>
+                    ) : null}
+                    {profileAddressAvailable ? (
+                      <button
+                        type="button"
+                        onClick={applyProfileAddress}
+                        className={`${CHECKOUT_SECONDARY_BTN} sm:min-w-0 sm:flex-1 sm:px-3`}
+                      >
+                        Use profile address
+                      </button>
+                    ) : null}
+                  </div>
+                  {lastUsedAddressHasContent(deviceSavedAddressSnapshot) &&
+                  deviceSavedAddressSnapshot?.zip_code &&
+                  currentPinCode &&
+                  String(deviceSavedAddressSnapshot.zip_code).trim() !== String(currentPinCode).trim() ? (
+                    <p className="mt-2 text-form-helper text-amber-800 dark:text-amber-200/90" role="status">
+                      Your cart uses PIN {currentPinCode}. The saved address uses PIN{' '}
+                      {String(deviceSavedAddressSnapshot.zip_code).trim()} — confirm it matches your delivery area
+                      before ordering.
+                    </p>
+                  ) : null}
+                </div>
+              )}
               <div>
-                  {/* Delivery location: label + Use current location button */}
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 mb-3">
-                    <span className="flex items-center gap-1.5 text-cart-label">
-                      <MapPin className="h-3.5 w-3.5 shrink-0 text-gray-500 dark:text-gray-400" aria-hidden />
-                      Delivery location (optional)
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleUseMyLocation}
-                      disabled={isFetchingLocation}
-                      className={`group relative inline-flex items-center justify-center gap-2 text-xs sm:text-sm text-blue-700 dark:text-blue-300 font-semibold px-4 py-2 rounded-lg border-2 border-blue-400 dark:border-blue-600 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-800/30 hover:from-blue-100 hover:to-blue-200 dark:hover:from-blue-900/50 dark:hover:to-blue-800/40 hover:border-blue-500 dark:hover:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-md hover:shadow-lg hover:shadow-blue-200/50 dark:hover:shadow-blue-900/30 active:scale-95 w-full sm:w-auto ${
-                        isFetchingLocation ? 'grayscale-[0.3] backdrop-blur-[2px] pointer-events-none' : ''
-                      }`}
-                    >
-                      {isFetchingLocation && (
-                        <div className="absolute inset-0 bg-white/30 dark:bg-gray-900/30 rounded-lg backdrop-blur-[1px] z-10" />
-                      )}
-                      {!isFetchingLocation && (
-                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-blue-500 rounded-full animate-pulse opacity-80" />
-                      )}
-                      <div className={`relative ${isFetchingLocation ? 'animate-spin' : ''}`}>
-                        <Navigation className="w-4 h-4 text-blue-600 dark:text-blue-400" strokeWidth={2.5} />
-                      </div>
-                      <MapPin className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" strokeWidth={2} />
-                      <span className="relative z-10">
-                        {isFetchingLocation ? (
-                          <span className="flex items-center gap-1.5">
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            Detecting location…
+                  {/* Delivery location: copy + GPS grouped on lg so the CTA reads as one block with the map below */}
+                  <div className="mb-2 space-y-3 rounded-xl border border-gray-200 bg-gradient-to-br from-white via-white to-pink-50/40 p-3 shadow-sm dark:border-gray-600 dark:from-gray-800 dark:via-gray-800 dark:to-pink-950/25 sm:p-4 lg:space-y-0 lg:border-l-4 lg:border-l-pink-500 lg:p-5">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-8">
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <p className="flex items-start gap-2 text-cart-body font-medium text-gray-900 dark:text-gray-100">
+                          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-pink-600 dark:text-pink-400" aria-hidden />
+                          <span>Set your delivery location on the map</span>
+                        </p>
+                        <p
+                          id="checkout-delivery-map-hint"
+                          className="flex items-start gap-2 text-form-helper text-gray-600 dark:text-gray-400"
+                        >
+                          <Move className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-500 dark:text-gray-500" aria-hidden />
+                          <span>
+                            Move the pin to adjust{' '}
+                            <span className="text-gray-500 dark:text-gray-500">(If required)</span>
                           </span>
-                        ) : (
-                          'Use my current location'
-                        )}
-                      </span>
-                    </button>
+                        </p>
+                      </div>
+                      <div className="shrink-0 lg:flex lg:justify-end">
+                        <button
+                          type="button"
+                          onClick={handleUseMyLocation}
+                          disabled={isFetchingLocation}
+                          className={`${CHECKOUT_PRIMARY_BTN} w-full min-w-0 lg:w-auto lg:min-w-[220px] lg:px-6 lg:py-3 lg:shadow-md lg:transition-[box-shadow,transform] lg:hover:shadow-lg lg:active:scale-[0.98] ${
+                            isFetchingLocation ? 'pointer-events-none opacity-80' : ''
+                          }`}
+                        >
+                          {isFetchingLocation ? (
+                            <span className="inline-flex items-center justify-center gap-2">
+                              <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                              Locating…
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center justify-center gap-2">
+                              <Navigation className="h-4 w-4 shrink-0 lg:h-[1.125rem] lg:w-[1.125rem]" strokeWidth={2} aria-hidden />
+                              Use my location
+                            </span>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                    {deliveryLocationFeedback && (
+                      <div
+                        role={deliveryLocationFeedback.variant === 'error' ? 'alert' : 'status'}
+                        aria-live="polite"
+                        className={`rounded-lg border px-3 py-2 text-sm ${
+                          deliveryLocationFeedback.variant === 'success'
+                            ? 'border-green-200 bg-green-50 text-green-900 dark:border-green-800 dark:bg-green-900/25 dark:text-green-100'
+                            : deliveryLocationFeedback.variant === 'error'
+                              ? 'border-red-200 bg-red-50 text-red-900 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-100'
+                              : 'border-gray-200 bg-gray-50 text-gray-800 dark:border-gray-600 dark:bg-gray-800/80 dark:text-gray-100'
+                        }`}
+                      >
+                        {deliveryLocationFeedback.text}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Detected location block – only when location is set */}
-                  {formData.address?.location && typeof formData.address.location.lat === 'number' && typeof formData.address.location.lng === 'number' && (
-                    <div className="mb-4 space-y-1.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-600 dark:bg-gray-700/50">
-                      <p className="text-form-legal font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                        Current location detected
-                      </p>
-                      <p className="text-cart-body-strong text-gray-900 dark:text-gray-100">
-                        {locationName || 'Location set'}
-                      </p>
-                      <p className="text-form-helper">
-                        Location already detected. Verify if it’s correct and also enter your full address below.
-                      </p>
-                      <a
-                        href={`https://www.google.com/maps?q=${formData.address.location.lat},${formData.address.location.lng}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-form-helper inline-flex items-center gap-1.5 font-medium text-green-700 hover:underline dark:text-green-400 dark:hover:text-green-300"
-                      >
-                        <MapPin className="w-3.5 h-3.5" />
-                        View on map to verify
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
+                  {/* Service-area + pinned maps — extra bottom space so sticky bar does not crowd the map */}
+                  <div className="space-y-4 pb-[max(2.5rem,env(safe-area-inset-bottom,0px))] sm:pb-[max(3rem,env(safe-area-inset-bottom,0px))]">
+                  {/* Service-area map before a pin exists (PIN forward geocode) */}
+                  {!hasDeliveryLocationPin && isValidPinCode && currentPinCode && (
+                    <div
+                      className="space-y-2"
+                      role="region"
+                      aria-label={`Delivery location map for PIN ${currentPinCode}`}
+                      aria-describedby="checkout-delivery-map-hint"
+                    >
+                      {serviceAreaGeocodeStatus === 'loading' && (
+                        <div
+                          className="flex h-[min(260px,45vh)] w-full items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/60"
+                          role="status"
+                          aria-live="polite"
+                        >
+                          <Loader2 className="h-8 w-8 shrink-0 animate-spin text-pink-600 dark:text-pink-400" aria-hidden />
+                          <span className="sr-only">Loading map for your PIN</span>
+                        </div>
+                      )}
+                      {serviceAreaGeocodeStatus === 'error' && (
+                        <p className="text-form-helper">
+                          We could not place the map for PIN {currentPinCode}. You can still use your current location
+                          or enter your address below.
+                        </p>
+                      )}
+                      {serviceAreaGeocodeStatus === 'ok' && serviceAreaMapCenter && (
+                        <CheckoutDeliveryMap
+                          key={`pin-preview-${currentPinCode}-${serviceAreaMapCenter.lat}-${serviceAreaMapCenter.lng}`}
+                          centerLat={serviceAreaMapCenter.lat}
+                          centerLng={serviceAreaMapCenter.lng}
+                          zoom={11}
+                          onPinMove={handleDeliveryMapPinMove}
+                          readOnly={isFetchingLocation}
+                          showTapHint={showDeliveryMapTapHint}
+                        />
+                      )}
                     </div>
                   )}
+
+                  {/* Map + summary when a delivery pin exists */}
+                  {hasDeliveryLocationPin && (
+                    <div
+                      className="space-y-2"
+                      role="region"
+                      aria-labelledby="checkout-delivery-map-title"
+                      aria-describedby="checkout-delivery-map-hint"
+                    >
+                      <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-600 dark:bg-gray-700/50">
+                        <p
+                          id="checkout-delivery-map-title"
+                          className="text-form-legal font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+                        >
+                          Map preview
+                        </p>
+                        <div className="space-y-1">
+                          <p className="text-sm text-gray-700 dark:text-gray-300">
+                            <span aria-hidden>📍</span>{' '}
+                            <span className="font-medium">Delivering to:</span>
+                          </p>
+                          <p className="text-cart-body-strong text-gray-900 dark:text-gray-100">
+                            {locationName ||
+                              `${formData.address.location.lat.toFixed(5)}, ${formData.address.location.lng.toFixed(5)}`}
+                          </p>
+                          <p className="text-form-helper text-amber-900 dark:text-amber-100/90">
+                            Approximate location — adjust pin for accuracy
+                          </p>
+                        </div>
+                      </div>
+                      <CheckoutDeliveryMap
+                        key={`pin-set-${formData.address.location.lat}-${formData.address.location.lng}`}
+                        centerLat={formData.address.location.lat}
+                        centerLng={formData.address.location.lng}
+                        zoom={17}
+                        markerLat={formData.address.location.lat}
+                        markerLng={formData.address.location.lng}
+                        accuracyM={
+                          typeof formData.address.location.accuracy === 'number'
+                            ? formData.address.location.accuracy
+                            : locationAccuracy
+                        }
+                        onPinMove={handleDeliveryMapPinMove}
+                        readOnly={isFetchingLocation}
+                        showTapHint={showDeliveryMapTapHint}
+                      />
+                      <div className="flex justify-center sm:justify-start">
+                        <button
+                          type="button"
+                          onClick={handleClearDeliveryLocation}
+                          disabled={isFetchingLocation}
+                          className="ui-focus-visible text-sm font-medium text-gray-600 underline-offset-2 hover:text-gray-900 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:text-gray-100"
+                        >
+                          Clear location
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  </div>
 
                   <div className="space-y-1">
                   <label className={CHECKOUT_FIELD_LABEL}>
@@ -3201,7 +3746,6 @@ function CheckoutPageContent({ isClient }) {
                       <span className="min-w-0">{fieldErrors['address.street']}</span>
                     </p>
                   )}
-                </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                   <div className="space-y-1">
@@ -3401,7 +3945,7 @@ function CheckoutPageContent({ isClient }) {
           </div>
 
           {/* RIGHT SECTION: Order Summary - Visible on All Devices */}
-          <div className="lg:sticky lg:top-24 h-fit mb-8 lg:mb-0">
+          <div className={`mb-8 h-fit lg:sticky lg:top-24 lg:mb-0 ${CHECKOUT_MAIN_COLUMN}`}>
             <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:shadow-black/20 sm:p-4 lg:p-5">
               <div className="flex items-center justify-between gap-2 border-b border-gray-200 pb-3 dark:border-gray-700">
                 <div className="flex min-w-0 items-center gap-2">
@@ -3514,6 +4058,7 @@ function CheckoutPageContent({ isClient }) {
                         productDetails.push(/tier/i.test(tierLabel) ? tierLabel : `${tierLabel} Tier`);
                       }
                       const multiRegularRows = cartItems.filter((i) => !i.is_deal_item).length > 1;
+                      const lineThumbSrc = resolveImageUrl(item.product?.image_url);
 
                       return (
                         <div
@@ -3527,12 +4072,16 @@ function CheckoutPageContent({ isClient }) {
                           }`}
                         >
                           {/* Product Image */}
-                          <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-700 sm:h-20 sm:w-20">
-                            <img
-                              src={item.product.image_url}
-                              alt={item.product.name}
-                              className="h-full w-full object-cover"
-                            />
+                          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-700 sm:h-20 sm:w-20">
+                            {lineThumbSrc ? (
+                              <Image
+                                src={lineThumbSrc}
+                                alt={item.product?.name || 'Product'}
+                                fill
+                                className="object-cover"
+                                sizes="80px"
+                              />
+                            ) : null}
                           </div>
                           
                           {/* Product Details */}
@@ -3776,9 +4325,9 @@ function CheckoutPageContent({ isClient }) {
         </div>
       </div>
 
-      {/* Mobile Sticky Checkout Bar — amount + expand summary, then place order */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-gray-200 bg-white/95 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-2xl backdrop-blur-sm dark:border-gray-600 dark:bg-gray-900/95 dark:shadow-black/50">
-        <div className="mx-auto max-w-7xl px-3 pt-2.5">
+      {/* Mobile Sticky Checkout Bar — same vertical rhythm as cart (48px row, py-1.5 shell) */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-gray-200 bg-white pb-[max(0.25rem,env(safe-area-inset-bottom))] shadow-lg dark:border-gray-700 dark:bg-gray-800 dark:shadow-black/40">
+        <div className="mx-auto max-w-7xl px-2 py-1.5">
           {error && (
             <div
               data-error-alert
@@ -3809,24 +4358,24 @@ function CheckoutPageContent({ isClient }) {
             </div>
           )}
 
-          <div className="mb-1 flex items-stretch gap-2">
+          <div className="mb-1 flex items-center gap-2">
             <button
               type="button"
               onClick={() => setShowOrderSummarySheet(true)}
-              className="ui-focus-visible flex min-h-[52px] min-w-0 max-w-[45%] flex-[1_1_40%] items-center justify-between gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-left dark:border-gray-600 dark:bg-gray-800/90"
+              className="ui-focus-visible flex h-[48px] min-h-[48px] w-[28vw] min-w-[86px] max-w-[40%] shrink-0 items-center justify-between gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-left dark:border-gray-600 dark:bg-gray-800/80"
               aria-label="View order summary and price breakdown"
               aria-expanded={showOrderSummarySheet}
             >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-lg font-extrabold tabular-nums leading-tight text-pink-600 dark:text-pink-400">
+              <div className="flex min-w-0 flex-1 flex-col justify-center text-center leading-tight">
+                <p className="truncate text-[13px] font-semibold tabular-nums text-pink-600 dark:text-pink-400">
                   {formatPrice(total)}
                 </p>
-                <p className="text-form-helper truncate text-gray-600 dark:text-gray-300">
+                <span className="truncate text-cart-meta font-medium text-gray-600 dark:text-gray-300">
                   {cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'}
-                  {appliedPromo && promoDiscount > 0 ? ` · promo −${formatPrice(promoDiscount)}` : ''}
-                </p>
+                  {appliedPromo && promoDiscount > 0 ? ` · −${formatPrice(promoDiscount)}` : ''}
+                </span>
               </div>
-              <ChevronUp className="h-5 w-5 shrink-0 text-gray-500 dark:text-gray-400" aria-hidden />
+              <ChevronUp className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400" aria-hidden />
             </button>
 
             <button
@@ -3837,36 +4386,38 @@ function CheckoutPageContent({ isClient }) {
                 handlePlaceOrder();
               }}
               disabled={loading || !isAuthenticated}
-              className={`ui-focus-visible flex min-h-[52px] min-w-0 flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-600 to-rose-600 px-3 text-base font-bold text-white shadow-lg transition-all dark:from-pink-700 dark:to-rose-700 dark:shadow-black/30 dark:hover:from-pink-600 dark:hover:to-rose-600 ${
+              className={`ui-focus-visible flex h-[48px] min-h-[48px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-pink-600 to-rose-600 py-1.5 text-[13px] font-bold text-white shadow-lg transition-all hover:from-pink-700 hover:to-rose-700 active:scale-[0.98] dark:from-pink-700 dark:to-rose-700 dark:shadow-xl dark:shadow-black/30 dark:hover:from-pink-600 dark:hover:to-rose-600 ${
                 loading || !isAuthenticated
                   ? 'cursor-not-allowed opacity-50'
                   : !selectedSlot && !cartDeliverySlot
                     ? 'cursor-pointer opacity-90'
-                    : 'hover:from-pink-700 hover:to-rose-700'
+                    : ''
               }`}
             >
               {loading ? (
                 <>
-                  <Loader2 className="h-5 w-5 animate-spin shrink-0" aria-hidden />
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
                   <span>Placing…</span>
                 </>
               ) : showSuccessIndicator ? (
                 <>
-                  <CheckCircle className="h-5 w-5 shrink-0" aria-hidden />
+                  <CheckCircle className="h-4 w-4 shrink-0" aria-hidden />
                   <span className="truncate">Ready</span>
                 </>
               ) : (
                 <>
-                  <Lock className="h-5 w-5 shrink-0" aria-hidden />
+                  <Lock className="h-4 w-4 shrink-0" aria-hidden />
                   <span className="truncate">Place order</span>
                 </>
               )}
             </button>
           </div>
 
-          <div className="flex items-center justify-center gap-1 pb-1 text-form-helper text-gray-500 dark:text-gray-400">
-            <Lock className="h-3 w-3 shrink-0 text-green-600 dark:text-green-400" aria-hidden />
-            <span>Secure checkout</span>
+          <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 px-0.5 pb-0.5 text-center leading-snug">
+            <p className="flex items-center justify-center gap-1 text-cart-meta text-gray-400 dark:text-gray-500">
+              <Lock className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
+              <span>Secure checkout</span>
+            </p>
           </div>
         </div>
       </div>
@@ -4008,6 +4559,7 @@ function CheckoutPageContent({ isClient }) {
                         productDetails.push(/tier/i.test(tierLabel) ? tierLabel : `${tierLabel} Tier`);
                       }
                       const multiRegularRows = cartItems.filter((i) => !i.is_deal_item).length > 1;
+                      const lineThumbSrc = resolveImageUrl(item.product?.image_url);
 
                       return (
                         <div
@@ -4020,12 +4572,16 @@ function CheckoutPageContent({ isClient }) {
                               : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
                           }`}
                         >
-                          <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-700 sm:h-20 sm:w-20">
-                            <img
-                              src={item.product.image_url}
-                              alt={item.product.name}
-                              className="h-full w-full object-cover"
-                            />
+                          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-700 sm:h-20 sm:w-20">
+                            {lineThumbSrc ? (
+                              <Image
+                                src={lineThumbSrc}
+                                alt={item.product?.name || 'Product'}
+                                fill
+                                className="object-cover"
+                                sizes="80px"
+                              />
+                            ) : null}
                           </div>
                           <div className="min-w-0 flex-1">
                             <h4 className="text-cart-card-title mb-1.5 line-clamp-2">
