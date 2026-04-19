@@ -59,7 +59,7 @@ import orderApi from '../../api/orderApi';
 import settingsApi from '../../api/settingsApi';
 import customerAuthApi from '../../api/customerAuthApi';
 import { formatPrice } from '../../utils/priceFormatter';
-import { resolveImageUrl } from '../../utils/imageUrl';
+import { resolveEntityImageUrl } from '../../utils/imageUrl';
 import { trackCheckoutEvent } from '../../utils/checkoutAnalytics';
 
 // Helper functions for formatting dates and times (same as cart page)
@@ -4058,7 +4058,7 @@ function CheckoutPageContent({ isClient }) {
                         productDetails.push(/tier/i.test(tierLabel) ? tierLabel : `${tierLabel} Tier`);
                       }
                       const multiRegularRows = cartItems.filter((i) => !i.is_deal_item).length > 1;
-                      const lineThumbSrc = resolveImageUrl(item.product?.image_url);
+                      const lineThumbSrc = resolveEntityImageUrl(item.product);
 
                       return (
                         <div
@@ -4559,7 +4559,7 @@ function CheckoutPageContent({ isClient }) {
                         productDetails.push(/tier/i.test(tierLabel) ? tierLabel : `${tierLabel} Tier`);
                       }
                       const multiRegularRows = cartItems.filter((i) => !i.is_deal_item).length > 1;
-                      const lineThumbSrc = resolveImageUrl(item.product?.image_url);
+                      const lineThumbSrc = resolveEntityImageUrl(item.product);
 
                       return (
                         <div

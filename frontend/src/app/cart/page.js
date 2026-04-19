@@ -39,7 +39,7 @@ import productApi from '../../api/productApi';
 import addOnApi from '../../api/addOnApi';
 import settingsApi from '../../api/settingsApi';
 import { formatPrice } from '../../utils/priceFormatter';
-import { resolveImageUrl } from '../../utils/imageUrl';
+import { resolveEntityImageUrl } from '../../utils/imageUrl';
 import { getRecommendationConfig } from '../../utils/cartRecommendationRules';
 
 // Helper functions for formatting dates and times
@@ -1570,7 +1570,7 @@ export default function CartPage() {
                     const totalItemPrice = item.totalPrice || (itemTotal + comboTotal);
                     const isMoving = movingItemId === item.id;
                     const isRemovingSaved = removingSavedItemId === item.id;
-                    const savedLineThumbSrc = resolveImageUrl(item.product?.image_url);
+                    const savedLineThumbSrc = resolveEntityImageUrl(item.product);
 
                     return (
                       <div
@@ -2086,7 +2086,7 @@ export default function CartPage() {
                         ? swipeState[item.id].currentX - swipeState[item.id].startX
                         : 0;
                       const dealSwipeOffset = Math.max(-150, Math.min(0, rawDealSwipeOffset)); // Clamp between -150px and 0
-                      const dealThumbSrc = resolveImageUrl(item.product?.image_url);
+                      const dealThumbSrc = resolveEntityImageUrl(item.product);
 
                       return (
                         <div
@@ -2249,7 +2249,7 @@ export default function CartPage() {
                       ? swipeState[item.id].currentX - swipeState[item.id].startX
                       : 0;
                     const swipeOffset = Math.max(-150, Math.min(0, rawSwipeOffset)); // Clamp between -150px and 0
-                    const regularThumbSrc = resolveImageUrl(item.product?.image_url);
+                    const regularThumbSrc = resolveEntityImageUrl(item.product);
 
                     return (
                       <div
@@ -2924,7 +2924,7 @@ export default function CartPage() {
                         if (item.flavor) savedProductDetails.push(`Flavor: ${item.flavor.name}`);
                         if (item.tier) savedProductDetails.push(`Tier: ${item.tier}`);
                         const savedDetailsText = savedProductDetails.join(' • ');
-                        const collapsedSavedThumbSrc = resolveImageUrl(item.product?.image_url);
+                        const collapsedSavedThumbSrc = resolveEntityImageUrl(item.product);
 
                       return (
                         <div
@@ -3292,7 +3292,7 @@ export default function CartPage() {
                                     updateCartItemCombos(firstCakeItem.id, updatedCombos);
                                     showSuccess('Added', `${item.name} added to your cake.`);
                                   };
-                                  const addOnThumbSrc = resolveImageUrl(item.image_url);
+                                  const addOnThumbSrc = resolveEntityImageUrl(item);
                                   return (
                                     <div key={item.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] bg-white dark:bg-gray-800 rounded-xl border border-amber-200/70 dark:border-amber-600/40 overflow-hidden shadow-md hover:shadow-lg hover:border-amber-300 dark:hover:border-amber-500/60 transition-all duration-200 group">
                                       <div className="relative h-[90px] w-full overflow-hidden rounded-t-xl bg-amber-50/80 dark:bg-amber-900/20 sm:h-[100px]">
@@ -3339,7 +3339,7 @@ export default function CartPage() {
                                   const originalPrice = product.base_price;
                                   const hasDiscount = product.discounted_price && product.discounted_price < originalPrice;
                                   const productWeight = product.base_weight || product.variants?.[0]?.weight || null;
-                                  const giftThumbSrc = resolveImageUrl(product.image_url);
+                                  const giftThumbSrc = resolveEntityImageUrl(product);
                                   return (
                                     <div key={product.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] lg:w-[160px] bg-white dark:bg-gray-800 rounded-xl border border-emerald-200/70 dark:border-emerald-600/40 overflow-hidden shadow-md hover:shadow-lg hover:border-emerald-300 dark:hover:border-emerald-500/60 transition-all duration-200 group">
                                       {hasDiscount && (
@@ -3400,7 +3400,7 @@ export default function CartPage() {
                                   const originalPrice = product.base_price;
                                   const hasDiscount = product.discounted_price && product.discounted_price < originalPrice;
                                   const productWeight = product.base_weight || product.variants?.[0]?.weight || null;
-                                  const treatThumbSrc = resolveImageUrl(product.image_url);
+                                  const treatThumbSrc = resolveEntityImageUrl(product);
                                   return (
                                     <div key={product.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] lg:w-[160px] bg-white dark:bg-gray-800 rounded-xl border border-rose-200/70 dark:border-rose-600/40 overflow-hidden shadow-md hover:shadow-lg hover:border-rose-300 dark:hover:border-rose-500/60 transition-all duration-200 group">
                                       {hasDiscount && (
@@ -3674,7 +3674,7 @@ export default function CartPage() {
                   </h3>
                   <div className="space-y-3">
                     {group.items.map((item, itemIndex) => {
-                      const dupThumbSrc = resolveImageUrl(item.product?.image_url);
+                      const dupThumbSrc = resolveEntityImageUrl(item.product);
                       return (
                       <div key={item.id} className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-600 relative group">
                         <div className="flex items-start gap-3">

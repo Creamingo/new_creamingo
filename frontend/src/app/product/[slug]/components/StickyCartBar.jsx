@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { ShoppingCart, Heart } from 'lucide-react';
-import { resolveImageUrl } from '../../../../utils/imageUrl';
+import { resolveEntityImageUrl } from '../../../../utils/imageUrl';
 import { resolveProductFormProfileFromProduct, isCakeProfile, FLOWERS_PDP_LABELS } from '../../../../utils/productFormProfile';
 
 const StickyCartBar = ({ 
@@ -68,7 +68,7 @@ const StickyCartBar = ({
             <div className="flex items-center space-x-3">
               <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded-lg flex-shrink-0 overflow-hidden">
                 <img
-                  src={resolveImageUrl(product.image_url)}
+                  src={resolveEntityImageUrl(product)}
                   alt={product.name}
                   className="w-full h-full object-cover"
                 />
