@@ -19,9 +19,9 @@ export const accountMenuGroups = [
     icon: 'Wallet',
     items: [
       { id: 'wallet-balance', label: 'Wallet Balance', href: '/wallet', icon: 'Wallet' },
-      { id: 'available-coupons', label: 'Available Coupons', href: '#coupons', icon: 'Tag', badgeKey: 'coupons' },
-      { id: 'collected-coupons', label: 'Collected Coupons', href: '#coupons', icon: 'Bookmark' },
-      { id: 'one-rs-deals-offers', label: '₹1 Deals offers', href: '#coupons', icon: 'Sparkles' },
+      { id: 'available-coupons', label: 'Available Coupons', href: '#coupons', couponTab: 'active', icon: 'Tag', badgeKey: 'coupons' },
+      { id: 'collected-coupons', label: 'Collected Coupons', href: '#coupons', couponTab: 'used', icon: 'Bookmark' },
+      { id: 'one-rs-deals-offers', label: '₹1 Deals offers', href: '#coupons', couponTab: 'deals', icon: 'Sparkles' },
     ],
   },
   {
@@ -29,7 +29,7 @@ export const accountMenuGroups = [
     title: 'Activity & Support',
     icon: 'Headphones',
     items: [
-      { id: 'your-feedback', label: 'Your Feedback', href: '/support', icon: 'MessageSquare' },
+      { id: 'your-feedback', label: 'Your Feedback', href: '/account/feedback', icon: 'MessageSquare' },
       { id: 'your-reviews', label: 'Your Reviews', href: '#reviews', icon: 'Star', badgeKey: 'reviews' },
       { id: 'raise-ticket', label: 'Raise Ticket', href: '/support', icon: 'MessageCircle' },
       { id: 'your-tickets', label: 'Your Tickets', href: '/support', icon: 'Ticket' },

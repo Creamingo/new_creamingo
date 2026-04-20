@@ -101,7 +101,7 @@ export default function AccountMenuSection({
       if (section === 'faqs' && onNavigateToFAQs) {
         onNavigateToFAQs();
       } else {
-        onSectionChange?.(section);
+        onSectionChange?.(section, item.couponTab || null);
       }
       return;
     }

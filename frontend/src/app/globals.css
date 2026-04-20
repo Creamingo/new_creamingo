@@ -199,10 +199,12 @@ body[data-page="product"] header[class*="top-0"] {
     background-color: white !important; /* Ensure it has background */
   }
   
-  /* Dark mode background */
+  /* Dark mode background (support html.dark + any body-level dark class) */
+  html.dark body[data-page="product"] .product-location-bar-wrapper > div,
   body[data-page="product"].dark .product-location-bar-wrapper > div,
   body[data-page="product"] .dark .product-location-bar-wrapper > div {
     background-color: rgb(31, 41, 55) !important; /* gray-800 */
+    border-color: rgb(55, 65, 81) !important; /* gray-700 */
   }
   
   /* Add padding-top to main content area to account for fixed LocationBar */
@@ -627,17 +629,33 @@ h1, h2, h3, h4, h5, h6, .heading {
   width: 100% !important;
 }
 
+.birthday-calendar-inline.react-datepicker {
+  width: 100% !important;
+  border: 2px solid #fbcfe8 !important;
+  border-radius: 14px !important;
+  background: #fffafb !important;
+  overflow: hidden !important;
+  box-shadow: 0 10px 20px rgba(190, 24, 93, 0.1) !important;
+}
+
+.dark .birthday-calendar-inline.react-datepicker {
+  border-color: rgba(190, 24, 93, 0.45) !important;
+  background: #1f2937 !important;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4) !important;
+}
+
 /* Ensure calendar aligns flush with input */
 .birthday-calendar-popper {
   width: 100% !important;
+  margin-top: 6px !important;
 }
 
 .birthday-calendar-popper .react-datepicker {
   margin: 0 !important;
-  margin-top: -2px !important;
-  border-top-left-radius: 0 !important;
-  border-top-right-radius: 0 !important;
-  border-top: 2px solid #fbcfe8 !important;
+  border-radius: 12px !important;
+  border: 2px solid #fbcfe8 !important;
+  background: #fffafb !important;
+  box-shadow: 0 14px 28px rgba(190, 24, 93, 0.14) !important;
   width: 100% !important;
   min-width: 100% !important;
   max-width: 100% !important;
@@ -651,8 +669,14 @@ h1, h2, h3, h4, h5, h6, .heading {
 .birthday-calendar-popper[data-placement^="bottom"] {
   transform: translate3d(0, 0, 0) !important;
   left: 0 !important;
-  margin-top: 0 !important;
+  margin-top: 6px !important;
   padding-top: 0 !important;
+}
+
+.dark .birthday-calendar-popper .react-datepicker {
+  border: 2px solid rgba(190, 24, 93, 0.45) !important;
+  background: #1f2937 !important;
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.45) !important;
 }
 
 /* Remove calendar icon/arrow from input */

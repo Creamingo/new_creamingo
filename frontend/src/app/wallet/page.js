@@ -336,15 +336,15 @@ function WalletPageContent() {
     <>
       <Header />
       <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 overflow-x-hidden w-full max-w-full">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 lg:pt-12 pb-24 lg:pb-8 w-full">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 lg:pt-12 pb-24 lg:pb-8 w-full">
         {/* Header with Notification Button */}
-        <div className="flex items-center justify-between mb-6 lg:mb-8">
+        <div className="flex items-center justify-between mb-4 lg:mb-5">
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 dark:text-white tracking-tight">Wallet</h1>
           <button
             onClick={openNotificationCenter}
-            className="relative bg-gray-100 dark:bg-gray-800 rounded-full p-2.5 text-gray-600 dark:text-gray-400 hover:text-pink-600 dark:hover:text-pink-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            className="relative bg-gray-100 dark:bg-gray-800 rounded-full p-2 text-gray-600 dark:text-gray-400 hover:text-pink-600 dark:hover:text-pink-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
           >
-            <Bell className="w-6 h-6" />
+            <Bell className="w-5 h-5" />
             {unreadCount > 0 && (
               <span className="absolute -top-1 -right-1 w-5 h-5 bg-pink-600 text-white text-xs font-bold rounded-full flex items-center justify-center ring-2 ring-white dark:ring-gray-800">
                 {unreadCount > 99 ? '99+' : unreadCount}
@@ -360,14 +360,14 @@ function WalletPageContent() {
           className="relative mb-6 lg:mb-8"
         >
           {hasLoadedTransactions ? (
-            <div className="rounded-3xl border border-pink-200/80 dark:border-pink-900/50 bg-gradient-to-br from-pink-50 via-white to-rose-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-700 p-4 sm:p-5 lg:p-6 shadow-lg dark:shadow-xl dark:shadow-black/20">
+            <div className="rounded-3xl border border-pink-200/80 dark:border-pink-900/50 bg-gradient-to-br from-pink-50 via-white to-rose-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-700 p-3.5 sm:p-4 lg:p-5 shadow-lg dark:shadow-xl dark:shadow-black/20">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">Wallet Balance</p>
-                  <h2 className="text-4xl sm:text-5xl font-bold text-gray-900 dark:text-white mt-1 tracking-tight tabular-nums">
+                  <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mt-0.5 tracking-tight tabular-nums">
                     {formatPrice(balance)}
                   </h2>
-                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1.5">
+                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">
                     Available to use on orders
                   </p>
                 </div>
@@ -376,7 +376,7 @@ function WalletPageContent() {
                 </div>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-pink-100 dark:border-gray-700 flex items-center flex-wrap gap-x-3 gap-y-2 text-sm sm:text-base">
+              <div className="mt-3 pt-2.5 border-t border-pink-100 dark:border-gray-700 flex items-center flex-wrap gap-x-3 gap-y-1.5 text-sm sm:text-base">
                 <div className="inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-semibold tabular-nums">
                   <TrendingUp className="w-4 h-4" />
                   <span>Earned {formatPrice(totalEarned)}</span>
@@ -389,11 +389,11 @@ function WalletPageContent() {
               </div>
             </div>
           ) : (
-            <div className="rounded-3xl border border-pink-200/80 dark:border-pink-900/50 bg-white dark:bg-gray-800 p-4 sm:p-5 lg:p-6 shadow-lg dark:shadow-xl dark:shadow-black/20 animate-pulse">
+            <div className="rounded-3xl border border-pink-200/80 dark:border-pink-900/50 bg-white dark:bg-gray-800 p-3.5 sm:p-4 lg:p-5 shadow-lg dark:shadow-xl dark:shadow-black/20 animate-pulse">
               <div className="h-4 w-28 bg-gray-200 dark:bg-gray-700 rounded" />
-              <div className="h-10 w-36 bg-gray-200 dark:bg-gray-700 rounded mt-3" />
-              <div className="h-3 w-44 bg-gray-200 dark:bg-gray-700 rounded mt-3" />
-              <div className="h-px bg-gray-200 dark:bg-gray-700 my-4" />
+              <div className="h-9 w-32 bg-gray-200 dark:bg-gray-700 rounded mt-2.5" />
+              <div className="h-3 w-44 bg-gray-200 dark:bg-gray-700 rounded mt-2.5" />
+              <div className="h-px bg-gray-200 dark:bg-gray-700 my-3" />
               <div className="flex items-center gap-3">
                 <div className="h-4 w-28 bg-gray-200 dark:bg-gray-700 rounded" />
                 <div className="h-4 w-28 bg-gray-200 dark:bg-gray-700 rounded" />

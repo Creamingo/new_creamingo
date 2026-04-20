@@ -54,28 +54,28 @@ const Toast = ({ id, type, title, message, duration = 3000, onClose, actionButto
   const getBackgroundColor = () => {
     switch (type) {
       case 'success':
-        return 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700';
+        return 'bg-green-50 dark:bg-emerald-950/95 border-green-200 dark:border-emerald-700/80';
       case 'error':
-        return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700';
+        return 'bg-red-50 dark:bg-red-950/95 border-red-200 dark:border-red-700/80';
       case 'warning':
-        return 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700';
+        return 'bg-yellow-50 dark:bg-amber-950/95 border-yellow-200 dark:border-amber-700/80';
       case 'info':
-        return 'bg-pink-50 dark:bg-pink-900/20 border-pink-200 dark:border-pink-700';
+        return 'bg-pink-50 dark:bg-fuchsia-950/95 border-pink-200 dark:border-fuchsia-700/80';
       default:
-        return 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700';
+        return 'bg-gray-50 dark:bg-gray-900/95 border-gray-200 dark:border-gray-700/80';
     }
   };
 
   const getTextColor = () => {
     switch (type) {
       case 'success':
-        return 'text-green-800 dark:text-green-200';
+        return 'text-green-800 dark:text-emerald-100';
       case 'error':
-        return 'text-red-800 dark:text-red-200';
+        return 'text-red-800 dark:text-red-100';
       case 'warning':
-        return 'text-yellow-800 dark:text-yellow-200';
+        return 'text-yellow-800 dark:text-amber-100';
       case 'info':
-        return 'text-pink-800 dark:text-pink-200';
+        return 'text-pink-800 dark:text-fuchsia-100';
       default:
         return 'text-gray-800 dark:text-gray-200';
     }
@@ -89,6 +89,8 @@ const Toast = ({ id, type, title, message, duration = 3000, onClose, actionButto
         rounded-lg 
         p-4 
         shadow-lg dark:shadow-xl dark:shadow-black/30 
+        ring-1 ring-black/5 dark:ring-white/10
+        backdrop-blur-md
         mb-4 
         min-w-[300px] 
         max-w-[400px]

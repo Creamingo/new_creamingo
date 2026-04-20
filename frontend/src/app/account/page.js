@@ -88,6 +88,7 @@ function AccountPageContent() {
   const source = searchParams?.get('source');
   const isFromWallet = source === 'wallet';
   const [activeSection, setActiveSection] = useState(null); // null = main profile page
+  const [couponsTab, setCouponsTab] = useState('active');
   const [badgeCounts, setBadgeCounts] = useState({
     orders: null,
     coupons: null,
@@ -116,8 +117,11 @@ function AccountPageContent() {
     }
   }, [searchParams]);
 
-  const handleSectionChange = (section) => {
+  const handleSectionChange = (section, tab = null) => {
     setActiveSection(section);
+    if (section === 'coupons' && tab) {
+      setCouponsTab(tab);
+    }
   };
 
   const handleNavigateToFAQs = () => {
@@ -145,7 +149,12 @@ function AccountPageContent() {
       case 'orders':
         return <OrdersSection onBadgeUpdate={(count) => setBadgeCounts(prev => ({ ...prev, orders: count }))} />;
       case 'coupons':
-        return <CouponsSection onBadgeUpdate={(count) => setBadgeCounts(prev => ({ ...prev, coupons: count > 0 ? count : null }))} />;
+        return (
+          <CouponsSection
+            initialTab={couponsTab}
+            onBadgeUpdate={(count) => setBadgeCounts(prev => ({ ...prev, coupons: count > 0 ? count : null }))}
+          />
+        );
       case 'faqs':
         return <FAQsSection />;
       case 'reviews':
@@ -189,9 +198,15 @@ function AccountPageContent() {
         {activeSection === 'orders' || activeSection === 'coupons' || activeSection === 'faqs' || activeSection === 'reviews' ? (
           // Show section content when active (Back to Profile is in sticky bar above)
           <div className="max-w-7xl mx-auto px-4 pt-4 pb-24">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-[0_2px_8px_0_rgba(0,0,0,0.08)] dark:shadow-[0_2px_8px_0_rgba(0,0,0,0.3)] border border-gray-200/60 dark:border-gray-700/60 p-5">
-              {renderActiveSection()}
-            </div>
+            {activeSection === 'coupons' ? (
+              <div className="pt-1">
+                {renderActiveSection()}
+              </div>
+            ) : (
+              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-[0_2px_8px_0_rgba(0,0,0,0.08)] dark:shadow-[0_2px_8px_0_rgba(0,0,0,0.3)] border border-gray-200/60 dark:border-gray-700/60 p-5">
+                {renderActiveSection()}
+              </div>
+            )}
           </div>
         ) : (
           // Show main profile page
