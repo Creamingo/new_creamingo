@@ -80,6 +80,62 @@ async function list(req, res) {
   }
 }
 
+/** GET /api/tickets/my?status=&page=1&limit=20 - customer's own tickets */
+async function listMy(req, res) {
+  try {
+    const customerId = req.customer?.id;
+    if (!customerId) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+
+    const status = (req.query.status || '').trim() || null;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(10, parseInt(req.query.limit, 10) || 20));
+    const offset = Math.max(0, (page - 1) * limit);
+
+    let countSql = 'SELECT COUNT(*) AS total FROM support_tickets WHERE customer_id = ?';
+    const countParams = [customerId];
+    if (status) {
+      countSql += ' AND status = ?';
+      countParams.push(status);
+    }
+    const countResult = await get(countSql, countParams);
+    const total = Number(countResult?.total ?? 0);
+
+    let listSql = `SELECT id, ticket_number, session_id, customer_id, subject, status, admin_notes, created_at, updated_at
+                   FROM support_tickets
+                   WHERE customer_id = ?`;
+    const listParams = [customerId];
+    if (status) {
+      listSql += ' AND status = ?';
+      listParams.push(status);
+    }
+    listSql += ' ORDER BY created_at DESC LIMIT ' + parseInt(limit, 10) + ' OFFSET ' + parseInt(offset, 10);
+
+    const result = await query(listSql, listParams);
+    const rows = (result.rows || []).map((r) => ({
+      id: r.id,
+      ticket_number: r.ticket_number,
+      session_id: r.session_id,
+      customer_id: r.customer_id,
+      subject: r.subject,
+      status: r.status,
+      admin_notes: r.admin_notes,
+      created_at: r.created_at,
+      updated_at: r.updated_at
+    }));
+
+    return res.json({
+      success: true,
+      data: rows,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+    });
+  } catch (err) {
+    console.error('My tickets list error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to list your tickets' });
+  }
+}
+
 /** GET /api/tickets/:id */
 async function getOne(req, res) {
   try {
@@ -156,6 +212,7 @@ async function update(req, res) {
 module.exports = {
   getOrCreateTicketForSession,
   list,
+  listMy,
   getOne,
   getMessages,
   update

@@ -14,13 +14,30 @@ function getOrCreateSessionId() {
   return id;
 }
 
+function getCurrentCustomerId() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem('customer_data');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.id || null;
+  } catch (_) {
+    return null;
+  }
+}
+
 const chatApi = {
   async sendMessage(message, sessionId = null) {
     const sid = sessionId || getOrCreateSessionId();
+    const customerId = getCurrentCustomerId();
     const response = await fetch(`${API_BASE_URL}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: message.trim(), session_id: sid })
+      body: JSON.stringify({
+        message: message.trim(),
+        session_id: sid,
+        ...(customerId ? { customer_id: customerId } : {})
+      })
     });
     const data = await response.json();
     if (!response.ok) {

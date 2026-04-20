@@ -31,8 +31,8 @@ export const accountMenuGroups = [
     items: [
       { id: 'your-feedback', label: 'Your Feedback', href: '/account/feedback', icon: 'MessageSquare' },
       { id: 'your-reviews', label: 'Your Reviews', href: '#reviews', icon: 'Star', badgeKey: 'reviews' },
-      { id: 'raise-ticket', label: 'Raise Ticket', href: '/support', icon: 'MessageCircle' },
-      { id: 'your-tickets', label: 'Your Tickets', href: '/support', icon: 'Ticket' },
+      { id: 'raise-ticket', label: 'Raise Ticket', href: '/support?view=raise', icon: 'MessageCircle' },
+      { id: 'your-tickets', label: 'Your Tickets', href: '/support?view=tickets', icon: 'Ticket' },
     ],
   },
   {
