@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { User } from 'lucide-react';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
@@ -25,7 +25,7 @@ function GuestAccountView() {
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
       <Header />
       {/* Same sticky greeting as logged-in Account – guest mode */}
-      <div className="sticky top-[3.6rem] lg:top-16 z-40 bg-white dark:bg-gray-800 border-b border-gray-200/60 dark:border-gray-700/60">
+      <div className="sticky top-[3.6rem] z-40 bg-white dark:bg-gray-800 border-b border-gray-200/60 dark:border-gray-700/60 lg:fixed lg:top-16 lg:left-0 lg:right-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
           <p className="font-poppins text-base lg:text-lg font-medium text-gray-700 dark:text-gray-200 leading-tight tracking-tight">
             Hello, Guest 👋
@@ -34,7 +34,7 @@ function GuestAccountView() {
       </div>
 
       {/* Same section structure as logged-in Account page */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-3 pb-20 lg:pb-24 space-y-4 lg:space-y-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-3 pb-20 lg:pt-20 lg:pb-24 space-y-4 lg:space-y-6">
         {/* Guest profile card – same style as UserProfileCard */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-[0_2px_8px_0_rgba(0,0,0,0.08)] dark:shadow-[0_2px_8px_0_rgba(0,0,0,0.3)] border border-gray-200/60 dark:border-gray-700/60 p-5 sm:p-6">
           <div className="flex items-start gap-4">
@@ -83,7 +83,10 @@ function GuestAccountView() {
 
 function AccountPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { customer, logout } = useCustomerAuth();
+  const source = searchParams?.get('source');
+  const isFromWallet = source === 'wallet';
   const [activeSection, setActiveSection] = useState(null); // null = main profile page
   const [badgeCounts, setBadgeCounts] = useState({
     orders: null,
@@ -100,6 +103,18 @@ function AccountPageContent() {
     window.addEventListener('account-section-change', handleSectionChange);
     return () => window.removeEventListener('account-section-change', handleSectionChange);
   }, []);
+
+  // Support direct section deep-linking from other pages (e.g., Wallet -> Coupons)
+  useEffect(() => {
+    const requestedView = searchParams?.get('view');
+    const sectionFromHash = typeof window !== 'undefined' ? window.location.hash?.replace('#', '') : null;
+    const targetSection = requestedView || sectionFromHash;
+    const allowedSections = new Set(['orders', 'coupons', 'faqs', 'reviews']);
+
+    if (targetSection && allowedSections.has(targetSection)) {
+      setActiveSection(targetSection);
+    }
+  }, [searchParams]);
 
   const handleSectionChange = (section) => {
     setActiveSection(section);
@@ -145,15 +160,21 @@ function AccountPageContent() {
       <Header />
       
       {/* Sticky bar: Back to Profile when in a section, else greeting */}
-      <div className="sticky top-[3.6rem] lg:top-16 z-40 bg-white dark:bg-gray-800 border-b border-gray-200/60 dark:border-gray-700/60">
+      <div className="sticky top-[3.6rem] z-40 bg-white dark:bg-gray-800 border-b border-gray-200/60 dark:border-gray-700/60 lg:fixed lg:top-16 lg:left-0 lg:right-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
           {activeSection === 'orders' || activeSection === 'coupons' || activeSection === 'faqs' || activeSection === 'reviews' ? (
             <button
-              onClick={() => setActiveSection(null)}
+              onClick={() => {
+                if (isFromWallet) {
+                  router.push('/wallet');
+                  return;
+                }
+                setActiveSection(null);
+              }}
               className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors font-inter text-sm font-medium"
             >
               <span className="text-xl">←</span>
-              <span>Back to Profile</span>
+              <span>{isFromWallet ? 'Back to Wallet' : 'Back to Profile'}</span>
             </button>
           ) : (
             <p className="font-poppins text-base lg:text-lg font-medium text-gray-700 dark:text-gray-200 leading-tight tracking-tight">
@@ -206,14 +227,14 @@ function AccountPageContent() {
       <div className="hidden lg:block">
         {activeSection === 'orders' || activeSection === 'coupons' || activeSection === 'faqs' || activeSection === 'reviews' ? (
           // Show section content when active (Back to Profile is in sticky bar above)
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-6">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-6 lg:pt-20">
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-[0_2px_8px_0_rgba(0,0,0,0.08)] dark:shadow-[0_2px_8px_0_rgba(0,0,0,0.3)] border border-gray-200/60 dark:border-gray-700/60 p-6 lg:p-8">
               {renderActiveSection()}
             </div>
           </div>
         ) : (
           // Show main profile page
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-3 pb-6 lg:pb-24">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-3 pb-6 lg:pt-20 lg:pb-24">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Left Column - Main Sections */}
               <div className="lg:col-span-2 space-y-6">

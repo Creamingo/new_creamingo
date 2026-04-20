@@ -10,39 +10,18 @@ export const accountMenuGroups = [
     title: 'Orders & Payments',
     icon: 'Package',
     items: [
-      { id: 'my-orders', label: 'My Orders', href: '#orders', icon: 'ShoppingBag', badgeKey: 'orders' },
-      { id: 'track-order', label: 'Track Order', href: '/track-order', icon: 'Truck' },
-      { id: 'invoices', label: 'Invoices', href: '#orders', icon: 'FileText' },
-      { id: 'reorder', label: 'Reorder', href: '#orders', icon: 'RotateCcw' },
+      { id: 'your-orders', label: 'Your Orders', href: '#orders', icon: 'ShoppingBag', badgeKey: 'orders' },
     ],
   },
   {
-    id: 'wallet-rewards',
-    title: 'Wallet & Rewards',
+    id: 'wallet-coupons',
+    title: 'Wallet & Coupons',
     icon: 'Wallet',
     items: [
       { id: 'wallet-balance', label: 'Wallet Balance', href: '/wallet', icon: 'Wallet' },
-      { id: 'cashback-history', label: 'Cashback History', href: '/wallet', icon: 'History' },
-      { id: 'loyalty-points', label: 'Loyalty Points', href: '/rewards', icon: 'Award' },
-    ],
-  },
-  {
-    id: 'coupons-offers',
-    title: 'Coupons & Offers',
-    icon: 'Tag',
-    items: [
       { id: 'available-coupons', label: 'Available Coupons', href: '#coupons', icon: 'Tag', badgeKey: 'coupons' },
       { id: 'collected-coupons', label: 'Collected Coupons', href: '#coupons', icon: 'Bookmark' },
-      { id: 'upcoming-deals', label: 'Upcoming Deals', href: '#coupons', icon: 'Sparkles' },
-    ],
-  },
-  {
-    id: 'addresses-delivery',
-    title: 'Addresses & Delivery',
-    icon: 'MapPin',
-    items: [
-      { id: 'saved-addresses', label: 'Saved Addresses', href: '/account/profile', icon: 'MapPin' },
-      { id: 'delivery-preferences', label: 'Delivery Preferences', href: '/account/profile', icon: 'Truck' },
+      { id: 'one-rs-deals-offers', label: '₹1 Deals offers', href: '#coupons', icon: 'Sparkles' },
     ],
   },
   {
@@ -50,10 +29,10 @@ export const accountMenuGroups = [
     title: 'Activity & Support',
     icon: 'Headphones',
     items: [
-      { id: 'my-reviews', label: 'My Reviews', href: '#reviews', icon: 'Star', badgeKey: 'reviews' },
+      { id: 'your-feedback', label: 'Your Feedback', href: '/support', icon: 'MessageSquare' },
+      { id: 'your-reviews', label: 'Your Reviews', href: '#reviews', icon: 'Star', badgeKey: 'reviews' },
       { id: 'raise-ticket', label: 'Raise Ticket', href: '/support', icon: 'MessageCircle' },
-      { id: 'my-tickets', label: 'My Tickets', href: '/support', icon: 'Ticket' },
-      { id: 'feedback', label: 'Feedback', href: '/support', icon: 'MessageSquare' },
+      { id: 'your-tickets', label: 'Your Tickets', href: '/support', icon: 'Ticket' },
     ],
   },
   {
@@ -80,6 +59,7 @@ export const accountMenuGroups = [
     title: 'Settings',
     icon: 'Settings',
     items: [
+      { id: 'saved-addresses', label: 'Saved Addresses', href: '/account/profile', icon: 'MapPin' },
       { id: 'notifications', label: 'Notifications', href: '/account/profile', icon: 'Bell' },
       { id: 'theme', label: 'Theme', href: '#appearance', icon: 'Palette' },
       { id: 'language', label: 'Language', href: '/account/profile', icon: 'Globe' },
