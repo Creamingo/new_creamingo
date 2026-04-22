@@ -11,7 +11,7 @@ import customerAuthApi from '../../api/customerAuthApi';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-export default function SupportPage() {
+function SupportPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, isLoading: isAuthLoading } = useCustomerAuth();
@@ -186,5 +186,13 @@ export default function SupportPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function SupportPage() {
+  return (
+    <React.Suspense fallback={null}>
+      <SupportPageContent />
+    </React.Suspense>
   );
 }
