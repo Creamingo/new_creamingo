@@ -1,4 +1,5 @@
 const Joi = require('joi');
+const { getProductFormProfile, isCakeFormProfile } = require('../utils/productFormProfile');
 
 // Validation middleware factory
 const validate = (schema) => {
@@ -49,6 +50,11 @@ const schemas = {
     rememberMe: Joi.boolean().optional()
   }),
 
+  refreshToken: Joi.object({
+    refreshToken: Joi.string().optional(),
+    refresh_token: Joi.string().optional()
+  }).or('refreshToken', 'refresh_token'),
+
   // Customer auth schemas
   customerRegister: Joi.object({
     name: Joi.string().min(2).max(100).required(),
@@ -97,6 +103,7 @@ const schemas = {
     button_text: Joi.string().min(1).max(50),
     button_url: Joi.string().uri(),
     image_url: imageUrl({ required: true }),
+    image_url_mobile: imageUrl({ allowEmpty: true }),
     is_active: Joi.boolean().default(true),
     order_index: Joi.number().integer().min(0).default(0)
   }),
@@ -107,6 +114,7 @@ const schemas = {
     button_text: Joi.string().min(1).max(50),
     button_url: Joi.string().uri(),
     image_url: imageUrl(),
+    image_url_mobile: imageUrl({ allowEmpty: true }),
     is_active: Joi.boolean(),
     order_index: Joi.number().integer().min(0)
   }),
@@ -116,8 +124,6 @@ const schemas = {
     name: Joi.string().min(1).max(100).required(),
     description: Joi.string().max(500),
     image_url: imageUrl({ required: true }),
-    icon: Joi.string().allow('', null).optional(),
-    icon_image_url: imageUrl({ allowEmpty: true }).optional(),
     display_name: Joi.string().max(100).allow('', null).optional(),
     is_active: Joi.boolean().default(true),
     order_index: Joi.number().integer().min(0).default(0)
@@ -127,8 +133,6 @@ const schemas = {
     name: Joi.string().min(1).max(100),
     description: Joi.string().max(500),
     image_url: imageUrl(),
-    icon: Joi.string().allow('', null).optional(),
-    icon_image_url: imageUrl({ allowEmpty: true }).optional(),
     display_name: Joi.string().max(100).allow('', null).optional(),
     is_active: Joi.boolean(),
     order_index: Joi.number().integer().min(0)
@@ -165,8 +169,10 @@ const schemas = {
     subcategory_ids: Joi.array().items(Joi.number().integer().positive()).optional(),
     primary_category_id: Joi.number().integer().positive().optional(),
     primary_subcategory_id: Joi.number().integer().positive().optional(),
+    available_flavor_ids: Joi.array().items(Joi.number().integer().positive()).optional(),
+    primary_flavor_id: Joi.number().integer().positive().allow(null).optional(),
     base_price: Joi.number().positive().required(),
-    base_weight: Joi.string().min(1).max(50).required(),
+    base_weight: Joi.string().max(50).allow('').optional(),
     discount_percent: Joi.number().min(0).max(100).default(0),
     image_url: imageUrl({ required: true }),
     is_active: Joi.boolean().default(true),
@@ -198,14 +204,28 @@ const schemas = {
     ).optional(),
     gallery_images: Joi.array().items(imageUrl()).optional()
   }).custom((value, helpers) => {
-    // Custom validation: ensure at least one category is provided
     const hasLegacyCategory = value.category_id && value.category_id > 0;
     const hasMultiCategories = value.category_ids && value.category_ids.length > 0;
-    
+
     if (!hasLegacyCategory && !hasMultiCategories) {
       return helpers.error('any.required', { message: 'At least one category must be provided (category_id or category_ids)' });
     }
-    
+
+    const categoryIds = value.category_ids || (value.category_id ? [value.category_id] : []);
+    const profile = getProductFormProfile(value.primary_category_id, categoryIds);
+    const bw = value.base_weight != null ? String(value.base_weight).trim() : '';
+
+    if (isCakeFormProfile(profile)) {
+      if (!bw) {
+        return helpers.error('any.custom', { message: 'base_weight is required for cake products' });
+      }
+      value.base_weight = bw;
+    } else if (!bw) {
+      value.base_weight = 'Standard';
+    } else {
+      value.base_weight = bw;
+    }
+
     return value;
   }),
 
@@ -220,6 +240,8 @@ const schemas = {
     subcategory_ids: Joi.array().items(Joi.number().integer().positive()).optional(),
     primary_category_id: Joi.number().integer().positive().optional(),
     primary_subcategory_id: Joi.number().integer().positive().optional(),
+    available_flavor_ids: Joi.array().items(Joi.number().integer().positive()).optional(),
+    primary_flavor_id: Joi.number().integer().positive().allow(null).optional(),
     base_price: Joi.number().positive(),
     base_weight: Joi.string().min(1).max(50),
     discount_percent: Joi.number().min(0).max(100),
@@ -515,6 +537,7 @@ const schemas = {
     button_text: Joi.string().max(50).allow(''),
     button_url: Joi.string().allow(''),
     image_url: imageUrl({ required: true }),
+    image_url_mobile: imageUrl({ allowEmpty: true }),
     is_active: Joi.boolean(),
     order_index: Joi.number().integer().min(0)
   }),
@@ -525,6 +548,7 @@ const schemas = {
     button_text: Joi.string().max(50).allow(''),
     button_url: Joi.string().allow(''),
     image_url: imageUrl(),
+    image_url_mobile: imageUrl({ allowEmpty: true }),
     is_active: Joi.boolean(),
     order_index: Joi.number().integer().min(0)
   })
@@ -536,6 +560,7 @@ const validateUpdateFeaturedCategory = validate(schemas.updateFeaturedCategory);
 const validateFeaturedProduct = validate(schemas.createFeaturedProduct);
 const validateUpdateFeaturedProduct = validate(schemas.updateFeaturedProduct);
 const validateBanner = validate(schemas.createBanner);
+const validateUpdateBanner = validate(schemas.updateBanner);
 
 module.exports = {
   validate,
@@ -544,5 +569,6 @@ module.exports = {
   validateUpdateFeaturedCategory,
   validateFeaturedProduct,
   validateUpdateFeaturedProduct,
-  validateBanner
+  validateBanner,
+  validateUpdateBanner
 };

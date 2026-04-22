@@ -14,7 +14,7 @@ const {
   trackBannerConversion
 } = require('../controllers/bannerController');
 const { authMiddleware } = require('../middleware/auth');
-const { validateBanner } = require('../middleware/validation');
+const { validateBanner, validateUpdateBanner } = require('../middleware/validation');
 
 // Public routes (for frontend display)
 router.get('/public', getBanners); // Public endpoint for frontend
@@ -38,11 +38,11 @@ router.get('/:id', getBanner);
 // POST /api/banners - Create new banner
 router.post('/', validateBanner, createBanner);
 
-// PUT /api/banners/:id - Update banner
-router.put('/:id', validateBanner, updateBanner);
-
-// PUT /api/banners/order/update - Update banner order (bulk)
+// PUT /api/banners/order/update - Update banner order (bulk) – must be before /:id so "order" is not captured as id
 router.put('/order/update', updateBannerOrder);
+
+// PUT /api/banners/:id - Update banner
+router.put('/:id', validateUpdateBanner, updateBanner);
 
 // DELETE /api/banners/:id - Delete banner
 router.delete('/:id', deleteBanner);

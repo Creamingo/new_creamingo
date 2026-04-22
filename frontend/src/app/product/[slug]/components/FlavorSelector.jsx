@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { motion } from 'framer-motion';
 
 const FlavorSelector = ({ 
   product, 
@@ -13,6 +12,12 @@ const FlavorSelector = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const [hasUserSelected, setHasUserSelected] = useState(false);
   const dropdownRef = useRef(null);
+
+  const isFlavorPrimary = (flavor) => {
+    if (!flavor) return false;
+    const v = flavor.is_primary;
+    return v === 1 || v === true || v === '1';
+  };
 
   // Define flavor subcategory IDs based on the backend mapping
   const FLAVOR_SUBCATEGORY_IDS = [
@@ -28,19 +33,24 @@ const FlavorSelector = ({
     18, // Blueberry
   ];
 
-  // Get available flavors from product subcategories
+  // Get available flavors from product flavors (fallback to subcategories)
   const getAvailableFlavors = () => {
-    if (!product.subcategories || !Array.isArray(product.subcategories)) {
+    const flavorSource = Array.isArray(product.flavors)
+      ? product.flavors
+      : (Array.isArray(product.subcategories) ? product.subcategories : []);
+
+    if (!Array.isArray(flavorSource)) {
       return [];
     }
-    
-    const flavors = product.subcategories
-      .filter(subcat => FLAVOR_SUBCATEGORY_IDS.includes(Number(subcat.id)));
+
+    const flavors = product.flavors && Array.isArray(product.flavors)
+      ? flavorSource
+      : flavorSource.filter(subcat => FLAVOR_SUBCATEGORY_IDS.includes(Number(subcat.id)));
     
     // Sort: Primary flavor first, then others alphabetically
     return flavors.sort((a, b) => {
-      const aIsPrimary = a.is_primary === 1;
-      const bIsPrimary = b.is_primary === 1;
+      const aIsPrimary = isFlavorPrimary(a);
+      const bIsPrimary = isFlavorPrimary(b);
       
       // Primary flavors come first
       if (aIsPrimary && !bIsPrimary) return -1;
@@ -52,6 +62,7 @@ const FlavorSelector = ({
   };
 
   const availableFlavors = getAvailableFlavors();
+  const additionalFlavors = availableFlavors.filter((f) => !isFlavorPrimary(f));
 
   // Reset hasUserSelected when selectedFlavor is cleared (e.g., on page refresh)
   useEffect(() => {
@@ -77,8 +88,9 @@ const FlavorSelector = ({
     };
   }, [isExpanded]);
 
-  // Don't render if no flavors are available
-  if (availableFlavors.length === 0) {
+  // Don't render if no flavors are available, or only the primary flavour is offered
+  // (admin must select at least one additional flavour under "Available Flavors")
+  if (availableFlavors.length === 0 || additionalFlavors.length === 0) {
     return null;
   }
 
@@ -177,28 +189,28 @@ const FlavorSelector = ({
           Try this in another flavour (optional)
         </label>
         <span className="text-xs font-medium text-gray-500 dark:text-gray-400 flex-shrink-0 whitespace-nowrap">
-          {availableFlavors.length} available
+          {additionalFlavors.length} available
         </span>
       </div>
 
-      {/* Flavor Dropdown */}
-      <div className="relative" ref={dropdownRef}>
+      {/* Flavor selector - inline expandable; opens in flow and pushes content below down */}
+      <div className="w-full" ref={dropdownRef}>
         <button
           type="button"
           onClick={() => setIsExpanded(!isExpanded)}
-          className={`w-full flex items-center justify-between p-3.5 rounded-lg border-2 bg-white dark:bg-gray-800 transition-all ${
+          className={`w-full flex items-center justify-between p-3.5 border-2 bg-white dark:bg-gray-800 transition-all ${
             isExpanded 
-              ? 'border-rose-500 dark:border-rose-400 shadow-md dark:shadow-lg dark:shadow-black/20' 
-              : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+              ? 'border-rose-500 dark:border-rose-400 border-b-gray-200 dark:border-b-gray-700 rounded-t-lg shadow-sm' 
+              : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 rounded-lg'
           }`}
         >
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            {selectedFlavor && selectedFlavor.is_primary === 1 && (
+            {selectedFlavor && isFlavorPrimary(selectedFlavor) && (
               <div className="flex-shrink-0 w-2 h-2 rounded-full bg-green-500 dark:bg-green-400"></div>
             )}
             <span className={`text-sm font-semibold truncate ${
               selectedFlavor 
-                ? selectedFlavor.is_primary === 1 
+                ? isFlavorPrimary(selectedFlavor) 
                   ? 'text-green-600 dark:text-green-400' 
                   : 'text-gray-900 dark:text-gray-100'
                 : 'text-gray-500 dark:text-gray-400'
@@ -207,7 +219,7 @@ const FlavorSelector = ({
             </span>
           </div>
           <ChevronDown 
-            className={`w-5 h-5 flex-shrink-0 transition-transform duration-200 ${
+            className={`w-5 h-5 flex-shrink-0 transition-transform duration-300 ease-out ${
               isExpanded 
                 ? 'rotate-180 text-rose-500 dark:text-rose-400' 
                 : 'text-gray-400 dark:text-gray-500'
@@ -215,53 +227,49 @@ const FlavorSelector = ({
           />
         </button>
 
-        {/* Dropdown Menu - Matching Sort By Style */}
-        {isExpanded && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-2xl dark:shadow-black/40 z-50 overflow-hidden backdrop-blur-sm max-h-60 overflow-y-auto"
-          >
-            <div className="py-1.5">
-              {availableFlavors.map((flavor) => {
-                const isPrimary = flavor.is_primary === 1;
-                const isSelected = selectedFlavor?.id === flavor.id;
-                
-                return (
-                  <button
-                    key={flavor.id}
-                    type="button"
-                    onClick={() => handleFlavorSelect(flavor)}
-                    className={`w-full text-left px-4 py-3 text-sm font-inter transition-all duration-200 flex items-center justify-between ${
-                      isSelected 
-                        ? 'bg-pink-50 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400 font-semibold border-l-2 border-pink-500 dark:border-pink-400' 
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
-                    }`}
-                  >
-                    <span>{flavor.name}</span>
-                    {isPrimary ? (
-                      <span className="text-xs font-semibold text-pink-600 dark:text-pink-400">Primary</span>
-                    ) : isSelected ? (
-                      <div className="w-2 h-2 rounded-full bg-pink-500 dark:bg-pink-400"></div>
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
-          </motion.div>
-        )}
+        {/* Inline options panel - expands in flow and pushes content below down */}
+        <div
+          className={`overflow-hidden transition-[max-height] duration-300 ease-out rounded-b-lg bg-white dark:bg-gray-800 ${
+            isExpanded ? 'border-2 border-t-0 border-rose-500 dark:border-rose-400' : 'border-0'
+          }`}
+          style={{ maxHeight: isExpanded ? '20rem' : 0 }}
+        >
+          <div className="max-h-80 overflow-y-auto py-1.5">
+            {availableFlavors.map((flavor) => {
+              const isPrimary = isFlavorPrimary(flavor);
+              const isSelected = selectedFlavor?.id === flavor.id;
+              return (
+                <button
+                  key={flavor.id}
+                  type="button"
+                  onClick={() => handleFlavorSelect(flavor)}
+                  className={`w-full text-left px-4 py-3 text-sm font-inter transition-colors duration-200 flex items-center justify-between ${
+                    isSelected 
+                      ? 'bg-pink-50 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400 font-semibold border-l-2 border-pink-500 dark:border-pink-400' 
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                  }`}
+                >
+                  <span>{flavor.name}</span>
+                  {isPrimary ? (
+                    <span className="text-xs font-semibold text-pink-600 dark:text-pink-400">Primary</span>
+                  ) : isSelected ? (
+                    <div className="w-2 h-2 rounded-full bg-pink-500 dark:bg-pink-400"></div>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Selected Flavor Info - Only show after user actively selects */}
       {selectedFlavor && hasUserSelected && (
         <div className={`text-sm font-medium mt-2 ${
-          selectedFlavor.is_primary === 1
+          isFlavorPrimary(selectedFlavor)
             ? 'text-green-600 dark:text-green-400'
             : 'text-amber-700 dark:text-amber-400'
         }`}>
-          {selectedFlavor.is_primary === 1
+          {isFlavorPrimary(selectedFlavor)
             ? `• Primary flavour – Cake will be made in ${selectedFlavor.name.toLowerCase()}.`
             : `• Your cake will be made in ${selectedFlavor.name.toLowerCase()} flavour.`
           }

@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { 
-  Share2, 
   Copy, 
   Check, 
   Users, 
@@ -19,14 +19,20 @@ import {
   Award,
   Crown,
   TrendingDown,
-  Activity
+  Activity,
+  X,
+  MoreHorizontal
 } from 'lucide-react';
 import referralApi from '../api/referralApi';
 import { useToast } from '../contexts/ToastContext';
+import { useCustomerAuth } from '../contexts/CustomerAuthContext';
+import { useAuthModal } from '../contexts/AuthModalContext';
 import { formatPrice } from '../utils/priceFormatter';
 
 const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
   const { showSuccess, showError } = useToast();
+  const { isAuthenticated, isLoading: isAuthLoading } = useCustomerAuth();
+  const { openAuthModal } = useAuthModal();
   const [referralData, setReferralData] = useState(null);
   const [milestoneData, setMilestoneData] = useState(null);
   const [tierData, setTierData] = useState(null);
@@ -35,17 +41,47 @@ const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
   const [analyticsData, setAnalyticsData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
-  const [shareMethod, setShareMethod] = useState(null);
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [activeSection, setActiveSection] = useState('overview'); // overview, tier, leaderboard, analytics
+  const [showAllMilestones, setShowAllMilestones] = useState(false);
+  const tabButtonRefs = useRef({});
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (isAuthLoading) return; // wait until auth state is resolved
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
     fetchReferralInfo();
     fetchMilestoneProgress();
     fetchTierProgress();
     fetchLeaderboard();
     fetchUserRank();
     fetchAnalytics();
-  }, []);
+  }, [isAuthenticated, isAuthLoading]);
+
+  useEffect(() => {
+    if (!shareSheetOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const onEscape = (event) => {
+      if (event.key === 'Escape') {
+        setShareSheetOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', onEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onEscape);
+    };
+  }, [shareSheetOpen]);
 
   const fetchReferralInfo = async () => {
     try {
@@ -131,7 +167,7 @@ const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
     return `${baseUrl}/signup?ref=${referralData.referralCode}`;
   };
 
-  const copyToClipboard = async () => {
+  const copyToClipboard = async (closeSheetAfterCopy = false) => {
     const link = getReferralLink();
     if (!link) return;
 
@@ -139,42 +175,73 @@ const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
       await navigator.clipboard.writeText(link);
       setCopied(true);
       showSuccess('Copied!', 'Referral link copied to clipboard');
+      if (closeSheetAfterCopy) {
+        setShareSheetOpen(false);
+      }
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
       showError('Error', 'Failed to copy link');
     }
   };
 
-  const shareViaWhatsApp = () => {
+  const shareViaWhatsApp = (closeSheetAfterShare = false) => {
     const link = getReferralLink();
     const message = encodeURIComponent(
       `🎉 Join Creamingo and get ₹50 welcome bonus + ₹25 extra when you use my referral code!\n\nUse code: ${referralData?.referralCode}\n\nSign up here: ${link}`
     );
     window.open(`https://wa.me/?text=${message}`, '_blank');
-    setShareMethod('whatsapp');
-    setTimeout(() => setShareMethod(null), 2000);
+    if (closeSheetAfterShare) {
+      setShareSheetOpen(false);
+    }
   };
 
-  const shareViaSMS = () => {
+  const shareViaSMS = (closeSheetAfterShare = false) => {
     const link = getReferralLink();
     const message = encodeURIComponent(
       `Join Creamingo and get ₹50 welcome bonus + ₹25 extra! Use my referral code: ${referralData?.referralCode}. Sign up: ${link}`
     );
     window.open(`sms:?body=${message}`, '_blank');
-    setShareMethod('sms');
-    setTimeout(() => setShareMethod(null), 2000);
+    if (closeSheetAfterShare) {
+      setShareSheetOpen(false);
+    }
   };
 
-  const shareViaEmail = () => {
+  const shareViaEmail = (closeSheetAfterShare = false) => {
     const link = getReferralLink();
     const subject = encodeURIComponent('Join Creamingo with my referral code!');
     const body = encodeURIComponent(
       `Hi!\n\nI'm inviting you to join Creamingo! When you sign up using my referral code, you'll get:\n\n✨ ₹50 Welcome Bonus\n✨ ₹25 Extra Bonus\n\nUse my referral code: ${referralData?.referralCode}\n\nSign up here: ${link}\n\nI'll also get ₹50 when you complete your first order!\n\nThanks!`
     );
     window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
-    setShareMethod('email');
-    setTimeout(() => setShareMethod(null), 2000);
+    if (closeSheetAfterShare) {
+      setShareSheetOpen(false);
+    }
   };
+
+  const shareViaNative = useCallback(async () => {
+    const link = getReferralLink();
+    if (!link) return;
+
+    const shareText = `Join Creamingo and get rewards using my referral code: ${referralData?.referralCode}`;
+
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Join Creamingo',
+          text: shareText,
+          url: link,
+        });
+      } catch (error) {
+        if (error?.name !== 'AbortError') {
+          showError('Error', 'Unable to open share apps. Please try again.');
+        }
+      }
+      setShareSheetOpen(false);
+      return;
+    }
+
+    await copyToClipboard(true);
+  }, [referralData?.referralCode]);
 
   const copyReferralCode = async () => {
     if (!referralData?.referralCode) return;
@@ -188,6 +255,19 @@ const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
   };
 
   const referralLink = getReferralLink();
+
+  const handleTabClick = (tabId) => {
+    setActiveSection(tabId);
+
+    const clickedTab = tabButtonRefs.current[tabId];
+    if (clickedTab && typeof clickedTab.scrollIntoView === 'function') {
+      clickedTab.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center',
+      });
+    }
+  };
 
   if (compact) {
     // Compact version matching the screenshot style - always visible
@@ -257,15 +337,31 @@ const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
       <div className="bg-gradient-to-br from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20 rounded-xl p-6 border border-pink-200 dark:border-pink-800">
         <div className="text-center py-8">
           <Gift className="w-12 h-12 text-pink-400 mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
-            Unable to load referral information. Please try refreshing the page.
-          </p>
-          <button
-            onClick={fetchReferralInfo}
-            className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg font-medium transition-colors"
-          >
-            Retry
-          </button>
+          {!isAuthenticated ? (
+            <>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Sign in to view your referral program and earn rewards.
+              </p>
+              <button
+                onClick={() => openAuthModal?.()}
+                className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Sign in
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Unable to load referral information. Please try refreshing the page.
+              </p>
+              <button
+                onClick={fetchReferralInfo}
+                className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Retry
+              </button>
+            </>
+          )}
         </div>
       </div>
     );
@@ -273,62 +369,119 @@ const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
 
   // Full version
   return (
-    <motion.div
+    <>
+      <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-gradient-to-br from-pink-50 via-rose-50 to-pink-100 dark:from-pink-900/30 dark:via-rose-900/20 dark:to-pink-900/30 rounded-2xl p-6 border-2 border-pink-200 dark:border-pink-800 shadow-lg"
-    >
+      className="p-0 lg:p-6 lg:bg-white lg:dark:bg-gray-800 lg:rounded-2xl lg:border lg:border-gray-200 lg:dark:border-gray-700 lg:shadow-md"
+      >
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="hidden lg:flex items-start justify-between mb-5">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-pink-500 to-rose-600 rounded-full flex items-center justify-center shadow-lg">
-            <Gift className="w-6 h-6 text-white" />
+          <div className="w-11 h-11 bg-pink-100 dark:bg-pink-900/30 rounded-xl flex items-center justify-center border border-pink-200 dark:border-pink-800">
+            <Gift className="w-5 h-5 text-pink-600 dark:text-pink-300" />
           </div>
           <div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+            <h3 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
               Refer & Earn
             </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Share with friends and earn rewards!
+            <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+              Invite friends, track progress, and earn wallet cashback.
             </p>
           </div>
         </div>
-        <div className="relative">
-          <Sparkles className="w-6 h-6 text-pink-500 animate-pulse" />
+        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-pink-50 dark:bg-pink-900/20 border border-pink-100 dark:border-pink-800/50">
+          <Sparkles className="w-3.5 h-3.5 text-pink-500" />
+          <span className="text-xs font-semibold text-pink-600 dark:text-pink-300">Earn Rewards</span>
+        </div>
+      </div>
+
+      {/* Primary value proposition */}
+      <div className="mb-5 rounded-xl border border-pink-200/70 dark:border-pink-800/50 bg-gradient-to-r from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/15 p-3.5 sm:p-4">
+        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
+          What you and your friend get
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="rounded-lg bg-white/80 dark:bg-gray-800/80 border border-pink-100 dark:border-pink-800/40 px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-gray-300">
+            Friend: <span className="font-semibold text-pink-600 dark:text-pink-300">₹50 welcome + ₹25 extra</span>
+          </div>
+          <div className="rounded-lg bg-white/80 dark:bg-gray-800/80 border border-pink-100 dark:border-pink-800/40 px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-gray-300">
+            You: <span className="font-semibold text-pink-600 dark:text-pink-300">₹50 after first completed order</span>
+          </div>
         </div>
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex flex-wrap gap-2 mb-6 border-b border-pink-200 dark:border-pink-700">
-        {[
-          { id: 'overview', label: 'Overview', icon: Gift },
-          { id: 'tier', label: 'Tier', icon: Crown },
-          { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
-          { id: 'analytics', label: 'Analytics', icon: BarChart3 }
-        ].map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveSection(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 font-medium transition-colors border-b-2 ${
-                activeSection === tab.id
-                  ? 'border-pink-600 text-pink-600 dark:text-pink-400'
-                  : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-pink-600 dark:hover:text-pink-400'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              <span className="hidden sm:inline">{tab.label}</span>
-            </button>
-          );
-        })}
+      <div className="mb-5 -mx-4 sm:mx-0 border-b border-gray-200 dark:border-gray-700 lg:rounded-xl lg:border lg:border-gray-200 lg:dark:border-gray-700 lg:bg-white/90 lg:dark:bg-gray-800/80">
+        <div className="overflow-x-auto scrollbar-hide px-2 lg:px-1">
+          <div className="flex min-w-max sm:min-w-0 sm:grid sm:grid-cols-4">
+          {[
+            { id: 'overview', label: 'Overview', icon: Gift },
+            { id: 'tier', label: 'Tier', icon: Crown },
+            { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
+            { id: 'analytics', label: 'Analytics', icon: BarChart3 }
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeSection === tab.id;
+
+            return (
+              <button
+                key={tab.id}
+                ref={(element) => {
+                  tabButtonRefs.current[tab.id] = element;
+                }}
+                onClick={() => handleTabClick(tab.id)}
+                className={`min-w-[98px] sm:min-w-0 inline-flex items-center justify-center gap-1.5 px-2.5 py-2.5 text-[12px] sm:text-sm font-medium border-b-2 -mb-px transition-colors ${
+                  isActive
+                    ? 'text-pink-600 dark:text-pink-300 border-pink-500 dark:border-pink-400 bg-pink-50/40 dark:bg-pink-900/15'
+                    : 'text-gray-600 dark:text-gray-400 border-transparent hover:text-pink-600 dark:hover:text-pink-300'
+                }`}
+              >
+                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-pink-600 dark:text-pink-300' : 'text-gray-500 dark:text-gray-400'}`} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+          </div>
+        </div>
       </div>
 
       {/* Overview Section */}
       {activeSection === 'overview' && (
         <>
+      {/* How it Works - plain list style */}
+      <div className="mb-5">
+        <h4 className="font-semibold text-gray-900 dark:text-white mb-2.5 flex items-center gap-2">
+          <TrendingUp className="w-4 h-4 text-pink-600" />
+          How it works
+        </h4>
+        <div className="divide-y divide-gray-200 dark:divide-gray-700">
+          <div className="flex items-start gap-3 py-3">
+            <span className="w-7 text-2xl leading-none font-extrabold text-amber-500 dark:text-amber-400">1</span>
+            <div>
+              <p className="text-base font-semibold text-gray-900 dark:text-white">Share your code</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Share your referral code or link with your friends.</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 py-3">
+            <span className="w-7 text-2xl leading-none font-extrabold text-amber-500 dark:text-amber-400">2</span>
+            <div>
+              <p className="text-base font-semibold text-gray-900 dark:text-white">Friend signs up</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Your friend signs up and places the first order.</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 py-3">
+            <span className="w-7 text-2xl leading-none font-extrabold text-amber-500 dark:text-amber-400">3</span>
+            <div>
+              <p className="text-base font-semibold text-gray-900 dark:text-white">Get rewarded</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Cashback gets credited to your wallet.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         <div className="bg-white/80 dark:bg-gray-800/80 rounded-lg p-3 border border-pink-200 dark:border-pink-700">
           <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Total Referrals</p>
           <p className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -355,137 +508,21 @@ const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
         </div>
       </div>
 
-      {/* Referral Code Section */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border-2 border-pink-300 dark:border-pink-700 mb-6">
-        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Your Referral Code
-        </p>
-        <div className="flex items-center gap-2">
-          <div className="flex-1 bg-pink-50 dark:bg-pink-900/20 rounded-lg px-4 py-3">
-            <p className="font-mono font-bold text-lg text-pink-600 dark:text-pink-400 text-center">
-              {referralData.referralCode}
-            </p>
-          </div>
-          <button
-            onClick={copyReferralCode}
-            className="px-4 py-3 bg-pink-600 hover:bg-pink-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
-          >
-            <Copy className="w-4 h-4" />
-            Copy
-          </button>
-        </div>
-      </div>
-
-      {/* Referral Link Section */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-pink-200 dark:border-pink-700 mb-6">
-        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Your Referral Link
-        </p>
-        <div className="flex items-center gap-2 w-full overflow-hidden">
-          <div className="flex-1 min-w-0 bg-gray-50 dark:bg-gray-900 rounded-lg px-3 sm:px-4 py-2.5 border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <p className="text-xs text-gray-600 dark:text-gray-400 truncate font-mono break-all">
-              {referralLink}
-            </p>
-          </div>
-          <button
-            onClick={copyToClipboard}
-            className={`px-3 sm:px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center gap-1.5 sm:gap-2 flex-shrink-0 ${
-              copied
-                ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
-                : 'bg-pink-600 hover:bg-pink-700 text-white'
-            }`}
-          >
-            {copied ? (
-              <>
-                <Check className="w-4 h-4" />
-                <span className="hidden sm:inline">Copied!</span>
-              </>
-            ) : (
-              <>
-                <Link2 className="w-4 h-4" />
-                <span className="hidden sm:inline">Copy</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* Share Buttons */}
-      <div>
-        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-          Share via
-        </p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={shareViaWhatsApp}
-            className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all ${
-              shareMethod === 'whatsapp'
-                ? 'bg-green-500 border-green-600 text-white'
-                : 'bg-white dark:bg-gray-800 border-green-300 dark:border-green-700 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20'
-            }`}
-          >
-            <MessageCircle className="w-6 h-6" />
-            <span className="text-xs font-medium">WhatsApp</span>
-          </motion.button>
-
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={shareViaSMS}
-            className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all ${
-              shareMethod === 'sms'
-                ? 'bg-blue-500 border-blue-600 text-white'
-                : 'bg-white dark:bg-gray-800 border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20'
-            }`}
-          >
-            <MessageCircle className="w-6 h-6" />
-            <span className="text-xs font-medium">SMS</span>
-          </motion.button>
-
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={shareViaEmail}
-            className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all ${
-              shareMethod === 'email'
-                ? 'bg-purple-500 border-purple-600 text-white'
-                : 'bg-white dark:bg-gray-800 border-purple-300 dark:border-purple-700 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20'
-            }`}
-          >
-            <Mail className="w-6 h-6" />
-            <span className="text-xs font-medium">Email</span>
-          </motion.button>
-
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={copyToClipboard}
-            className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all ${
-              copied
-                ? 'bg-emerald-500 border-emerald-600 text-white'
-                : 'bg-white dark:bg-gray-800 border-pink-300 dark:border-pink-700 text-pink-600 dark:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-900/20'
-            }`}
-          >
-            {copied ? (
-              <>
-                <Check className="w-6 h-6" />
-                <span className="text-xs font-medium">Copied!</span>
-              </>
-            ) : (
-              <>
-                <Link2 className="w-6 h-6" />
-                <span className="text-xs font-medium">Copy Link</span>
-              </>
-            )}
-          </motion.button>
-        </div>
-      </div>
-
       {/* Milestones Section */}
       {milestoneData && (
-        <div className="mt-6 pt-6 border-t border-pink-200 dark:border-pink-700">
+        <div className="mt-5 pt-5 border-t border-pink-200 dark:border-pink-700">
+          {(() => {
+            const allMilestones = milestoneData.milestones || [];
+            const achievedMilestones = allMilestones.filter((milestone) => milestone.isAchieved).length;
+            const previewMilestones = showAllMilestones ? allMilestones : allMilestones.slice(0, 3);
+            const shouldShowToggle = allMilestones.length > 3;
+            const nextMilestone = milestoneData.nextMilestone;
+            const referralsDone = milestoneData.completedReferrals || 0;
+            const referralsNeeded = nextMilestone?.referrals || referralsDone;
+            const referralsRemaining = Math.max(referralsNeeded - referralsDone, 0);
+
+            return (
+              <>
           <div className="flex items-center justify-between mb-4">
             <h4 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-pink-600" />
@@ -499,124 +536,175 @@ const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
           </div>
 
           {/* Next Milestone */}
-          {milestoneData.nextMilestone && (
-            <div className="mb-6 p-4 bg-gradient-to-r from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20 rounded-xl border border-pink-200 dark:border-pink-700">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <p className="font-semibold text-gray-900 dark:text-white">
-                    Next Milestone: {milestoneData.nextMilestone.name}
-                  </p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">
-                    {milestoneData.nextMilestone.description}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-lg font-bold text-pink-600 dark:text-pink-400">
-                    ₹{milestoneData.nextMilestone.bonus}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Reward</p>
-                </div>
+          <div className="mb-4 grid grid-cols-3 gap-2">
+            <div className="rounded-lg border border-pink-200 dark:border-pink-800 bg-pink-50/70 dark:bg-pink-900/20 px-3 py-2">
+              <p className="text-[11px] text-gray-600 dark:text-gray-400">Completed</p>
+              <p className="text-sm font-bold text-gray-900 dark:text-white">
+                {achievedMilestones}/{allMilestones.length}
+              </p>
+            </div>
+            <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-900/20 px-3 py-2">
+              <p className="text-[11px] text-gray-600 dark:text-gray-400">Unlocked</p>
+              <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                {formatPrice(milestoneData.totalMilestoneBonuses || 0)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-900/20 px-3 py-2">
+              <p className="text-[11px] text-gray-600 dark:text-gray-400">Remaining</p>
+              <p className="text-sm font-bold text-amber-700 dark:text-amber-300">
+                {Math.max(allMilestones.length - achievedMilestones, 0)}
+              </p>
+            </div>
+          </div>
+
+          {nextMilestone ? (
+            <div className="mb-5 p-4 bg-gradient-to-r from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20 rounded-xl border border-pink-200 dark:border-pink-700">
+              <div className="flex items-center justify-between gap-3 mb-1">
+                <p className="font-semibold text-gray-900 dark:text-white">
+                  Next reward: {formatPrice(nextMilestone.bonus)}
+                </p>
+                <span className="text-xs font-semibold px-2 py-1 rounded-full bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300">
+                  In progress
+                </span>
               </div>
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                {referralsRemaining > 0
+                  ? `${referralsRemaining} more successful referral${referralsRemaining > 1 ? 's' : ''} to unlock ${nextMilestone.name}.`
+                  : `You are at ${nextMilestone.name}. Complete the remaining step to unlock reward.`}
+              </p>
               <div className="mt-3">
-                <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
+                <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400 mb-1.5">
                   <span>
-                    {milestoneData.completedReferrals} / {milestoneData.nextMilestone.referrals} referrals
+                    {referralsDone} / {referralsNeeded} referrals
                   </span>
-                  <span>{milestoneData.nextMilestone.progress}%</span>
+                  <span className="px-2 py-0.5 rounded-full bg-pink-100 dark:bg-pink-900/40 text-pink-700 dark:text-pink-300 font-medium">
+                    {referralsRemaining} left
+                  </span>
                 </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                <div className="w-full bg-pink-100 dark:bg-pink-900/35 rounded-full h-2.5 border border-pink-200/80 dark:border-pink-800/60">
                   <motion.div
                     initial={{ width: 0 }}
-                    animate={{ width: `${milestoneData.nextMilestone.progress}%` }}
+                    animate={{ width: `${nextMilestone.progress}%` }}
                     transition={{ duration: 0.5 }}
-                    className="bg-gradient-to-r from-pink-500 to-rose-500 h-2.5 rounded-full"
+                    className="bg-gradient-to-r from-pink-500 via-rose-500 to-fuchsia-500 h-2.5 rounded-full"
                   />
                 </div>
+                <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-1.5">
+                  Complete referral onboarding to unlock this reward faster.
+                </p>
               </div>
+            </div>
+          ) : (
+            <div className="mb-5 p-4 rounded-xl border border-emerald-200 dark:border-emerald-700 bg-emerald-50/70 dark:bg-emerald-900/20">
+              <p className="font-semibold text-emerald-700 dark:text-emerald-300">Great job! All milestones are unlocked.</p>
+              <p className="text-xs text-emerald-700/90 dark:text-emerald-300/90 mt-1">
+                Keep sharing to maintain your referral momentum.
+              </p>
             </div>
           )}
 
           {/* All Milestones */}
-          <div className="space-y-3">
-            {milestoneData.milestones.map((milestone, index) => (
-              <div
-                key={index}
-                className={`p-3 rounded-lg border-2 ${
-                  milestone.isAchieved
-                    ? 'bg-gradient-to-r from-emerald-50 to-green-50 dark:from-emerald-900/20 dark:to-green-900/20 border-emerald-300 dark:border-emerald-700'
-                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 flex-1">
-                    {milestone.isAchieved ? (
-                      <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center">
-                        <Check className="w-6 h-6 text-white" />
+          <div className="space-y-2.5">
+            {previewMilestones.map((milestone, index) => {
+              const referralsLeft = Math.max((milestone.referrals || 0) - referralsDone, 0);
+              const statusLabel = milestone.isAchieved
+                ? 'Unlocked'
+                : referralsLeft > 0
+                  ? `${referralsLeft} left`
+                  : 'In progress';
+
+              return (
+                <div
+                  key={index}
+                  className={`p-3 rounded-xl border ${
+                    milestone.isAchieved
+                      ? 'bg-emerald-50/80 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700'
+                      : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center ${
+                      milestone.isAchieved
+                        ? 'bg-emerald-500'
+                        : 'bg-gray-100 dark:bg-gray-700'
+                    }`}>
+                      {milestone.isAchieved ? (
+                        <Check className="w-4 h-4 text-white" />
+                      ) : (
+                        <Gift className="w-4 h-4 text-gray-500 dark:text-gray-300" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className={`font-semibold truncate ${
+                          milestone.isAchieved ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-900 dark:text-white'
+                        }`}>
+                          {milestone.name}
+                        </p>
+                        <p className={`font-bold ${
+                          milestone.isAchieved ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-700 dark:text-gray-200'
+                        }`}>
+                          {formatPrice(milestone.bonus || 0)}
+                        </p>
                       </div>
-                    ) : (
-                      <div className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center">
-                        <Gift className="w-5 h-5 text-gray-400" />
+                      <div className="flex items-center justify-between mt-0.5">
+                        <p className="text-xs text-gray-600 dark:text-gray-400">
+                          Target: {milestone.referrals} referrals
+                        </p>
+                        <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                          milestone.isAchieved
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                            : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                        }`}>
+                          {statusLabel}
+                        </span>
                       </div>
-                    )}
-                    <div className="flex-1">
-                      <p className={`font-semibold ${milestone.isAchieved ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-900 dark:text-white'}`}>
-                        {milestone.name}
-                      </p>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">
-                        {milestone.referrals} referrals • {milestone.description}
-                      </p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className={`font-bold ${milestone.isAchieved ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400'}`}>
-                      ₹{milestone.bonus}
-                    </p>
-                  </div>
+
+                  {!milestone.isAchieved && (
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[11px] text-gray-600 dark:text-gray-400">
+                          Need {referralsLeft} more
+                        </span>
+                        <span className="text-[11px] text-pink-600 dark:text-pink-300 font-medium">
+                          {milestone.progress}% complete
+                        </span>
+                      </div>
+                      <div className="w-full bg-pink-100 dark:bg-pink-900/30 rounded-full h-1.5 border border-pink-200/80 dark:border-pink-800/50">
+                        <div
+                          className="bg-gradient-to-r from-pink-400 via-rose-400 to-fuchsia-500 h-1.5 rounded-full transition-all"
+                          style={{ width: `${milestone.progress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
-                {!milestone.isAchieved && (
-                  <div className="mt-2">
-                    <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
-                      <span>Progress</span>
-                      <span>{milestone.progress}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
-                      <div
-                        className="bg-gradient-to-r from-pink-400 to-rose-400 h-1.5 rounded-full transition-all"
-                        style={{ width: `${milestone.progress}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
+
+          {shouldShowToggle && (
+            <div className="mt-3 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setShowAllMilestones((prev) => !prev)}
+                className="text-sm font-medium text-pink-600 dark:text-pink-300 hover:text-pink-700 dark:hover:text-pink-200 transition-colors"
+              >
+                {showAllMilestones ? 'View less milestones' : `View all milestones (${allMilestones.length})`}
+              </button>
+            </div>
+          )}
+              </>
+            );
+          })()}
         </div>
       )}
 
       {/* How it Works */}
-      <div className="mt-6 pt-6 border-t border-pink-200 dark:border-pink-700">
-        <h4 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-          <TrendingUp className="w-5 h-5 text-pink-600" />
-          How it Works
-        </h4>
-        <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-          <div className="flex items-start gap-2">
-            <span className="font-bold text-pink-600">1.</span>
-            <span>Share your referral code or link with friends</span>
-          </div>
-          <div className="flex items-start gap-2">
-            <span className="font-bold text-pink-600">2.</span>
-            <span>They sign up using your code and get ₹50 welcome bonus + ₹25 extra</span>
-          </div>
-          <div className="flex items-start gap-2">
-            <span className="font-bold text-pink-600">3.</span>
-            <span>When they complete their first order, you get ₹50 in your wallet!</span>
-          </div>
-        </div>
-      </div>
-
       {/* Terms & Conditions */}
-      <div className="mt-6 pt-6 border-t border-pink-200 dark:border-pink-700">
+      <div className="mt-5 pt-5 border-t border-pink-200 dark:border-pink-700">
         <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Terms & Conditions</h4>
         <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
           Referral rewards are credited after the referred friend completes their first order.
@@ -674,28 +762,43 @@ const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
       {/* Tier System Section */}
       {activeSection === 'tier' && tierData && (
         <div className="space-y-4 sm:space-y-6">
-          {/* Current Tier Card - Mobile Optimized */}
-          <div className={`bg-gradient-to-br ${tierData.currentTier.badgeColor} rounded-2xl p-4 sm:p-6 border-2 border-opacity-50 shadow-lg`}>
-            <div className="flex items-start justify-between mb-3 sm:mb-4">
-              <div className="flex items-center gap-3 flex-1">
-                <div className="w-14 h-14 sm:w-16 sm:h-16 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm flex-shrink-0">
+          {/* Current Tier Card */}
+          <div className={`relative overflow-hidden bg-gradient-to-br ${tierData.currentTier.badgeColor} rounded-2xl p-4 sm:p-6 border border-white/20 shadow-[0_16px_36px_rgba(17,24,39,0.24)]`}>
+            <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-white/15 blur-2xl pointer-events-none" />
+            <div className="absolute -bottom-10 -left-8 w-24 h-24 rounded-full bg-black/10 blur-xl pointer-events-none" />
+
+            <div className="relative z-10 flex items-start justify-between mb-4">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/20 flex-shrink-0">
                   <span className="text-2xl sm:text-3xl">{tierData.currentTier.icon}</span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm text-white/80 mb-0.5">Your Current Tier</p>
+                  <p className="text-xs sm:text-sm text-white/85 mb-0.5">Your Current Tier</p>
                   <h3 className="text-xl sm:text-3xl font-bold text-white leading-tight">
                     {tierData.currentTier.name || tierData.currentTier.tier}
                   </h3>
-                  <p className="text-xs sm:text-sm text-white/70 mt-0.5">{tierData.currentTier.tier} Tier</p>
+                  <p className="text-xs sm:text-sm text-white/75 mt-0.5">{tierData.currentTier.tier} Tier</p>
                 </div>
               </div>
-              <div className="text-right flex-shrink-0 ml-2">
-                <p className="text-xs sm:text-sm text-white/80 mb-0.5">Bonus</p>
-                <p className="text-xl sm:text-2xl font-bold text-white">{(tierData.bonusMultiplier * 100).toFixed(0)}%</p>
+              <div className="text-right flex-shrink-0 ml-3">
+                <p className="text-[11px] sm:text-xs text-white/80 mb-0.5">Bonus</p>
+                <p className="text-2xl sm:text-3xl font-extrabold text-white">{(tierData.bonusMultiplier * 100).toFixed(0)}%</p>
               </div>
             </div>
-            <div className="bg-white/20 rounded-xl p-3 sm:p-4 backdrop-blur-sm">
-              <p className="text-white font-semibold mb-2 text-sm sm:text-base">Tier Benefits:</p>
+
+            <div className="relative z-10 grid grid-cols-2 gap-2 mb-3">
+              <div className="rounded-lg bg-black/15 border border-white/20 px-3 py-2">
+                <p className="text-[11px] text-white/70">Completed referrals</p>
+                <p className="text-sm sm:text-base font-bold text-white">{tierData.completedReferrals}</p>
+              </div>
+              <div className="rounded-lg bg-black/15 border border-white/20 px-3 py-2">
+                <p className="text-[11px] text-white/70">Tier status</p>
+                <p className="text-sm sm:text-base font-bold text-white">Active now</p>
+              </div>
+            </div>
+
+            <div className="relative z-10 bg-black/15 border border-white/20 rounded-xl p-3 sm:p-4 backdrop-blur-sm">
+              <p className="text-white font-semibold mb-2 text-sm sm:text-base">Tier Benefits</p>
               <ul className="space-y-1.5 text-white/90 text-xs sm:text-sm">
                 {tierData.currentTier.benefits.map((benefit, idx) => (
                   <li key={idx} className="flex items-start gap-2">
@@ -709,10 +812,10 @@ const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
 
           {/* Next Tier Progress - Mobile Optimized */}
           {tierData.nextTier && (
-            <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 sm:p-6 border border-pink-200 dark:border-pink-700">
+            <div className="rounded-2xl p-4 sm:p-6 border border-pink-200 dark:border-pink-700 bg-gradient-to-br from-white via-rose-50/80 to-pink-50 dark:from-gray-800 dark:via-gray-800 dark:to-pink-900/10 shadow-sm">
               <div className="flex items-start justify-between mb-3 sm:mb-4">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 bg-pink-50 dark:bg-pink-900/20 rounded-full flex items-center justify-center flex-shrink-0">
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 bg-pink-100 dark:bg-pink-900/30 rounded-2xl border border-pink-200 dark:border-pink-800 flex items-center justify-center flex-shrink-0">
                     <span className="text-xl sm:text-2xl">{tierData.nextTier.icon}</span>
                   </div>
                   <div className="flex-1 min-w-0">
@@ -730,17 +833,29 @@ const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
                   </p>
                 </div>
               </div>
-              <div className="mt-3 sm:mt-4">
-                <div className="flex items-center justify-between text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1.5 sm:mb-2">
-                  <span>Progress to {tierData.nextTier.tier}</span>
-                  <span className="font-semibold">{tierData.progressToNextTier}%</span>
+
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div className="rounded-lg bg-white/80 dark:bg-gray-900/40 border border-pink-100 dark:border-pink-800/50 px-3 py-2">
+                  <p className="text-[11px] text-gray-600 dark:text-gray-400">Referrals done</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{tierData.completedReferrals}</p>
                 </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 sm:h-3">
+                <div className="rounded-lg bg-white/80 dark:bg-gray-900/40 border border-pink-100 dark:border-pink-800/50 px-3 py-2">
+                  <p className="text-[11px] text-gray-600 dark:text-gray-400">To unlock</p>
+                  <p className="text-sm font-semibold text-pink-600 dark:text-pink-400">{tierData.referralsNeeded} more</p>
+                </div>
+              </div>
+
+              <div className="mt-2">
+                <div className="flex items-center justify-between text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1.5">
+                  <span>Progress to {tierData.nextTier.tier}</span>
+                  <span className="font-semibold text-pink-600 dark:text-pink-300">{tierData.progressToNextTier}%</span>
+                </div>
+                <div className="w-full bg-pink-100 dark:bg-pink-900/35 rounded-full h-2.5 border border-pink-200/80 dark:border-pink-800/50">
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: `${tierData.progressToNextTier}%` }}
                     transition={{ duration: 0.5 }}
-                    className={`bg-gradient-to-r ${tierData.nextTier.badgeColor} h-2 sm:h-3 rounded-full`}
+                    className={`bg-gradient-to-r ${tierData.nextTier.badgeColor} h-2.5 rounded-full`}
                   />
                 </div>
               </div>
@@ -756,17 +871,17 @@ const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
               return (
                 <div
                   key={index}
-                  className={`p-3 sm:p-4 rounded-xl border-2 transition-all ${
+                  className={`p-3 sm:p-4 rounded-xl border transition-all ${
                     isCurrentTier
-                      ? `bg-gradient-to-r ${tier.badgeColor} border-opacity-50 text-white shadow-md`
+                      ? `bg-gradient-to-r ${tier.badgeColor} border-white/25 text-white shadow-md`
                       : isUnlocked
-                      ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700'
-                      : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
+                      ? 'bg-emerald-50/80 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700'
+                      : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-pink-200 dark:hover:border-pink-800'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
+                      <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
                         isCurrentTier 
                           ? 'bg-white/20 backdrop-blur-sm' 
                           : isUnlocked
@@ -786,7 +901,7 @@ const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
                     </div>
                     <div className="flex-shrink-0">
                       {isCurrentTier && (
-                        <span className="px-2.5 py-1 bg-white/20 rounded-full text-xs font-semibold text-white whitespace-nowrap">
+                        <span className="px-2.5 py-1 bg-white/20 border border-white/30 rounded-full text-xs font-semibold text-white whitespace-nowrap">
                           Current
                         </span>
                       )}
@@ -804,52 +919,79 @@ const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
 
       {/* Leaderboard Section */}
       {activeSection === 'leaderboard' && (
-        <div className="space-y-6">
-          {/* User Rank Card */}
-          {userRank && (
-            <div className="bg-gradient-to-r from-pink-500 to-rose-500 rounded-xl p-6 text-white">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-white/80 mb-1">Your Rank</p>
-                  <h3 className="text-4xl font-bold">
-                    #{userRank.rank || '—'}
-                  </h3>
-                </div>
-                <div className="text-right space-y-1">
-                  <p className="text-sm text-white/80">Completed</p>
-                  <p className="text-2xl font-bold">{userRank.completedReferrals}</p>
-                  <p className="text-sm text-white/80">Total Earned</p>
-                  <p className="text-xl font-bold">{formatPrice(userRank.totalEarnings)}</p>
-                </div>
+        <div className="space-y-4">
+          {(() => {
+            const hasUserCompletions = (userRank?.completedReferrals || 0) > 0;
+            const hasBoardCompletions = (leaderboardData?.leaderboard || []).some(
+              (entry) => (entry.completedReferrals || 0) > 0
+            );
+            const hasRealLeaderboardActivity = hasUserCompletions || hasBoardCompletions;
+            const isTopRank = hasRealLeaderboardActivity && userRank?.rank === 1 && hasUserCompletions;
+
+            return (
+              <>
+          <div className="rounded-xl border border-indigo-200 dark:border-indigo-800 bg-gradient-to-r from-indigo-50 via-violet-50 to-fuchsia-50 dark:from-indigo-900/25 dark:via-violet-900/20 dark:to-fuchsia-900/20 p-3.5">
+            <p className="text-sm font-semibold text-indigo-900 dark:text-indigo-200 flex items-center gap-2">
+              <Trophy className="w-4 h-4 text-indigo-600 dark:text-indigo-300" />
+              Quarterly leaderboard
+            </p>
+            <p className="mt-1 text-xs text-indigo-800/85 dark:text-indigo-200/85">
+              Based on successful referrals + credited rewards.
+            </p>
+          </div>
+
+          <div className="bg-gradient-to-br from-violet-600 via-fuchsia-600 to-indigo-600 rounded-2xl p-4 sm:p-5 text-white shadow-lg">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs sm:text-sm text-white/80 mb-1">Your Rank</p>
+                <h3 className="text-4xl sm:text-5xl font-extrabold">
+                  {hasRealLeaderboardActivity ? `#${userRank?.rank || '—'}` : '—'}
+                </h3>
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white/20 border border-white/25 text-white/95">
+                {isTopRank ? 'You are on top' : hasRealLeaderboardActivity ? 'Live standings' : 'Not ranked yet'}
+              </span>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2.5">
+              <div className="rounded-lg bg-white/15 border border-white/20 px-3 py-2.5">
+                <p className="text-[11px] text-white/75">Completed</p>
+                <p className="text-xl font-bold">{userRank?.completedReferrals ?? 0}</p>
+              </div>
+              <div className="rounded-lg bg-white/15 border border-white/20 px-3 py-2.5">
+                <p className="text-[11px] text-white/75">Total Earned</p>
+                <p className="text-xl font-bold">{formatPrice(userRank?.totalEarnings ?? 0)}</p>
               </div>
             </div>
-          )}
+
+          </div>
 
           {/* Leaderboard List */}
-          {leaderboardData && (
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-pink-200 dark:border-pink-700 overflow-hidden">
-              <div className="p-4 border-b border-pink-200 dark:border-pink-700">
-                <h4 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                  <Trophy className="w-5 h-5 text-pink-600" />
-                  Top Referrers
-                </h4>
-              </div>
-              <div className="divide-y divide-pink-200 dark:divide-pink-700">
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-indigo-200 dark:border-indigo-800 overflow-hidden">
+            <div className="p-4 border-b border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-900/20">
+              <h4 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-indigo-600 dark:text-indigo-300" />
+                Top Referrers
+              </h4>
+            </div>
+
+            {leaderboardData?.leaderboard?.length ? (
+              <div className="divide-y divide-indigo-100 dark:divide-indigo-900/40">
                 {leaderboardData.leaderboard.map((user, index) => {
                   const isTopThree = index < 3;
                   return (
                     <div
                       key={user.customerId}
                       className={`p-4 flex items-center justify-between ${
-                        isTopThree ? 'bg-gradient-to-r from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20' : ''
+                        isTopThree ? 'bg-gradient-to-r from-indigo-50/70 to-violet-50/70 dark:from-indigo-900/20 dark:to-violet-900/20' : ''
                       }`}
                     >
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
                           index === 0 ? 'bg-gradient-to-br from-yellow-400 to-yellow-600 text-white' :
-                          index === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-500 text-white' :
-                          index === 2 ? 'bg-gradient-to-br from-amber-600 to-amber-800 text-white' :
-                          'bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400'
+                          index === 1 ? 'bg-gradient-to-br from-slate-300 to-slate-500 text-white' :
+                          index === 2 ? 'bg-gradient-to-br from-amber-500 to-amber-700 text-white' :
+                          'bg-indigo-100 dark:bg-indigo-900/35 text-indigo-600 dark:text-indigo-300'
                         }`}>
                           {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${user.rank}`}
                         </div>
@@ -858,12 +1000,12 @@ const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
                             {user.name}
                           </p>
                           <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {user.completedReferrals} completed
+                            {user.completedReferrals} successful
                           </p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-pink-600 dark:text-pink-400">
+                        <p className="font-bold text-indigo-700 dark:text-indigo-300">
                           {formatPrice(user.totalEarnings)}
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -874,79 +1016,108 @@ const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
                   );
                 })}
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="p-4 text-sm text-gray-600 dark:text-gray-400">
+                No leaderboard activity yet. Start sharing now to appear in the rankings.
+              </div>
+            )}
+          </div>
+              </>
+            );
+          })()}
         </div>
       )}
 
       {/* Analytics Section */}
       {activeSection === 'analytics' && analyticsData && (
-        <div className="space-y-6">
+        <div className="space-y-4">
+          <div className="rounded-xl border border-sky-200 dark:border-sky-800 bg-gradient-to-r from-sky-50 via-cyan-50 to-blue-50 dark:from-sky-900/25 dark:via-cyan-900/20 dark:to-blue-900/20 p-3.5">
+            <p className="text-sm font-semibold text-sky-900 dark:text-sky-200 flex items-center gap-2">
+              <Activity className="w-4 h-4 text-sky-600 dark:text-sky-300" />
+              Analytics
+            </p>
+            <p className="mt-1 text-xs text-sky-800/85 dark:text-sky-200/85">
+              Conversion and rewards snapshot.
+            </p>
+          </div>
+
           {/* Overall Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-pink-200 dark:border-pink-700">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="rounded-xl p-4 border border-fuchsia-200 dark:border-fuchsia-800 bg-fuchsia-50/70 dark:bg-fuchsia-900/20">
               <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Conversion Rate</p>
-              <p className="text-2xl font-bold text-pink-600 dark:text-pink-400">
+              <p className="text-2xl font-bold text-fuchsia-600 dark:text-fuchsia-300">
                 {analyticsData.overall.conversionRate.toFixed(1)}%
               </p>
             </div>
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-pink-200 dark:border-pink-700">
+            <div className="rounded-xl p-4 border border-blue-200 dark:border-blue-800 bg-blue-50/70 dark:bg-blue-900/20">
               <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Avg. Conversion</p>
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+              <p className="text-2xl font-bold text-blue-600 dark:text-blue-300">
                 {analyticsData.overall.avgConversionDays.toFixed(1)} days
               </p>
             </div>
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-pink-200 dark:border-pink-700">
+            <div className="rounded-xl p-4 border border-amber-200 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-900/20">
               <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Pending</p>
-              <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+              <p className="text-2xl font-bold text-amber-600 dark:text-amber-300">
                 {analyticsData.overall.pendingReferrals}
               </p>
             </div>
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-pink-200 dark:border-pink-700">
+            <div className="rounded-xl p-4 border border-emerald-200 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-900/20">
               <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Pending Earnings</p>
-              <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+              <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-300">
                 {formatPrice(analyticsData.overall.pendingEarnings)}
               </p>
             </div>
           </div>
 
           {/* Referrals Chart Data */}
-          {analyticsData.referralsByDate.length > 0 && (
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-pink-200 dark:border-pink-700">
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                <Activity className="w-5 h-5 text-pink-600" />
-                Referrals Over Time (Last 30 Days)
-              </h4>
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-sky-200 dark:border-sky-800">
+            <h4 className="font-semibold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
+              <Activity className="w-5 h-5 text-sky-600 dark:text-sky-300" />
+              Referrals Over Time
+            </h4>
+            <div className="mb-2" />
+
+            {analyticsData.referralsByDate.length > 0 ? (
               <div className="space-y-2">
-                {analyticsData.referralsByDate.slice(-7).map((item, index) => (
-                  <div key={index} className="flex items-center gap-4">
-                    <div className="w-20 text-xs text-gray-600 dark:text-gray-400">
-                      {new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </div>
-                    <div className="flex-1 flex items-center gap-2">
-                      <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-4 relative">
-                        <div
-                          className="bg-gradient-to-r from-pink-500 to-rose-500 h-4 rounded-full"
-                          style={{ width: `${(item.completed / Math.max(...analyticsData.referralsByDate.map(r => r.completed))) * 100}%` }}
-                        />
+                {analyticsData.referralsByDate.slice(-7).map((item, index) => {
+                  const maxCompleted = Math.max(1, ...analyticsData.referralsByDate.map((r) => r.completed || 0));
+                  const widthPercent = ((item.completed || 0) / maxCompleted) * 100;
+
+                  return (
+                    <div key={index} className="flex items-center gap-3">
+                      <div className="w-20 text-xs text-gray-600 dark:text-gray-400">
+                        {new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       </div>
-                      <span className="text-xs font-medium text-gray-900 dark:text-white w-12 text-right">
-                        {item.completed}/{item.total}
-                      </span>
+                      <div className="flex-1 flex items-center gap-2">
+                        <div className="flex-1 bg-sky-100 dark:bg-sky-900/30 rounded-full h-4 relative border border-sky-200/80 dark:border-sky-800/60">
+                          <div
+                            className="bg-gradient-to-r from-sky-500 to-cyan-500 h-4 rounded-full"
+                            style={{ width: `${widthPercent}%` }}
+                          />
+                        </div>
+                        <span className="text-xs font-medium text-gray-900 dark:text-white w-14 text-right">
+                          {item.completed}/{item.total}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="text-sm text-gray-600 dark:text-gray-400 py-2">
+                No trend data yet.
+              </div>
+            )}
+          </div>
 
           {/* Top Referrals */}
-          {analyticsData.topReferrals.length > 0 && (
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-pink-200 dark:border-pink-700">
-              <div className="p-4 border-b border-pink-200 dark:border-pink-700">
-                <h4 className="font-semibold text-gray-900 dark:text-white">Top Referrals</h4>
-              </div>
-              <div className="divide-y divide-pink-200 dark:divide-pink-700">
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-cyan-200 dark:border-cyan-800">
+            <div className="p-4 border-b border-cyan-200 dark:border-cyan-800">
+              <h4 className="font-semibold text-gray-900 dark:text-white">Top Referrals</h4>
+            </div>
+
+            {analyticsData.topReferrals.length > 0 ? (
+              <div className="divide-y divide-cyan-100 dark:divide-cyan-900/40">
                 {analyticsData.topReferrals.map((referral, index) => (
                   <div key={index} className="p-4 flex items-center justify-between">
                     <div>
@@ -974,11 +1145,142 @@ const ReferAndEarn = ({ compact = false, onReferNowClick }) => {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="p-4 text-sm text-gray-600 dark:text-gray-400">
+                No top referrals yet.
+              </div>
+            )}
+          </div>
         </div>
       )}
-    </motion.div>
+      </motion.div>
+
+      {/* Sticky footer CTA */}
+      <div className="fixed inset-x-0 bottom-0 z-[120] pointer-events-none">
+        <div className="mx-auto max-w-5xl border-t border-gray-200/80 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.8rem)] shadow-[0_-6px_24px_rgba(15,23,42,0.08)]">
+          <button
+            type="button"
+            onClick={() => setShareSheetOpen(true)}
+            className="pointer-events-auto mx-auto flex w-full max-w-md items-center justify-center rounded-full bg-gradient-to-r from-pink-600 to-rose-600 px-6 py-3.5 text-base font-semibold text-white hover:from-pink-700 hover:to-rose-700 active:scale-[0.99] transition-all"
+          >
+            Refer now
+          </button>
+        </div>
+      </div>
+
+      {/* Bottom share sheet */}
+      {mounted && shareSheetOpen && createPortal(
+        <>
+          <div
+            className="fixed inset-0 z-[200] bg-black/50 dark:bg-black/70 backdrop-blur-sm transition-opacity duration-300"
+            onClick={() => setShareSheetOpen(false)}
+            aria-hidden
+          />
+          <div
+            className="fixed inset-x-0 bottom-0 z-[201] w-full max-w-lg mx-auto rounded-t-3xl bg-white dark:bg-gray-900 shadow-2xl border-t border-x border-gray-100 dark:border-gray-800 animate-in fade-in slide-in-from-bottom-4 duration-300 pb-[max(1rem,env(safe-area-inset-bottom))] max-h-[90vh] overflow-y-auto"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="referral-share-sheet-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-100 dark:border-gray-800">
+              <h2 id="referral-share-sheet-title" className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                Share your referral code
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShareSheetOpen(false)}
+                className="p-2 rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                aria-label="Close share sheet"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="px-4 pt-4">
+              <div className="mb-2 rounded-lg border border-pink-200 dark:border-pink-800 bg-pink-50/70 dark:bg-pink-900/20 px-3 py-2">
+                <p className="text-[11px] text-gray-600 dark:text-gray-300 mb-1">Referral code</p>
+                <p className="font-mono text-sm font-semibold text-pink-700 dark:text-pink-300">{referralData?.referralCode}</p>
+              </div>
+
+              <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-800/50">
+                <input
+                  readOnly
+                  type="text"
+                  value={referralLink}
+                  className="flex-1 min-w-0 px-3 py-2.5 text-xs sm:text-sm text-gray-700 dark:text-gray-200 bg-transparent border-0 outline-none truncate"
+                />
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(true)}
+                  className="flex-shrink-0 px-3 border-l border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  aria-label="Copy referral link"
+                >
+                  <Copy className="w-5 h-5 mx-auto" />
+                </button>
+              </div>
+            </div>
+
+            <div className="px-4 pt-6 pb-6">
+              <div className="flex justify-between items-start gap-2 max-w-md mx-auto">
+                <button
+                  type="button"
+                  onClick={() => shareViaWhatsApp(true)}
+                  className="flex flex-col items-center gap-2 flex-1 min-w-0"
+                >
+                  <span className="w-12 h-12 rounded-full bg-[#25D366] text-white flex items-center justify-center shadow-md">
+                    <MessageCircle className="w-5 h-5" />
+                  </span>
+                  <span className="text-[11px] text-gray-600 dark:text-gray-400 text-center font-medium leading-tight">
+                    WhatsApp
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => shareViaSMS(true)}
+                  className="flex flex-col items-center gap-2 flex-1 min-w-0"
+                >
+                  <span className="w-12 h-12 rounded-full bg-[#1877F2] text-white flex items-center justify-center shadow-md">
+                    <MessageCircle className="w-5 h-5" />
+                  </span>
+                  <span className="text-[11px] text-gray-600 dark:text-gray-400 text-center font-medium leading-tight">
+                    SMS
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => shareViaEmail(true)}
+                  className="flex flex-col items-center gap-2 flex-1 min-w-0"
+                >
+                  <span className="w-12 h-12 rounded-full bg-gradient-to-br from-[#f09433] via-[#dc2743] to-[#bc1888] text-white flex items-center justify-center shadow-md">
+                    <Mail className="w-5 h-5" />
+                  </span>
+                  <span className="text-[11px] text-gray-600 dark:text-gray-400 text-center font-medium leading-tight">
+                    Email
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={shareViaNative}
+                  className="flex flex-col items-center gap-2 flex-1 min-w-0"
+                >
+                  <span className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 flex items-center justify-center shadow-md">
+                    <MoreHorizontal className="w-6 h-6" />
+                  </span>
+                  <span className="text-[11px] text-gray-600 dark:text-gray-400 text-center font-medium leading-tight">
+                    More apps
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+    </>
   );
 };
 

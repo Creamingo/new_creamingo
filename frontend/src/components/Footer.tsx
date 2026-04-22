@@ -219,12 +219,27 @@ const Footer: React.FC = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
                   </svg>
                   <a 
-                    href="https://dev.creamingo.com" 
-                    rel="nofollow" 
-                    target="_blank" 
-                    className="text-gray-300 dark:text-gray-400 hover:text-blue-400 dark:hover:text-blue-300 transition-colors duration-300"
+                    href="/website-development"
+                    rel="noopener noreferrer"
+                    target="_blank"
+                    aria-label="Website Development (opens in new tab)"
+                    className="inline-flex items-center gap-1 text-gray-300 dark:text-gray-400 hover:text-blue-400 dark:hover:text-blue-300 transition-colors duration-300"
                   >
                     Website Development
+                    <svg
+                      className="w-3.5 h-3.5 opacity-80"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M14 3h7m0 0v7m0-7L10 14M21 14v5a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h5"
+                      />
+                    </svg>
                   </a>
                 </div>
               </div>

@@ -158,9 +158,14 @@ const ProductHero = ({ product, selectedVariant, isFavorite, onFavoriteToggle, o
         )}
 
         {/* Mobile: Wishlist and Share overlay */}
-        <div className="absolute top-4 right-4 flex items-center space-x-2 sm:hidden">
+        <div className="absolute top-4 right-4 flex items-center space-x-2 sm:hidden z-10">
           <button
-            onClick={onFavoriteToggle}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onFavoriteToggle?.();
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
             className={`w-10 h-10 rounded-full backdrop-blur-sm bg-white/80 dark:bg-gray-800/80 flex items-center justify-center shadow ${isFavorite ? 'text-rose-600 dark:text-rose-400' : 'text-gray-700 dark:text-gray-300'}`}
             aria-label="Save to wishlist"
           >
@@ -169,8 +174,13 @@ const ProductHero = ({ product, selectedVariant, isFavorite, onFavoriteToggle, o
             </svg>
           </button>
           <button
-            onClick={onQuickShare}
-            className="w-10 h-10 rounded-full backdrop-blur-sm bg-white/80 dark:bg-gray-800/80 flex items-center justify-center shadow text-gray-700 dark:text-gray-300"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onQuickShare?.();
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="w-10 h-10 rounded-full backdrop-blur-sm bg-white/80 dark:bg-gray-800/80 flex items-center justify-center shadow text-gray-700 dark:text-gray-300 [touch-action:manipulation]"
             aria-label="Share product"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

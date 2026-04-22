@@ -199,10 +199,12 @@ body[data-page="product"] header[class*="top-0"] {
     background-color: white !important; /* Ensure it has background */
   }
   
-  /* Dark mode background */
+  /* Dark mode background (support html.dark + any body-level dark class) */
+  html.dark body[data-page="product"] .product-location-bar-wrapper > div,
   body[data-page="product"].dark .product-location-bar-wrapper > div,
   body[data-page="product"] .dark .product-location-bar-wrapper > div {
     background-color: rgb(31, 41, 55) !important; /* gray-800 */
+    border-color: rgb(55, 65, 81) !important; /* gray-700 */
   }
   
   /* Add padding-top to main content area to account for fixed LocationBar */
@@ -627,17 +629,33 @@ h1, h2, h3, h4, h5, h6, .heading {
   width: 100% !important;
 }
 
+.birthday-calendar-inline.react-datepicker {
+  width: 100% !important;
+  border: 2px solid #fbcfe8 !important;
+  border-radius: 14px !important;
+  background: #fffafb !important;
+  overflow: hidden !important;
+  box-shadow: 0 10px 20px rgba(190, 24, 93, 0.1) !important;
+}
+
+.dark .birthday-calendar-inline.react-datepicker {
+  border-color: rgba(190, 24, 93, 0.45) !important;
+  background: #1f2937 !important;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4) !important;
+}
+
 /* Ensure calendar aligns flush with input */
 .birthday-calendar-popper {
   width: 100% !important;
+  margin-top: 6px !important;
 }
 
 .birthday-calendar-popper .react-datepicker {
   margin: 0 !important;
-  margin-top: -2px !important;
-  border-top-left-radius: 0 !important;
-  border-top-right-radius: 0 !important;
-  border-top: 2px solid #fbcfe8 !important;
+  border-radius: 12px !important;
+  border: 2px solid #fbcfe8 !important;
+  background: #fffafb !important;
+  box-shadow: 0 14px 28px rgba(190, 24, 93, 0.14) !important;
   width: 100% !important;
   min-width: 100% !important;
   max-width: 100% !important;
@@ -651,8 +669,14 @@ h1, h2, h3, h4, h5, h6, .heading {
 .birthday-calendar-popper[data-placement^="bottom"] {
   transform: translate3d(0, 0, 0) !important;
   left: 0 !important;
-  margin-top: 0 !important;
+  margin-top: 6px !important;
   padding-top: 0 !important;
+}
+
+.dark .birthday-calendar-popper .react-datepicker {
+  border: 2px solid rgba(190, 24, 93, 0.45) !important;
+  background: #1f2937 !important;
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.45) !important;
 }
 
 /* Remove calendar icon/arrow from input */
@@ -691,4 +715,151 @@ input[type="date"] {
 
 .react-datepicker__portal {
   z-index: 9999 !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Commerce typography & a11y tokens — cart, checkout, PDP, form fields       */
+/* -------------------------------------------------------------------------- */
+@layer components {
+  .heading-page {
+    @apply text-[22px] font-semibold leading-tight tracking-tight text-gray-900 dark:text-gray-100 sm:text-2xl sm:leading-tight lg:text-[28px] lg:leading-snug;
+  }
+
+  .heading-section {
+    @apply text-base font-bold text-gray-900 dark:text-gray-100 sm:text-lg;
+  }
+
+  .heading-subsection {
+    @apply text-sm font-semibold text-gray-900 dark:text-gray-100;
+  }
+
+  .text-cart-subtitle {
+    @apply text-sm text-gray-600 dark:text-gray-300 sm:text-base;
+  }
+
+  .text-cart-page-meta {
+    @apply text-xs leading-snug text-gray-500 dark:text-gray-400;
+  }
+
+  .text-cart-body {
+    @apply text-sm text-gray-600 dark:text-gray-300;
+  }
+
+  .text-cart-body-strong {
+    @apply text-sm font-semibold text-gray-800 dark:text-gray-200;
+  }
+
+  .text-cart-label {
+    @apply text-sm font-medium text-gray-700 dark:text-gray-300;
+  }
+
+  .text-cart-meta {
+    @apply text-xs text-gray-500 dark:text-gray-400;
+  }
+
+  .text-cart-meta-strong {
+    @apply text-xs font-semibold text-gray-600 dark:text-gray-300;
+  }
+
+  .text-cart-section-muted {
+    @apply text-sm font-medium text-gray-500 dark:text-gray-400 sm:text-base;
+  }
+
+  .text-cart-card-title {
+    @apply text-sm font-semibold text-gray-900 dark:text-gray-100 sm:text-base;
+  }
+
+  .text-cart-card-title-lg {
+    @apply text-base font-semibold text-gray-900 dark:text-gray-100 sm:text-lg;
+  }
+
+  .text-cart-pill {
+    @apply text-xs font-semibold;
+  }
+
+  .text-cart-panel-title {
+    @apply text-sm font-bold text-gray-900 dark:text-gray-100;
+  }
+
+  .text-cart-savings-title {
+    @apply text-sm font-semibold leading-tight text-gray-900 dark:text-gray-100;
+  }
+
+  .text-cart-modal-title {
+    @apply text-base font-semibold text-gray-900 dark:text-gray-100;
+  }
+
+  .text-cart-modal-meta {
+    @apply text-xs text-gray-500 dark:text-gray-400;
+  }
+
+  .text-cart-upsell-section {
+    @apply text-sm font-semibold text-gray-900 dark:text-gray-100 sm:text-base;
+  }
+
+  .text-cart-upsell-title {
+    @apply min-h-[2rem] text-xs font-semibold leading-tight text-gray-900 line-clamp-2 dark:text-gray-100;
+  }
+
+  .text-cart-upsell-blurb {
+    @apply text-xs text-gray-600 dark:text-gray-400;
+  }
+
+  .text-cart-corner-badge {
+    @apply text-xs font-bold leading-none;
+  }
+
+  .text-cart-summary-row {
+    @apply text-sm font-normal text-gray-500 dark:text-gray-400 sm:text-base;
+  }
+
+  .text-cart-summary-value {
+    @apply text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100 sm:text-base;
+  }
+
+  .text-cart-total-label {
+    @apply text-base font-semibold text-gray-900 dark:text-gray-100 sm:text-lg;
+  }
+
+  .text-cart-grand-total {
+    @apply text-xl font-bold tabular-nums text-pink-700 dark:text-pink-400 sm:text-2xl sm:font-extrabold;
+  }
+
+  /* Checkout order summary — final amount (stronger than cart grand total in dense panels) */
+  .text-checkout-due-amount {
+    @apply text-2xl font-extrabold tabular-nums tracking-tight text-pink-700 dark:text-pink-400 sm:text-3xl;
+  }
+
+  /* Checkout / forms — same scale as cart meta & labels (P4) */
+  .text-form-helper {
+    @apply text-xs leading-snug text-gray-500 dark:text-gray-400;
+  }
+
+  .text-form-legal {
+    @apply text-[11px] leading-relaxed text-gray-500 dark:text-gray-400 sm:text-xs;
+  }
+
+  .text-form-error {
+    @apply text-xs font-medium leading-snug text-red-600 dark:text-red-400;
+  }
+
+  .text-form-context {
+    @apply text-sm leading-snug text-gray-600 dark:text-gray-300;
+  }
+
+  .ui-focus-visible {
+    @apply rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-600 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-pink-500 dark:focus-visible:ring-offset-gray-900;
+  }
+
+  .cart-touch-target {
+    @apply inline-flex min-h-[44px] min-w-[72px] items-center justify-center sm:h-7 sm:min-h-0;
+  }
+}
+
+/*
+ * Leaflet + Tailwind preflight: `img { max-width: 100% }` breaks tile sizing and can clip
+ * raster map art (roads visible, place/street labels missing or cropped).
+ */
+.leaflet-container img.leaflet-tile {
+  max-width: none !important;
 }

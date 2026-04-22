@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Search, Edit, Trash2, Package, Star, Award, Loader2, Download, Upload, FileText, Eye, RefreshCw, X, MessageSquare, CheckCircle, Image as ImageIcon } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Plus, Search, Edit, Trash2, Package, Star, Award, Loader2, Download, Upload, FileText, Eye, RefreshCw, X, MessageSquare, CheckCircle, Image as ImageIcon, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Modal, ModalFooter } from '../components/ui/Modal';
@@ -17,6 +17,16 @@ import productService from '../services/productService';
 import categoryService from '../services/categoryService';
 import apiClient from '../services/api';
 import { useToastContext } from '../contexts/ToastContext';
+import {
+  getProductFormProfile,
+  isCakeFormProfile,
+  getNonCakeProfileCopy,
+  FLOWERS_ADMIN_PRICE_COPY,
+} from '../utils/productFormProfile';
+import {
+  getDefaultCareStorageHtml,
+  getDefaultDeliveryGuidelinesHtml,
+} from '../utils/productSupplementalDefaults';
 
 // Utility functions from productService
 const calculateDiscountedPrice = productService.calculateDiscountedPrice;
@@ -29,6 +39,11 @@ const getFileTypeFromUrl = (url: string): 'image' | 'video' => {
   return videoExtensions.includes(extension) ? 'video' : 'image';
 };
 
+/** Backend may send 0/1; missing field was treated as pending before is_approved was selected. */
+const isReviewApproved = (review: { is_approved?: unknown }): boolean => {
+  const v = review.is_approved;
+  return v === true || v === 1 || v === '1';
+};
 
 // Helper function to render Egg/Eggless icon
 const getEgglessIcon = (isEggless: boolean | undefined) => {
@@ -48,6 +63,19 @@ const getEgglessIcon = (isEggless: boolean | undefined) => {
     </span>
   );
 };
+
+const ProductImageUploadHint = () => (
+  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 leading-relaxed">
+    Square (1:1) images look best on the storefront—aim for at least{' '}
+    <span className="whitespace-nowrap">1200×1200px</span> when possible. JPEG, PNG, GIF, or WebP. Max 10MB per file.
+  </p>
+);
+
+const ProductGalleryUploadHint = () => (
+  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 leading-relaxed">
+    Optional extras: more photos or short videos (same formats; max 10MB each). Up to 10 files per upload. Square images align with the main product view.
+  </p>
+);
 
 // Modern Rating Component
 const ModernRatingComponent = ({ 
@@ -127,12 +155,21 @@ const ModernRatingComponent = ({
 
 export const Products: React.FC = () => {
   const { showSuccess, showError, showInfo } = useToastContext();
+  const FLAVOR_SUBCATEGORY_IDS = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterCategoryId, setFilterCategoryId] = useState<number | 'all'>('all');
+  const [filterSubcategoryId, setFilterSubcategoryId] = useState<number | 'all'>('all');
+  const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('all');
+  const [filterTopOnly, setFilterTopOnly] = useState(false);
+  const [filterFeaturedOnly, setFilterFeaturedOnly] = useState(false);
+  const [filterBestsellerOnly, setFilterBestsellerOnly] = useState(false);
+  const [listPage, setListPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showVariantsModal, setShowVariantsModal] = useState(false);
@@ -249,6 +286,54 @@ export const Products: React.FC = () => {
     delivery_guidelines: ''
   });
 
+  const addFormProfile = useMemo(
+    () => getProductFormProfile(newProduct.primary_category_id, newProduct.category_ids),
+    [newProduct.primary_category_id, newProduct.category_ids]
+  );
+  const editFormProfile = useMemo(
+    () => getProductFormProfile(editProduct.primary_category_id, editProduct.category_ids),
+    [editProduct.primary_category_id, editProduct.category_ids]
+  );
+  const isNewCakeForm = isCakeFormProfile(addFormProfile);
+  const isEditCakeForm = isCakeFormProfile(editFormProfile);
+  const isAddFlowers = addFormProfile === 'flowers';
+  const isEditFlowers = editFormProfile === 'flowers';
+  /** Cakes + Small Treats Desserts (same optional flavor grid as cakes). */
+  const showFlavorPickerOnAdd = isNewCakeForm || addFormProfile === 'treats';
+  const showFlavorPickerOnEdit = isEditCakeForm || editFormProfile === 'treats';
+
+  const treatsPrimaryFlavorNameAdd = useMemo(() => {
+    if (addFormProfile !== 'treats') return undefined;
+    const id = newProduct.primary_flavor_id;
+    if (id == null) return undefined;
+    return subcategories.find((s) => Number(s.id) === Number(id))?.name;
+  }, [addFormProfile, newProduct.primary_flavor_id, subcategories]);
+
+  const treatsPrimaryFlavorNameEdit = useMemo(() => {
+    if (editFormProfile !== 'treats') return undefined;
+    const id = editProduct.primary_flavor_id;
+    if (id == null) return undefined;
+    return subcategories.find((s) => Number(s.id) === Number(id))?.name;
+  }, [editFormProfile, editProduct.primary_flavor_id, subcategories]);
+
+  /** When primary category (profile) changes while adding a product, refresh care & delivery defaults. */
+  const addFormProfileTransitionRef = React.useRef(addFormProfile);
+  React.useEffect(() => {
+    if (!showAddModal) {
+      addFormProfileTransitionRef.current = 'cake';
+      return;
+    }
+    const prev = addFormProfileTransitionRef.current;
+    if (prev !== addFormProfile) {
+      setNewProduct((p) => ({
+        ...p,
+        care_storage: getDefaultCareStorageHtml(addFormProfile),
+        delivery_guidelines: getDefaultDeliveryGuidelinesHtml(addFormProfile),
+      }));
+    }
+    addFormProfileTransitionRef.current = addFormProfile;
+  }, [showAddModal, addFormProfile]);
+
   // Reusable function to reset new product form
   const resetNewProductForm = useCallback(() => {
     // Prefilled template for product description
@@ -270,30 +355,6 @@ export const Products: React.FC = () => {
 <li>Cake stands and cutlery shown in images are for display only and are not included with the cake.</li>
 <li>This cake is hand delivered in a good quality cardboard box.</li>
 </ul>`;
-
-    // Prefilled template for care & storage
-    const careStorageTemplate = `<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">1). Refrigerate:</strong> <span style="color: #6b7280;">Store cream cakes in a refrigerator. Fondant cakes should be kept in an air-conditioned environment. (Use a serrated knife to cut a fondant cake.)</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">2). Temperature:</strong> <span style="color: #6b7280;">Slice and serve the cake at room temperature. Keep away from direct heat.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">3). Consumption:</strong> <span style="color: #6b7280;">Consume the cake within 24 hours for best taste and freshness.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">4). Decorations:</strong> <span style="color: #6b7280;">Some decorations may contain wires, toothpicks, or skewers - please check before serving to children.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; color: #1f2937; margin-top: 16px;">Enjoy your Creamingo cake! 🎂</p>`;
-
-    // Prefilled template for delivery guidelines
-    const deliveryGuidelinesTemplate = `<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Packaging:</strong> <span style="color: #6b7280;">Every Creamingo cake is hand-delivered in a sturdy, premium-quality box.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Complimentary Items:</strong> <span style="color: #6b7280;">Knives and message tags are included whenever available.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Timing:</strong> <span style="color: #6b7280;">Delivery times are estimates and may vary by product and location.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Perishable Nature:</strong> <span style="color: #6b7280;">Cakes are perishable and will be delivered in a single attempt only.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Substitution Policy:</strong> <span style="color: #6b7280;">In rare cases, designs or flavors may vary slightly based on availability.</span></p>
-
-<p style="margin-bottom: 20px;"></p>`;
 
     setNewProduct({
       name: '',
@@ -318,8 +379,8 @@ export const Products: React.FC = () => {
       is_bestseller: false,
       preparation_time: 0,
       serving_size: '',
-      care_storage: careStorageTemplate,
-      delivery_guidelines: deliveryGuidelinesTemplate
+      care_storage: getDefaultCareStorageHtml('cake'),
+      delivery_guidelines: getDefaultDeliveryGuidelinesHtml('cake')
     });
   }, []);
 
@@ -742,25 +803,115 @@ export const Products: React.FC = () => {
     restoreFormData();
   }, [loadData, loadDraftProducts, restoreFormData]);
 
-  const filteredProducts = products.filter(product => {
-    // Add null checks to prevent undefined errors
-    if (!product || !product.name) return false;
-    
-    const categoryName = product.category_id 
-      ? categories.find(c => c.id === product.category_id)?.name || product.category_name || ''
-      : product.category_name || '';
-    
-    const subcategoryName = product.subcategory_id 
-      ? subcategories.find(s => s.id === product.subcategory_id)?.name || product.subcategory_name || ''
-      : product.subcategory_name || '';
-    
-    return (
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      categoryName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      subcategoryName.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  });
+  useEffect(() => {
+    setFilterSubcategoryId('all');
+  }, [filterCategoryId]);
 
+  useEffect(() => {
+    setListPage(1);
+  }, [
+    searchTerm,
+    filterCategoryId,
+    filterSubcategoryId,
+    filterActive,
+    filterTopOnly,
+    filterFeaturedOnly,
+    filterBestsellerOnly,
+    pageSize,
+  ]);
+
+  const subcategoryFilterOptions = useMemo(() => {
+    if (filterCategoryId === 'all') return subcategories;
+    return subcategories.filter((s) => Number(s.category_id) === Number(filterCategoryId));
+  }, [subcategories, filterCategoryId]);
+
+  const filteredProducts = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    return products.filter((product) => {
+      if (!product || !product.name) return false;
+
+      const categoryName = product.category_id
+        ? categories.find((c) => c.id === product.category_id)?.name || product.category_name || ''
+        : product.category_name || '';
+
+      const subcategoryName = product.subcategory_id
+        ? subcategories.find((s) => s.id === product.subcategory_id)?.name || product.subcategory_name || ''
+        : product.subcategory_name || '';
+
+      const matchesSearch =
+        !q ||
+        product.name.toLowerCase().includes(q) ||
+        categoryName.toLowerCase().includes(q) ||
+        subcategoryName.toLowerCase().includes(q);
+      if (!matchesSearch) return false;
+
+      if (filterCategoryId !== 'all') {
+        const cid = Number(filterCategoryId);
+        const inMulti = product.categories?.some((c) => Number(c.id) === cid);
+        const legacy = Number(product.category_id) === cid;
+        if (!inMulti && !legacy) return false;
+      }
+
+      if (filterSubcategoryId !== 'all') {
+        const sid = Number(filterSubcategoryId);
+        const inMulti = product.subcategories?.some((s) => Number(s.id) === sid);
+        const legacy = Number(product.subcategory_id) === sid;
+        if (!inMulti && !legacy) return false;
+      }
+
+      if (filterActive === 'active' && !product.is_active) return false;
+      if (filterActive === 'inactive' && product.is_active) return false;
+      if (filterTopOnly && !product.is_top_product) return false;
+      if (filterFeaturedOnly && !product.is_featured) return false;
+      if (filterBestsellerOnly && !product.is_bestseller) return false;
+
+      return true;
+    });
+  }, [
+    products,
+    categories,
+    subcategories,
+    searchTerm,
+    filterCategoryId,
+    filterSubcategoryId,
+    filterActive,
+    filterTopOnly,
+    filterFeaturedOnly,
+    filterBestsellerOnly,
+  ]);
+
+  const totalFiltered = filteredProducts.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+  const currentPage = Math.min(Math.max(1, listPage), totalPages);
+
+  useEffect(() => {
+    if (listPage > totalPages) setListPage(totalPages);
+  }, [listPage, totalPages]);
+
+  const pageStart = (currentPage - 1) * pageSize;
+  const paginatedProducts = useMemo(
+    () => filteredProducts.slice(pageStart, pageStart + pageSize),
+    [filteredProducts, pageStart, pageSize]
+  );
+
+  const hasActiveListFilters =
+    searchTerm.trim() !== '' ||
+    filterCategoryId !== 'all' ||
+    filterSubcategoryId !== 'all' ||
+    filterActive !== 'all' ||
+    filterTopOnly ||
+    filterFeaturedOnly ||
+    filterBestsellerOnly;
+
+  const clearListFilters = () => {
+    setSearchTerm('');
+    setFilterCategoryId('all');
+    setFilterSubcategoryId('all');
+    setFilterActive('all');
+    setFilterTopOnly(false);
+    setFilterFeaturedOnly(false);
+    setFilterBestsellerOnly(false);
+  };
 
   const handleDeleteProduct = async (productId: string | number) => {
     console.log('=== PRODUCT DELETE FUNCTION CALLED ===');
@@ -834,22 +985,81 @@ export const Products: React.FC = () => {
         setActionLoading(null);
         return;
       }
+
+      if (!isNewCakeForm) {
+        const hasSubcategories =
+          newProduct.subcategory_ids.length > 0 ||
+          (newProduct.subcategory_id !== '' && newProduct.subcategory_id != null);
+        if (!hasSubcategories) {
+          showError(
+            'Validation Error',
+            'Please select at least one subcategory. Subcategories are required for Treats, Flowers, and Sweets.'
+          );
+          setActionLoading(null);
+          return;
+        }
+      }
+
+      if (addFormProfile === 'treats') {
+        if (!newProduct.primary_subcategory_id) {
+          showError(
+            'Validation Error',
+            'Please select a primary subcategory (e.g. Pastries, Puddings) for Small Treats Desserts.'
+          );
+          setActionLoading(null);
+          return;
+        }
+        const flavorIds = newProduct.available_flavor_ids || [];
+        if (flavorIds.length < 1) {
+          showError('Validation Error', 'Please select at least one available flavor.');
+          setActionLoading(null);
+          return;
+        }
+        const pfv = newProduct.primary_flavor_id;
+        if (pfv == null) {
+          showError('Validation Error', 'Please select a Primary Flavor.');
+          setActionLoading(null);
+          return;
+        }
+        if (!flavorIds.map(Number).includes(Number(pfv))) {
+          showError(
+            'Validation Error',
+            'Primary flavor must be one of the selected available flavors.'
+          );
+          setActionLoading(null);
+          return;
+        }
+      }
       
+      const legacyCategoryId = newProduct.primary_category_id
+        || (newProduct.category_ids.length > 0 ? newProduct.category_ids[0] : parseInt(newProduct.category_id));
+      const primarySubcategory = newProduct.primary_subcategory_id
+        ? subcategories.find((s) => Number(s.id) === Number(newProduct.primary_subcategory_id))
+        : undefined;
+      const legacySubcategoryId = (primarySubcategory && Number(primarySubcategory.category_id) === Number(legacyCategoryId))
+        ? newProduct.primary_subcategory_id
+        : newProduct.subcategory_ids.find((id) => {
+          const subcat = subcategories.find((s) => Number(s.id) === Number(id));
+          return subcat && Number(subcat.category_id) === Number(legacyCategoryId);
+        }) || (newProduct.subcategory_id ? parseInt(newProduct.subcategory_id) : undefined);
+
       // Create product data with only the fields that the API accepts
       const productData = {
         name: newProduct.name,
         description: newProduct.description,
         short_description: newProduct.short_description,
         // Legacy fields for backward compatibility
-        category_id: newProduct.category_ids.length > 0 ? newProduct.category_ids[0] : parseInt(newProduct.category_id),
-        // Set legacy subcategory_id to first subcategory (can be flavor or non-flavor)
-        subcategory_id: newProduct.subcategory_ids.length > 0 ? newProduct.subcategory_ids[0] : (newProduct.subcategory_id ? parseInt(newProduct.subcategory_id) : undefined),
+        category_id: Number.isFinite(legacyCategoryId) ? legacyCategoryId : undefined,
+        // Set legacy subcategory_id within the legacy category
+        subcategory_id: Number.isFinite(legacySubcategoryId) ? legacySubcategoryId : undefined,
         // New multi-category fields
         category_ids: newProduct.category_ids.length > 0 ? newProduct.category_ids : (newProduct.category_id ? [parseInt(newProduct.category_id)] : []),
-        // Combine base subcategories with flavor subcategories
-        subcategory_ids: Array.from(new Set([...(newProduct.subcategory_ids.length > 0 ? newProduct.subcategory_ids : (newProduct.subcategory_id ? [parseInt(newProduct.subcategory_id)] : [])), ...(newProduct.available_flavor_ids || [])])),
+        subcategory_ids: newProduct.subcategory_ids.length > 0 ? newProduct.subcategory_ids : (newProduct.subcategory_id ? [parseInt(newProduct.subcategory_id)] : []),
         primary_category_id: newProduct.primary_category_id,
-        primary_subcategory_id: newProduct.primary_subcategory_id || newProduct.primary_flavor_id,
+        primary_subcategory_id: newProduct.primary_subcategory_id,
+        // Flavor selection fields
+        available_flavor_ids: newProduct.available_flavor_ids || [],
+        primary_flavor_id: newProduct.primary_flavor_id,
         base_price: newProduct.base_price,
         base_weight: newProduct.base_weight,
         discount_percent: newProduct.discount_percent,
@@ -870,6 +1080,11 @@ export const Products: React.FC = () => {
         variations: productVariations, // Include product variations
         gallery_images: selectedGalleryImages // Include gallery images
       };
+
+      if (!showFlavorPickerOnAdd) {
+        productData.available_flavor_ids = [];
+        productData.primary_flavor_id = undefined;
+      }
 
       console.log('Sending product data:', productData); // Debug log
       const response = await productService.createProduct(productData);
@@ -974,65 +1189,21 @@ export const Products: React.FC = () => {
 
   // Handler functions for care & storage reset
   const handleCareStorageReset = useCallback(() => {
-    const careStorageTemplate = `<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">1). Refrigerate:</strong> <span style="color: #6b7280;">Store cream cakes in a refrigerator. Fondant cakes should be kept in an air-conditioned environment. (Use a serrated knife to cut a fondant cake.)</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">2). Temperature:</strong> <span style="color: #6b7280;">Slice and serve the cake at room temperature. Keep away from direct heat.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">3). Consumption:</strong> <span style="color: #6b7280;">Consume the cake within 24 hours for best taste and freshness.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">4). Decorations:</strong> <span style="color: #6b7280;">Some decorations may contain wires, toothpicks, or skewers - please check before serving to children.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; color: #1f2937; margin-top: 16px;">Enjoy your Creamingo cake! 🎂</p>`;
-    
-    handleInputChange('care_storage', careStorageTemplate);
-  }, [handleInputChange]);
+    handleInputChange('care_storage', getDefaultCareStorageHtml(addFormProfile));
+  }, [handleInputChange, addFormProfile]);
 
   const handleEditCareStorageReset = useCallback(() => {
-    const careStorageTemplate = `<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">1). Refrigerate:</strong> <span style="color: #6b7280;">Store cream cakes in a refrigerator. Fondant cakes should be kept in an air-conditioned environment. (Use a serrated knife to cut a fondant cake.)</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">2). Temperature:</strong> <span style="color: #6b7280;">Slice and serve the cake at room temperature. Keep away from direct heat.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">3). Consumption:</strong> <span style="color: #6b7280;">Consume the cake within 24 hours for best taste and freshness.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><strong style="color: #1f2937;">4). Decorations:</strong> <span style="color: #6b7280;">Some decorations may contain wires, toothpicks, or skewers - please check before serving to children.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; color: #1f2937; margin-top: 16px;">Enjoy your Creamingo cake! 🎂</p>`;
-    
-    handleEditInputChange('care_storage', careStorageTemplate);
-  }, [handleEditInputChange]);
+    handleEditInputChange('care_storage', getDefaultCareStorageHtml(editFormProfile));
+  }, [handleEditInputChange, editFormProfile]);
 
   // Handler functions for delivery guidelines reset
   const handleDeliveryGuidelinesReset = useCallback(() => {
-    const deliveryGuidelinesTemplate = `<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Packaging:</strong> <span style="color: #6b7280;">Every Creamingo cake is hand-delivered in a sturdy, premium-quality box.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Complimentary Items:</strong> <span style="color: #6b7280;">Knives and message tags are included whenever available.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Timing:</strong> <span style="color: #6b7280;">Delivery times are estimates and may vary by product and location.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Perishable Nature:</strong> <span style="color: #6b7280;">Cakes are perishable and will be delivered in a single attempt only.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Substitution Policy:</strong> <span style="color: #6b7280;">In rare cases, designs or flavors may vary slightly based on availability.</span></p>
-
-<p style="margin-bottom: 20px;"></p>`;
-    
-    handleInputChange('delivery_guidelines', deliveryGuidelinesTemplate);
-  }, [handleInputChange]);
+    handleInputChange('delivery_guidelines', getDefaultDeliveryGuidelinesHtml(addFormProfile));
+  }, [handleInputChange, addFormProfile]);
 
   const handleEditDeliveryGuidelinesReset = useCallback(() => {
-    const deliveryGuidelinesTemplate = `<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Packaging:</strong> <span style="color: #6b7280;">Every Creamingo cake is hand-delivered in a sturdy, premium-quality box.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Complimentary Items:</strong> <span style="color: #6b7280;">Knives and message tags are included whenever available.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Timing:</strong> <span style="color: #6b7280;">Delivery times are estimates and may vary by product and location.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Perishable Nature:</strong> <span style="color: #6b7280;">Cakes are perishable and will be delivered in a single attempt only.</span></p>
-
-<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin-bottom: 12px;"><span style="color: #6b7280;">•</span> <strong style="color: #1f2937;">Substitution Policy:</strong> <span style="color: #6b7280;">In rare cases, designs or flavors may vary slightly based on availability.</span></p>
-
-<p style="margin-bottom: 20px;"></p>`;
-    
-    handleEditInputChange('delivery_guidelines', deliveryGuidelinesTemplate);
-  }, [handleEditInputChange]);
+    handleEditInputChange('delivery_guidelines', getDefaultDeliveryGuidelinesHtml(editFormProfile));
+  }, [handleEditInputChange, editFormProfile]);
 
   // Update edit form when editing product changes
   React.useEffect(() => {
@@ -1047,13 +1218,9 @@ export const Products: React.FC = () => {
         subcategory_ids: editingProduct.subcategories?.map(s => Number(s.id)) || [],
         primary_category_id: editingProduct.primary_category_id || editingProduct.categories?.find(c => c.is_primary)?.id,
         primary_subcategory_id: editingProduct.primary_subcategory_id || editingProduct.subcategories?.find(s => s.is_primary)?.id,
-        // Flavor selection fields - extract flavor subcategories from all subcategories
-        available_flavor_ids: editingProduct.subcategories?.filter(s => 
-          [9, 10, 12, 14, 11, 13, 17, 16, 15, 18].includes(Number(s.id))
-        ).map(s => Number(s.id)) || [],
-        primary_flavor_id: editingProduct.subcategories?.find(s => 
-          [9, 10, 12, 14, 11, 13, 17, 16, 15, 18].includes(Number(s.id)) && s.is_primary
-        )?.id,
+        // Flavor selection fields
+        available_flavor_ids: editingProduct.flavors?.map(s => Number(s.id)) || [],
+        primary_flavor_id: editingProduct.flavors?.find(s => s.is_primary)?.id,
         base_weight: editingProduct.base_weight,
         base_price: editingProduct.base_price,
         discount_percent: editingProduct.discount_percent,
@@ -1094,6 +1261,58 @@ export const Products: React.FC = () => {
     }
   }, [editingProduct]);
 
+  React.useEffect(() => {
+    if (!newProduct.primary_subcategory_id) return;
+    if (!FLAVOR_SUBCATEGORY_IDS.includes(Number(newProduct.primary_subcategory_id))) return;
+    if (newProduct.available_flavor_ids.includes(Number(newProduct.primary_subcategory_id))) return;
+
+    setNewProduct(prev => ({
+      ...prev,
+      available_flavor_ids: Array.from(new Set([
+        ...prev.available_flavor_ids,
+        Number(prev.primary_subcategory_id)
+      ]))
+    }));
+  }, [newProduct.primary_subcategory_id, newProduct.available_flavor_ids]);
+
+  React.useEffect(() => {
+    if (!editProduct.primary_subcategory_id) return;
+    if (!FLAVOR_SUBCATEGORY_IDS.includes(Number(editProduct.primary_subcategory_id))) return;
+    if (editProduct.available_flavor_ids.includes(Number(editProduct.primary_subcategory_id))) return;
+
+    setEditProduct(prev => ({
+      ...prev,
+      available_flavor_ids: Array.from(new Set([
+        ...prev.available_flavor_ids,
+        Number(prev.primary_subcategory_id)
+      ]))
+    }));
+  }, [editProduct.primary_subcategory_id, editProduct.available_flavor_ids]);
+
+  /** Small Treats: primary flavor must stay in the selected flavor list */
+  React.useEffect(() => {
+    if (addFormProfile !== 'treats') return;
+    const ids = newProduct.available_flavor_ids;
+    if (ids.length === 0) return;
+    const p = newProduct.primary_flavor_id;
+    const pNum = p != null ? Number(p) : NaN;
+    const idSet = new Set(ids.map(Number));
+    if (!Number.isFinite(pNum) || !idSet.has(pNum)) {
+      setNewProduct((prev) => ({ ...prev, primary_flavor_id: ids[0] }));
+    }
+  }, [addFormProfile, newProduct.available_flavor_ids, newProduct.primary_flavor_id]);
+
+  React.useEffect(() => {
+    if (editFormProfile !== 'treats') return;
+    const ids = editProduct.available_flavor_ids;
+    if (ids.length === 0) return;
+    const p = editProduct.primary_flavor_id;
+    const pNum = p != null ? Number(p) : NaN;
+    const idSet = new Set(ids.map(Number));
+    if (!Number.isFinite(pNum) || !idSet.has(pNum)) {
+      setEditProduct((prev) => ({ ...prev, primary_flavor_id: ids[0] }));
+    }
+  }, [editFormProfile, editProduct.available_flavor_ids, editProduct.primary_flavor_id]);
 
   const handleAddVariation = () => {
     // Check if we're adding the first variation (no variations exist yet)
@@ -1630,6 +1849,51 @@ export const Products: React.FC = () => {
     try {
       setActionLoading('edit-product');
 
+      if (!isEditCakeForm) {
+        const hasSubcategories =
+          editProduct.subcategory_ids.length > 0 ||
+          (editProduct.subcategory_id !== '' && editProduct.subcategory_id != null);
+        if (!hasSubcategories) {
+          showError(
+            'Validation Error',
+            'Please select at least one subcategory. Subcategories are required for Treats, Flowers, and Sweets.'
+          );
+          setActionLoading(null);
+          return;
+        }
+      }
+
+      if (editFormProfile === 'treats') {
+        if (!editProduct.primary_subcategory_id) {
+          showError(
+            'Validation Error',
+            'Please select a primary subcategory (e.g. Pastries, Puddings) for Small Treats Desserts.'
+          );
+          setActionLoading(null);
+          return;
+        }
+        const flavorIds = editProduct.available_flavor_ids || [];
+        if (flavorIds.length < 1) {
+          showError('Validation Error', 'Please select at least one available flavor.');
+          setActionLoading(null);
+          return;
+        }
+        const pfv = editProduct.primary_flavor_id;
+        if (pfv == null) {
+          showError('Validation Error', 'Please select a Primary Flavor.');
+          setActionLoading(null);
+          return;
+        }
+        if (!flavorIds.map(Number).includes(Number(pfv))) {
+          showError(
+            'Validation Error',
+            'Primary flavor must be one of the selected available flavors.'
+          );
+          setActionLoading(null);
+          return;
+        }
+      }
+
       const toValidNumber = (value: string | number | null | undefined): number | undefined => {
         if (value === null || value === undefined || value === '') {
           return undefined;
@@ -1644,19 +1908,24 @@ export const Products: React.FC = () => {
           : (toValidNumber(editProduct.category_id) ? [toValidNumber(editProduct.category_id)!] : [])
       ).filter((id): id is number => Number.isFinite(id));
 
-      const resolvedSubcategoryIds = Array.from(
-        new Set([
-          ...(editProduct.subcategory_ids.length > 0
-            ? editProduct.subcategory_ids
-            : (toValidNumber(editProduct.subcategory_id) ? [toValidNumber(editProduct.subcategory_id)!] : [])),
-          ...(editProduct.available_flavor_ids || [])
-        ])
+      const resolvedSubcategoryIds = (
+        editProduct.subcategory_ids.length > 0
+          ? editProduct.subcategory_ids
+          : (toValidNumber(editProduct.subcategory_id) ? [toValidNumber(editProduct.subcategory_id)!] : [])
       ).filter((id): id is number => Number.isFinite(id));
 
-      const resolvedCategoryId = resolvedCategoryIds[0];
-      const resolvedSubcategoryId = resolvedSubcategoryIds[0];
       const resolvedPrimaryCategoryId = toValidNumber(editProduct.primary_category_id);
-      const resolvedPrimarySubcategoryId = toValidNumber(editProduct.primary_subcategory_id || editProduct.primary_flavor_id);
+      const resolvedPrimarySubcategoryId = toValidNumber(editProduct.primary_subcategory_id);
+      const resolvedCategoryId = resolvedPrimaryCategoryId || resolvedCategoryIds[0];
+      const primaryEditSubcategory = resolvedPrimarySubcategoryId
+        ? subcategories.find((s) => Number(s.id) === Number(resolvedPrimarySubcategoryId))
+        : undefined;
+      const resolvedSubcategoryId = (primaryEditSubcategory && Number(primaryEditSubcategory.category_id) === Number(resolvedCategoryId))
+        ? resolvedPrimarySubcategoryId
+        : resolvedSubcategoryIds.find((id) => {
+          const subcat = subcategories.find((s) => Number(s.id) === Number(id));
+          return subcat && Number(subcat.category_id) === Number(resolvedCategoryId);
+        }) || resolvedSubcategoryIds[0];
 
       const productData: {
         name: string;
@@ -1694,14 +1963,15 @@ export const Products: React.FC = () => {
         short_description: editProduct.short_description,
         // Legacy fields for backward compatibility
         category_id: resolvedCategoryId,
-        // Set legacy subcategory_id to first subcategory (can be flavor or non-flavor)
+        // Set legacy subcategory_id within the legacy category
         subcategory_id: resolvedSubcategoryId,
         // New multi-category fields
         category_ids: resolvedCategoryIds.length > 0 ? resolvedCategoryIds : undefined,
-        // Combine base subcategories with flavor subcategories
         subcategory_ids: resolvedSubcategoryIds.length > 0 ? resolvedSubcategoryIds : undefined,
         primary_category_id: resolvedPrimaryCategoryId,
         primary_subcategory_id: resolvedPrimarySubcategoryId,
+        available_flavor_ids: editProduct.available_flavor_ids,
+        primary_flavor_id: toValidNumber(editProduct.primary_flavor_id),
         base_price: editProduct.base_price,
         base_weight: editProduct.base_weight,
         discount_percent: editProduct.discount_percent,
@@ -1718,6 +1988,11 @@ export const Products: React.FC = () => {
         shape: editProductDetails.shape || 'Round',
         country_of_origin: editProductDetails.countryOfOrigin || 'India'
       };
+
+      if (!showFlavorPickerOnEdit) {
+        productData.available_flavor_ids = [];
+        productData.primary_flavor_id = undefined;
+      }
 
       // Only include variations if they have been modified
       // Compare current variations with original variations to detect changes
@@ -1784,11 +2059,20 @@ export const Products: React.FC = () => {
 
   return (
     <div className="space-y-4 p-6">
+      {/* Product table: client filters + pagination; labeled status grid; stacked action buttons (no overflow menu). */}
       {/* Simplified Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Products</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{filteredProducts.length} products</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {products.length} in catalog
+            {hasActiveListFilters ? (
+              <>
+                {' '}
+                · <span className="font-medium text-gray-700 dark:text-gray-300">{totalFiltered} match filters</span>
+              </>
+            ) : null}
+          </p>
         </div>
         {/* Mobile: Stacked layout, Desktop: Horizontal layout */}
         <div className="flex flex-col md:flex-row gap-3 md:space-x-3 md:space-y-0">
@@ -1846,16 +2130,118 @@ export const Products: React.FC = () => {
         </div>
       </div>
 
-      {/* Simplified Search */}
-      <div className="flex gap-3">
-        <div className="flex-1">
-          <Input
-            placeholder="Search products..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            leftIcon={<Search className="h-4 w-4" />}
-            className="text-sm"
-          />
+      {/* Search + filters */}
+      <div className="space-y-3">
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <Input
+              placeholder="Search products..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              leftIcon={<Search className="h-4 w-4" />}
+              className="text-sm"
+            />
+          </div>
+        </div>
+        <div className="flex flex-col gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-900/40 p-3 sm:p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3 items-end">
+            <div className="min-w-0">
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Category</label>
+              <select
+                value={filterCategoryId === 'all' ? 'all' : String(filterCategoryId)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setFilterCategoryId(v === 'all' ? 'all' : Number(v));
+                }}
+                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-2 py-2"
+              >
+                <option value="all">All categories</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="min-w-0">
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Subcategory / flavor</label>
+              <select
+                value={filterSubcategoryId === 'all' ? 'all' : String(filterSubcategoryId)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setFilterSubcategoryId(v === 'all' ? 'all' : Number(v));
+                }}
+                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-2 py-2"
+              >
+                <option value="all">All subcategories</option>
+                {subcategoryFilterOptions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="min-w-0">
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Status</label>
+              <select
+                value={filterActive}
+                onChange={(e) => setFilterActive(e.target.value as 'all' | 'active' | 'inactive')}
+                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-2 py-2"
+              >
+                <option value="all">Active and inactive</option>
+                <option value="active">Active only</option>
+                <option value="inactive">Inactive only</option>
+              </select>
+            </div>
+            <div className="min-w-0">
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Page size</label>
+              <select
+                value={String(pageSize)}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-2 py-2"
+              >
+                <option value="25">25 per page</option>
+                <option value="50">50 per page</option>
+                <option value="100">100 per page</option>
+              </select>
+            </div>
+            <div className="sm:col-span-2 lg:col-span-2 xl:col-span-2 flex flex-wrap items-center gap-3 pt-1">
+              <label className="inline-flex items-center gap-1.5 text-xs text-gray-700 dark:text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filterTopOnly}
+                  onChange={(e) => setFilterTopOnly(e.target.checked)}
+                  className="rounded border-gray-300 dark:border-gray-600"
+                />
+                Top only
+              </label>
+              <label className="inline-flex items-center gap-1.5 text-xs text-gray-700 dark:text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filterFeaturedOnly}
+                  onChange={(e) => setFilterFeaturedOnly(e.target.checked)}
+                  className="rounded border-gray-300 dark:border-gray-600"
+                />
+                Featured only
+              </label>
+              <label className="inline-flex items-center gap-1.5 text-xs text-gray-700 dark:text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filterBestsellerOnly}
+                  onChange={(e) => setFilterBestsellerOnly(e.target.checked)}
+                  className="rounded border-gray-300 dark:border-gray-600"
+                />
+                Bestseller only
+              </label>
+            </div>
+          </div>
+          {hasActiveListFilters && (
+            <div className="flex justify-end">
+              <Button type="button" variant="ghost" size="sm" onClick={clearListFilters} className="text-xs">
+                Clear filters
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1871,8 +2257,9 @@ export const Products: React.FC = () => {
               </p>
             </div>
           ) : (
-            <table className="w-full divide-y divide-gray-200 dark:divide-gray-700 table-fixed min-w-[800px]">
-              <thead className="bg-gray-50 dark:bg-gray-700">
+            <>
+            <table className="w-full divide-y divide-gray-200 dark:divide-gray-700 table-fixed min-w-[960px]">
+              <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700 shadow-sm">
                 <tr>
                   <th className="w-20 px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Image
@@ -1886,16 +2273,16 @@ export const Products: React.FC = () => {
                   <th className="w-24 px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Price
                   </th>
-                  <th className="w-28 px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  <th className="w-[14rem] px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Status
                   </th>
-                  <th className="w-28 px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  <th className="w-[7.5rem] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {filteredProducts.map((product) => (
+                {paginatedProducts.map((product) => (
                   <React.Fragment key={product.id}>
                     {/* Main Product Row */}
                     <tr className="hover:bg-gray-50 dark:hover:bg-gray-700">
@@ -1980,128 +2367,129 @@ export const Products: React.FC = () => {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col gap-1">
-                          {/* Top Product Button */}
+                      <td className="px-3 py-3 align-top">
+                        <div className="grid grid-cols-2 gap-1.5 min-w-[13rem]">
                           <button
+                            type="button"
                             onClick={() => handleToggleTopProduct(product.id)}
                             disabled={actionLoading === `top-${product.id}`}
-                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium transition-all duration-200 ${
+                            className={`inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md border text-[11px] font-medium leading-tight transition-colors ${
                               product.is_top_product
-                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/20 dark:text-amber-400 shadow-sm'
-                                : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 opacity-60 hover:opacity-80'
-                            } ${actionLoading === `top-${product.id}` ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                ? 'border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200'
+                                : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
+                            } ${actionLoading === `top-${product.id}` ? 'opacity-50 cursor-not-allowed' : ''}`}
                             title={product.is_top_product ? 'Remove from Top Products' : 'Mark as Top Product'}
                           >
                             {actionLoading === `top-${product.id}` ? (
-                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
                             ) : (
-                              <Star className={`h-3 w-3 mr-1 ${product.is_top_product ? 'fill-current' : ''}`} />
+                              <Star className={`h-3.5 w-3.5 shrink-0 ${product.is_top_product ? 'fill-current' : ''}`} />
                             )}
-                            Top
+                            <span className="text-left">Top product</span>
                           </button>
-
-                          {/* Bestseller Button */}
                           <button
-                            onClick={() => handleToggleBestseller(product.id)}
-                            disabled={actionLoading === `bestseller-${product.id}`}
-                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium transition-all duration-200 ${
-                              product.is_bestseller
-                                ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400 shadow-sm'
-                                : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 opacity-60 hover:opacity-80'
-                            } ${actionLoading === `bestseller-${product.id}` ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                            title={product.is_bestseller ? 'Remove from Bestsellers' : 'Mark as Bestseller'}
-                          >
-                            {actionLoading === `bestseller-${product.id}` ? (
-                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                            ) : (
-                              <Award className={`h-3 w-3 mr-1 ${product.is_bestseller ? 'fill-current' : ''}`} />
-                            )}
-                            Best
-                          </button>
-
-                          {/* Featured Button */}
-                          <button
+                            type="button"
                             onClick={() => handleToggleFeatured(product.id)}
                             disabled={actionLoading === `featured-${product.id}`}
-                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium transition-all duration-200 ${
+                            className={`inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md border text-[11px] font-medium leading-tight transition-colors ${
                               product.is_featured
-                                ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400 shadow-sm'
-                                : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 opacity-60 hover:opacity-80'
-                            } ${actionLoading === `featured-${product.id}` ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                ? 'border-blue-300 bg-blue-100 text-blue-900 dark:border-blue-700 dark:bg-blue-900/30 dark:text-blue-200'
+                                : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
+                            } ${actionLoading === `featured-${product.id}` ? 'opacity-50 cursor-not-allowed' : ''}`}
                             title={product.is_featured ? 'Remove from Featured' : 'Mark as Featured'}
                           >
                             {actionLoading === `featured-${product.id}` ? (
-                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
                             ) : (
-                              <Star className={`h-3 w-3 mr-1 ${product.is_featured ? 'fill-current' : ''}`} />
+                              <Sparkles className="h-3.5 w-3.5 shrink-0" />
                             )}
-                            Featured
+                            <span className="text-left">Featured</span>
                           </button>
-
-                          {/* Active/Inactive Button */}
                           <button
+                            type="button"
+                            onClick={() => handleToggleBestseller(product.id)}
+                            disabled={actionLoading === `bestseller-${product.id}`}
+                            className={`inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md border text-[11px] font-medium leading-tight transition-colors ${
+                              product.is_bestseller
+                                ? 'border-purple-300 bg-purple-100 text-purple-900 dark:border-purple-700 dark:bg-purple-900/30 dark:text-purple-200'
+                                : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
+                            } ${actionLoading === `bestseller-${product.id}` ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            title={product.is_bestseller ? 'Remove from Bestsellers' : 'Mark as Bestseller'}
+                          >
+                            {actionLoading === `bestseller-${product.id}` ? (
+                              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                            ) : (
+                              <Award className={`h-3.5 w-3.5 shrink-0 ${product.is_bestseller ? 'fill-current' : ''}`} />
+                            )}
+                            <span className="text-left">Bestseller</span>
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleToggleActive(product.id)}
                             disabled={actionLoading === `active-${product.id}`}
-                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium transition-all duration-200 ${
+                            className={`inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md border text-[11px] font-medium leading-tight transition-colors ${
                               product.is_active
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 shadow-sm'
-                                : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400 shadow-sm'
-                            } ${actionLoading === `active-${product.id}` ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:opacity-80'}`}
+                                ? 'border-green-300 bg-green-100 text-green-900 dark:border-green-700 dark:bg-green-900/30 dark:text-green-200'
+                                : 'border-red-300 bg-red-100 text-red-900 dark:border-red-700 dark:bg-red-900/30 dark:text-red-200'
+                            } ${actionLoading === `active-${product.id}` ? 'opacity-50 cursor-not-allowed' : ''}`}
                             title={product.is_active ? 'Deactivate Product' : 'Activate Product'}
                           >
                             {actionLoading === `active-${product.id}` ? (
-                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
                             ) : (
-                              <div className={`h-2 w-2 mr-1 rounded-full ${product.is_active ? 'bg-green-500' : 'bg-red-500'}`} />
+                              <div className={`h-2.5 w-2.5 shrink-0 rounded-full ${product.is_active ? 'bg-green-500' : 'bg-red-500'}`} />
                             )}
-                            {product.is_active ? 'Active' : 'Inactive'}
+                            <span className="text-left">{product.is_active ? 'Active' : 'Inactive'}</span>
                           </button>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex flex-col items-end space-y-1 min-w-[100px]">
+                      <td className="px-3 py-3 align-top text-right">
+                        <div className="inline-flex flex-col items-stretch gap-1 min-w-[6.75rem]">
                           <button
+                            type="button"
                             onClick={() => handleViewReviews(product)}
-                            className="flex items-center space-x-1.5 px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/30 rounded transition-colors w-full justify-center"
+                            className="inline-flex items-center justify-center gap-1.5 px-2 py-1.5 text-[11px] font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/25 dark:text-blue-300 dark:hover:bg-blue-900/40 rounded-md border border-blue-200/80 dark:border-blue-800 transition-colors"
                             title="View Reviews"
                           >
-                            <MessageSquare className="h-3 w-3" />
-                            <span>Reviews</span>
+                            <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+                            Reviews
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleAddReview(product)}
-                            className="flex items-center space-x-1.5 px-2 py-1 text-xs font-medium text-green-600 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 rounded transition-colors w-full justify-center"
+                            className="inline-flex items-center justify-center gap-1.5 px-2 py-1.5 text-[11px] font-medium text-green-700 bg-green-50 hover:bg-green-100 dark:bg-green-900/25 dark:text-green-300 dark:hover:bg-green-900/40 rounded-md border border-green-200/80 dark:border-green-800 transition-colors"
                             title="Add Review"
                           >
-                            <Plus className="h-3 w-3" />
-                            <span>Rate</span>
+                            <Plus className="h-3.5 w-3.5 shrink-0" />
+                            Add rating
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleSetEditingProduct(product)}
-                            className="flex items-center space-x-1.5 px-2 py-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400 dark:hover:bg-indigo-900/30 rounded transition-colors w-full justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                             disabled={actionLoading === `edit-${product.id}`}
+                            className="inline-flex items-center justify-center gap-1.5 px-2 py-1.5 text-[11px] font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/25 dark:text-indigo-300 dark:hover:bg-indigo-900/40 rounded-md border border-indigo-200/80 dark:border-indigo-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Edit Product"
                           >
                             {actionLoading === `edit-${product.id}` ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
+                              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
                             ) : (
-                              <Edit className="h-3 w-3" />
+                              <Edit className="h-3.5 w-3.5 shrink-0" />
                             )}
-                            <span>Edit</span>
+                            Edit
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleDeleteProduct(product.id)}
-                            className="flex items-center space-x-1.5 px-2 py-1 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 rounded transition-colors w-full justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Delete Product"
                             disabled={actionLoading === `delete-${product.id}`}
+                            className="inline-flex items-center justify-center gap-1.5 px-2 py-1.5 text-[11px] font-medium text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-900/25 dark:text-red-300 dark:hover:bg-red-900/40 rounded-md border border-red-200/80 dark:border-red-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Delete Product"
                           >
                             {actionLoading === `delete-${product.id}` ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
+                              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
                             ) : (
-                              <Trash2 className="h-3 w-3" />
+                              <Trash2 className="h-3.5 w-3.5 shrink-0" />
                             )}
-                            <span>Delete</span>
+                            Delete
                           </button>
                         </div>
                       </td>
@@ -2214,6 +2602,47 @@ export const Products: React.FC = () => {
                 ))}
               </tbody>
             </table>
+            {totalFiltered > 0 && (
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-900/30">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Showing{' '}
+                  <span className="font-medium text-gray-900 dark:text-gray-100">{pageStart + 1}</span>
+                  –
+                  <span className="font-medium text-gray-900 dark:text-gray-100">
+                    {Math.min(pageStart + pageSize, totalFiltered)}
+                  </span>{' '}
+                  of <span className="font-medium text-gray-900 dark:text-gray-100">{totalFiltered}</span>
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={currentPage <= 1}
+                    onClick={() => setListPage((p) => Math.max(1, p - 1))}
+                    className="inline-flex items-center gap-1"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </Button>
+                  <span className="text-sm text-gray-600 dark:text-gray-400 px-1 tabular-nums">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setListPage((p) => Math.min(totalPages, p + 1))}
+                    className="inline-flex items-center gap-1"
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </div>
       </div>
@@ -2263,42 +2692,89 @@ export const Products: React.FC = () => {
             />
           </div>
 
-          {/* Third Box: Available Flavors Selection */}
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-            <FlavorSelector
-              subcategories={subcategories}
-              selectedSubcategoryIds={newProduct.subcategory_ids}
-              selectedFlavorIds={newProduct.available_flavor_ids}
-              primaryFlavorId={newProduct.primary_flavor_id}
-              onFlavorsChange={(flavorIds) => setNewProduct(prev => ({ ...prev, available_flavor_ids: flavorIds }))}
-              onPrimaryFlavorChange={(flavorId) => setNewProduct(prev => ({ ...prev, primary_flavor_id: flavorId }))}
-            />
-          </div>
+          {/* Third Box: Available Flavors (cakes + Small Treats Desserts only) */}
+          {showFlavorPickerOnAdd ? (
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+              <FlavorSelector
+                subcategories={subcategories}
+                selectedSubcategoryIds={newProduct.subcategory_ids}
+                selectedFlavorIds={newProduct.available_flavor_ids}
+                primaryFlavorId={newProduct.primary_flavor_id}
+                onFlavorsChange={(flavorIds) => setNewProduct(prev => ({ ...prev, available_flavor_ids: flavorIds }))}
+                onPrimaryFlavorChange={(flavorId) => setNewProduct(prev => ({ ...prev, primary_flavor_id: flavorId }))}
+                requireFlavorSelection={addFormProfile === 'treats'}
+              />
+            </div>
+          ) : (
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Flavors & cake options</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Not used for {getNonCakeProfileCopy(addFormProfile).title}. Use the price section for pack sizes, units, or bouquet options.
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">{getNonCakeProfileCopy(addFormProfile).hint}</p>
+            </div>
+          )}
 
           {/* Fourth Box: Price Section */}
           <div className="bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Price Section</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              {isNewCakeForm ? 'Price Section' : 'Price & purchase options'}
+            </h3>
             
             {/* Base Price Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-                <Input 
-                  label="Base Weight" 
-                  placeholder="e.g., 1kg" 
-                  value={newProduct.base_weight}
-                  onChange={(e) => handleInputChange('base_weight', e.target.value)}
-                />
+                <div className="space-y-1">
+                  <Input 
+                    label={
+                      isNewCakeForm
+                        ? 'Base Weight'
+                        : isAddFlowers
+                          ? FLOWERS_ADMIN_PRICE_COPY.primaryLabel
+                          : 'Primary option label'
+                    }
+                    placeholder={
+                      isNewCakeForm
+                        ? 'e.g., 1kg'
+                        : isAddFlowers
+                          ? FLOWERS_ADMIN_PRICE_COPY.primaryPlaceholder
+                          : 'e.g., Standard, 250g, Box of 6'
+                    }
+                    value={newProduct.base_weight}
+                    onChange={(e) => handleInputChange('base_weight', e.target.value)}
+                  />
+                  {!isNewCakeForm && isAddFlowers && (
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
+                      {FLOWERS_ADMIN_PRICE_COPY.primaryHelper}
+                    </p>
+                  )}
+                </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Servings
+                  {isNewCakeForm
+                    ? 'Servings'
+                    : isAddFlowers
+                      ? FLOWERS_ADMIN_PRICE_COPY.servingLabel
+                      : 'Size / pack note (optional)'}
                 </label>
                 <Input 
-                  placeholder={calculateServings(newProduct.base_weight)} 
+                  placeholder={
+                    isNewCakeForm
+                      ? calculateServings(newProduct.base_weight)
+                      : isAddFlowers
+                        ? FLOWERS_ADMIN_PRICE_COPY.servingPlaceholder
+                        : 'e.g., Serves 2, 12 pieces'
+                  }
                   value={newProduct.serving_size}
                   onChange={(e) => handleInputChange('serving_size', e.target.value)}
                 />
-                {!newProduct.serving_size && (
+                {isNewCakeForm && !newProduct.serving_size && (
                   <p className="text-xs text-gray-500 mt-1">
                     Auto-calculated: {calculateServings(newProduct.base_weight)}
+                  </p>
+                )}
+                {!isNewCakeForm && isAddFlowers && (
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 leading-snug">
+                    {FLOWERS_ADMIN_PRICE_COPY.servingHelper}
                   </p>
                 )}
               </div>
@@ -2340,7 +2816,7 @@ export const Products: React.FC = () => {
                   disabled={!canAddNewVariation()}
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  Add New Variation
+                  {isNewCakeForm ? 'Add New Variation' : isAddFlowers ? 'Add another stem tier' : 'Add another price option'}
                 </Button>
               </div>
             )}
@@ -2350,18 +2826,40 @@ export const Products: React.FC = () => {
               <div key={`variation-${index}`} className="mb-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 p-4 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-700">
                   <Input 
-                    label="Base Weight" 
-                    placeholder="e.g., 500g" 
+                    label={
+                      isNewCakeForm
+                        ? 'Base Weight'
+                        : isAddFlowers
+                          ? FLOWERS_ADMIN_PRICE_COPY.variationLabel
+                          : 'Option label'
+                    }
+                    placeholder={
+                      isNewCakeForm
+                        ? 'e.g., 500g'
+                        : isAddFlowers
+                          ? FLOWERS_ADMIN_PRICE_COPY.variationPlaceholder
+                          : 'e.g., 500g pack, Large bouquet'
+                    }
                             value={variation.weight}
                             onChange={(e) => handleVariationChange(index, 'weight', e.target.value)}
                           />
                         <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Servings
+                      {isNewCakeForm ? 'Servings' : isAddFlowers ? FLOWERS_ADMIN_PRICE_COPY.variationTipTitle : 'Note'}
                           </label>
+                    {isNewCakeForm ? (
                     <div className="px-4 py-3 bg-gray-50 dark:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl text-sm font-semibold text-blue-600">
                       {calculateServings(variation.weight)}
                     </div>
+                    ) : isAddFlowers ? (
+                    <div className="px-3 py-2.5 bg-emerald-50/90 dark:bg-emerald-900/25 border border-emerald-200/80 dark:border-emerald-800/50 rounded-xl text-[11px] text-emerald-900 dark:text-emerald-100/95 leading-snug">
+                      {FLOWERS_ADMIN_PRICE_COPY.variationTipBody}
+                    </div>
+                    ) : (
+                    <div className="px-4 py-3 bg-gray-50 dark:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl text-sm font-semibold text-blue-600">
+                      {variation.weight ? '—' : 'Enter option label'}
+                    </div>
+                    )}
                   </div>
                   <Input 
                     label="Base Price" 
@@ -2438,7 +2936,7 @@ export const Products: React.FC = () => {
                       disabled={!canAddNewVariation()}
                     >
                       <Plus className="h-4 w-4 mr-2" />
-                      Add New Variation
+                      {isNewCakeForm ? 'Add New Variation' : isAddFlowers ? 'Add another stem tier' : 'Add another price option'}
                     </Button>
                 </div>
               )}
@@ -2500,10 +2998,13 @@ export const Products: React.FC = () => {
                   onReset={handleDescriptionReset}
                   onClean={handleDescriptionClean}
                   showPreview={showDescriptionPreview}
-                  primarySubcategoryId={newProduct.primary_subcategory_id}
+                  primarySubcategoryId={showFlavorPickerOnAdd ? newProduct.primary_subcategory_id : undefined}
                   subcategories={subcategories}
                   productVariations={productVariations}
                   baseWeight={newProduct.base_weight}
+                  isCakePricingForm={isNewCakeForm}
+                  formProfile={addFormProfile}
+                  primaryFlavorDisplayName={treatsPrimaryFlavorNameAdd}
                 />
                 
                 {/* Visual Separator */}
@@ -2586,6 +3087,7 @@ export const Products: React.FC = () => {
                       </button>
                     </div>
                   </div>
+                  <ProductImageUploadHint />
                   <div className="flex flex-col h-full">
                     {selectedMainImage ? (
                       <div className="space-y-4 flex-1">
@@ -2659,6 +3161,7 @@ export const Products: React.FC = () => {
                       </button>
                     </div>
                   </div>
+                  <ProductGalleryUploadHint />
                   <div className="flex flex-col h-full">
                     {selectedGalleryImages.length > 0 ? (
                       <div className="space-y-4 flex-1">
@@ -2926,46 +3429,89 @@ export const Products: React.FC = () => {
               />
             </div>
 
-            {/* Third Box: Available Flavors Selection */}
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
-              <FlavorSelector
-                subcategories={subcategories}
-                selectedSubcategoryIds={editProduct.subcategory_ids}
-                selectedFlavorIds={editProduct.available_flavor_ids}
-                primaryFlavorId={editProduct.primary_flavor_id}
-                onFlavorsChange={(flavorIds) => setEditProduct(prev => ({ ...prev, available_flavor_ids: flavorIds }))}
-                onPrimaryFlavorChange={(flavorId) => setEditProduct(prev => ({ ...prev, primary_flavor_id: flavorId }))}
-              />
-            </div>
+            {/* Third Box: Available Flavors Selection (cake only) */}
+            {showFlavorPickerOnEdit ? (
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
+                <FlavorSelector
+                  subcategories={subcategories}
+                  selectedSubcategoryIds={editProduct.subcategory_ids}
+                  selectedFlavorIds={editProduct.available_flavor_ids}
+                  primaryFlavorId={editProduct.primary_flavor_id}
+                  onFlavorsChange={(flavorIds) => setEditProduct(prev => ({ ...prev, available_flavor_ids: flavorIds }))}
+                  onPrimaryFlavorChange={(flavorId) => setEditProduct(prev => ({ ...prev, primary_flavor_id: flavorId }))}
+                  requireFlavorSelection={editFormProfile === 'treats'}
+                />
+              </div>
+            ) : (
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Flavors & cake options</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Not used for {getNonCakeProfileCopy(editFormProfile).title}. Use price options below for packs, units, or bouquet sizes.
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">{getNonCakeProfileCopy(editFormProfile).hint}</p>
+              </div>
+            )}
 
             {/* Fourth Box: Price Section */}
             <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Price Section</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                {isEditCakeForm ? 'Price Section' : 'Price & purchase options'}
+              </h3>
               <div className="space-y-4">
                 {/* Base Price Row */}
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                  <div className="flex-1">
+                  <div className="flex-1 space-y-1">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Base Weight
+                      {isEditCakeForm
+                        ? 'Base Weight'
+                        : isEditFlowers
+                          ? FLOWERS_ADMIN_PRICE_COPY.primaryLabel
+                          : 'Primary option label'}
                     </label>
               <Input 
                 value={editProduct.base_weight}
                 onChange={(e) => handleEditInputChange('base_weight', e.target.value)}
-                      placeholder="e.g., 500g, 1kg" 
+                      placeholder={
+                        isEditCakeForm
+                          ? 'e.g., 500g, 1kg'
+                          : isEditFlowers
+                            ? FLOWERS_ADMIN_PRICE_COPY.primaryPlaceholder
+                            : 'e.g., Standard, 250g'
+                      } 
                     />
+                    {!isEditCakeForm && isEditFlowers && (
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
+                        {FLOWERS_ADMIN_PRICE_COPY.primaryHelper}
+                      </p>
+                    )}
                   </div>
                   <div className="flex-1">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Servings
+                      {isEditCakeForm
+                        ? 'Servings'
+                        : isEditFlowers
+                          ? FLOWERS_ADMIN_PRICE_COPY.servingLabel
+                          : 'Size / pack note (optional)'}
                     </label>
                     <Input 
                       value={editProduct.serving_size}
                       onChange={(e) => handleEditInputChange('serving_size', e.target.value)}
-                      placeholder={calculateServings(editProduct.base_weight)} 
+                      placeholder={
+                        isEditCakeForm
+                          ? calculateServings(editProduct.base_weight)
+                          : isEditFlowers
+                            ? FLOWERS_ADMIN_PRICE_COPY.servingPlaceholder
+                            : 'e.g., 12 pcs'
+                      } 
                     />
-                    {!editProduct.serving_size && (
+                    {isEditCakeForm && !editProduct.serving_size && (
                       <p className="text-xs text-gray-500 mt-1">
                         Auto-calculated: {calculateServings(editProduct.base_weight)}
+                      </p>
+                    )}
+                    {!isEditCakeForm && isEditFlowers && (
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 leading-snug">
+                        {FLOWERS_ADMIN_PRICE_COPY.servingHelper}
                       </p>
                     )}
                   </div>
@@ -3015,18 +3561,40 @@ export const Products: React.FC = () => {
                       <div key={index} className="mb-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 p-4 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-700">
                           <Input 
-                            label="Weight" 
-                            placeholder="e.g., 500g" 
+                            label={
+                              isEditCakeForm
+                                ? 'Weight'
+                                : isEditFlowers
+                                  ? FLOWERS_ADMIN_PRICE_COPY.variationLabel
+                                  : 'Option label'
+                            } 
+                            placeholder={
+                              isEditCakeForm
+                                ? 'e.g., 500g'
+                                : isEditFlowers
+                                  ? FLOWERS_ADMIN_PRICE_COPY.variationPlaceholder
+                                  : 'e.g., 500g pack'
+                            } 
                             value={variation.weight}
                             onChange={(e) => handleEditVariationChange(index, 'weight', e.target.value)}
                           />
                           <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Servings
+                              {isEditCakeForm ? 'Servings' : isEditFlowers ? FLOWERS_ADMIN_PRICE_COPY.variationTipTitle : 'Note'}
                             </label>
+                            {isEditCakeForm ? (
                             <div className="px-4 py-3 bg-gray-50 dark:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl text-sm font-semibold text-blue-600">
                               {calculateServings(variation.weight)}
                             </div>
+                            ) : isEditFlowers ? (
+                            <div className="px-3 py-2.5 bg-emerald-50/90 dark:bg-emerald-900/25 border border-emerald-200/80 dark:border-emerald-800/50 rounded-xl text-[11px] text-emerald-900 dark:text-emerald-100/95 leading-snug">
+                              {FLOWERS_ADMIN_PRICE_COPY.variationTipBody}
+                            </div>
+                            ) : (
+                            <div className="px-4 py-3 bg-gray-50 dark:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl text-sm font-semibold text-blue-600">
+                              {variation.weight ? '—' : 'Enter option label'}
+                            </div>
+                            )}
                           </div>
                           <Input 
                             label="Price" 
@@ -3078,7 +3646,7 @@ export const Products: React.FC = () => {
                               disabled={!canAddNewEditVariation()}
                               className="px-4 py-2"
                             >
-                              Add New Variation
+                              {isEditCakeForm ? 'Add New Variation' : isEditFlowers ? 'Add another stem tier' : 'Add another price option'}
                             </Button>
                           </div>
                         )}
@@ -3090,7 +3658,9 @@ export const Products: React.FC = () => {
                 {/* Add New Variation Button - Only show when no variations exist */}
                 {editProductVariations.length === 0 && (
                   <div className="mt-6">
-                    <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-4">Product Variations</h4>
+                    <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-4">
+                      {isEditCakeForm ? 'Product Variations' : isEditFlowers ? 'Stem tier options' : 'Additional price options'}
+                    </h4>
                     <div className="text-center py-8 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl">
                       <p className="text-gray-500 dark:text-gray-400 mb-4">No variations added yet</p>
                       <Button 
@@ -3101,7 +3671,7 @@ export const Products: React.FC = () => {
                         disabled={!canAddNewEditVariation()}
                         className="px-4 py-2"
                       >
-                        Add First Variation
+                        {isEditCakeForm ? 'Add First Variation' : isEditFlowers ? 'Add first stem tier' : 'Add first price option'}
                       </Button>
                     </div>
                   </div>
@@ -3163,10 +3733,13 @@ export const Products: React.FC = () => {
                   onReset={handleEditDescriptionReset}
                   onClean={handleEditDescriptionClean}
                   showPreview={showEditDescriptionPreview}
-                  primarySubcategoryId={editProduct.primary_subcategory_id}
+                  primarySubcategoryId={showFlavorPickerOnEdit ? editProduct.primary_subcategory_id : undefined}
                   subcategories={subcategories}
                   productVariations={editProductVariations}
                   baseWeight={editProduct.base_weight}
+                  isCakePricingForm={isEditCakeForm}
+                  formProfile={editFormProfile}
+                  primaryFlavorDisplayName={treatsPrimaryFlavorNameEdit}
                 />
                 
                 {/* Visual Separator */}
@@ -3248,6 +3821,7 @@ export const Products: React.FC = () => {
                         </button>
                       </div>
                     </div>
+                    <ProductImageUploadHint />
                     <div className="flex flex-col h-full">
                       {selectedMainImage ? (
                         <div className="space-y-4 flex-1">
@@ -3321,6 +3895,7 @@ export const Products: React.FC = () => {
                         </button>
                       </div>
                     </div>
+                    <ProductGalleryUploadHint />
                     <div className="flex flex-col h-full">
                       {selectedGalleryImages.length > 0 ? (
                         <div className="space-y-4 flex-1">
@@ -3548,6 +4123,7 @@ export const Products: React.FC = () => {
               </div>
             </div>
           )}
+          {galleryType === 'main' ? <ProductImageUploadHint /> : <ProductGalleryUploadHint />}
           
           <ProductFileUpload
             onFilesSelected={(files) => {
@@ -3926,7 +4502,11 @@ export const Products: React.FC = () => {
                             Verified Purchase
                           </span>
                         )}
-                        {!review.is_approved && (
+                        {isReviewApproved(review) ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200">
+                            Approved
+                          </span>
+                        ) : (
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
                             Pending Approval
                           </span>
@@ -3944,14 +4524,23 @@ export const Products: React.FC = () => {
                         {new Date(review.created_at).toLocaleDateString()}
                       </p>
                     </div>
-                    <div className="flex items-center space-x-2 ml-4">
-                      {!review.is_approved && (
-                        <button
-                          onClick={() => handleApproveReview(review.id)}
-                          className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
-                          title="Approve Review"
+                    <div className="flex items-center space-x-2 ml-4 shrink-0">
+                      {isReviewApproved(review) ? (
+                        <span
+                          className="inline-flex items-center justify-center rounded-full p-1.5 bg-emerald-100 text-emerald-800 ring-2 ring-emerald-400/80 dark:bg-emerald-900/45 dark:text-emerald-200 dark:ring-emerald-500/50"
+                          title="Approved — live on storefront"
+                          aria-label="Approved"
                         >
-                          <CheckCircle className="h-4 w-4" />
+                          <CheckCircle className="h-5 w-5" strokeWidth={2.5} />
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleApproveReview(review.id)}
+                          className="inline-flex items-center justify-center rounded-full p-1.5 bg-amber-100 text-amber-900 ring-2 ring-amber-500/80 hover:bg-amber-200 hover:ring-amber-600 dark:bg-amber-950/50 dark:text-amber-100 dark:ring-amber-500/60 dark:hover:bg-amber-900/60 transition-colors"
+                          title="Click to approve (publish on storefront)"
+                        >
+                          <CheckCircle className="h-5 w-5" strokeWidth={2.5} />
                         </button>
                       )}
                       <button

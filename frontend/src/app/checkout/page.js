@@ -1,7 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
+import Image from 'next/image';
+import dynamic from 'next/dynamic';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   ArrowLeft,
   User,
@@ -24,7 +26,10 @@ import {
   Tag,
   Package,
   Gift,
-  Navigation
+  Navigation,
+  Move,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { useCart } from '../../contexts/CartContext';
 import { usePinCode } from '../../contexts/PinCodeContext';
@@ -35,10 +40,27 @@ import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import MobileFooter from '../../components/MobileFooter';
 import DeliverySlotSelector from '../../components/DeliverySlotSelector';
+
+const CheckoutDeliveryMap = dynamic(() => import('../../components/CheckoutDeliveryMap'), {
+  ssr: false,
+  loading: () => (
+    <div
+      className="flex h-[min(143px,24.75vh)] w-full items-center justify-center rounded-lg border border-gray-200 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/80 sm:h-[min(260px,45vh)]"
+      role="status"
+      aria-live="polite"
+    >
+      <Loader2 className="h-8 w-8 shrink-0 animate-spin text-pink-600 dark:text-pink-400" aria-hidden />
+      <span className="sr-only">Loading map</span>
+    </div>
+  ),
+});
+import deliverySlotApi from '../../api/deliverySlotApi';
 import orderApi from '../../api/orderApi';
 import settingsApi from '../../api/settingsApi';
 import customerAuthApi from '../../api/customerAuthApi';
 import { formatPrice } from '../../utils/priceFormatter';
+import { resolveEntityImageUrl } from '../../utils/imageUrl';
+import { trackCheckoutEvent } from '../../utils/checkoutAnalytics';
 
 // Helper functions for formatting dates and times (same as cart page)
 const formatDeliveryDate = (date) => {
@@ -118,14 +140,453 @@ const formatTimeSlot = (deliverySlot) => {
   return 'N/A';
 };
 
-function CheckoutPageContent() {
+/** Module-level slot helpers (stable for react-hooks/exhaustive-deps; pure, no component state). */
+const parseDeliveryDate = (dateInput) => {
+  if (!dateInput) return null;
+
+  if (dateInput instanceof Date) {
+    return new Date(dateInput);
+  }
+  if (typeof dateInput === 'string') {
+    const dateParts = dateInput.split('-');
+    if (dateParts.length === 3) {
+      const year = parseInt(dateParts[0], 10);
+      const month = parseInt(dateParts[1], 10) - 1;
+      const day = parseInt(dateParts[2], 10);
+      if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+        return new Date(year, month, day);
+      }
+    }
+    return new Date(dateInput);
+  }
+  return null;
+};
+
+const isDeliverySlotExpired = (deliverySlot) => {
+  if (!deliverySlot || !deliverySlot.date) return false;
+
+  try {
+    let deliveryDate;
+    if (deliverySlot.date instanceof Date) {
+      deliveryDate = new Date(deliverySlot.date);
+    } else if (typeof deliverySlot.date === 'string') {
+      const dateParts = deliverySlot.date.split('-');
+      if (dateParts.length === 3) {
+        const year = parseInt(dateParts[0], 10);
+        const month = parseInt(dateParts[1], 10) - 1;
+        const day = parseInt(dateParts[2], 10);
+        if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+          deliveryDate = new Date(year, month, day);
+        } else {
+          deliveryDate = new Date(deliverySlot.date);
+        }
+      } else {
+        deliveryDate = new Date(deliverySlot.date);
+      }
+
+      if (isNaN(deliveryDate.getTime())) {
+        console.warn('Invalid delivery date format:', deliverySlot.date);
+        return false;
+      }
+    } else {
+      return false;
+    }
+
+    const now = new Date();
+
+    const deliveryDateOnly = new Date(
+      deliveryDate.getFullYear(),
+      deliveryDate.getMonth(),
+      deliveryDate.getDate()
+    );
+    const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const daysDiff = Math.floor((todayOnly - deliveryDateOnly) / (1000 * 60 * 60 * 24));
+    return daysDiff > 1;
+  } catch (e) {
+    console.error('Error checking delivery slot expiry:', e);
+    return false;
+  }
+};
+
+const isSlotExpiredForToday = (deliverySlot) => {
+  if (!deliverySlot || !deliverySlot.date) return false;
+
+  try {
+    const today = new Date();
+    let deliveryDate;
+
+    if (deliverySlot.date instanceof Date) {
+      deliveryDate = new Date(deliverySlot.date);
+    } else if (typeof deliverySlot.date === 'string') {
+      const dateParts = deliverySlot.date.split('-');
+      if (dateParts.length === 3) {
+        const year = parseInt(dateParts[0], 10);
+        const month = parseInt(dateParts[1], 10) - 1;
+        const day = parseInt(dateParts[2], 10);
+        if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+          deliveryDate = new Date(year, month, day);
+        } else {
+          deliveryDate = new Date(deliverySlot.date);
+        }
+      } else {
+        deliveryDate = new Date(deliverySlot.date);
+      }
+    } else {
+      return false;
+    }
+
+    const selectedDateOnly = new Date(deliveryDate.getFullYear(), deliveryDate.getMonth(), deliveryDate.getDate());
+    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    if (selectedDateOnly.getTime() !== todayOnly.getTime()) {
+      return false;
+    }
+
+    const now = new Date();
+    const currentTime = now.getHours() * 60 + now.getMinutes();
+
+    const slot = deliverySlot.slot;
+    if (!slot || !slot.startTime) return false;
+
+    try {
+      const [startHour, startMin] = slot.startTime.split(':').map(Number);
+      const slotStartTime = startHour * 60 + startMin;
+
+      return currentTime >= slotStartTime;
+    } catch (e) {
+      console.warn('Error parsing slot start time:', e);
+      return false;
+    }
+  } catch (e) {
+    console.error('Error checking slot expiration for today:', e);
+    return false;
+  }
+};
+
+const getSlotExpirationStatus = (deliverySlot) => {
+  if (!deliverySlot || !deliverySlot.date) return 'valid';
+
+  try {
+    const deliveryDate = parseDeliveryDate(deliverySlot.date);
+    if (!deliveryDate || isNaN(deliveryDate.getTime())) {
+      return 'valid';
+    }
+
+    const today = new Date();
+    const deliveryDateOnly = new Date(deliveryDate.getFullYear(), deliveryDate.getMonth(), deliveryDate.getDate());
+    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const daysDiff = Math.floor((todayOnly - deliveryDateOnly) / (1000 * 60 * 60 * 24));
+
+    if (daysDiff > 0) {
+      return 'expired';
+    }
+
+    if (daysDiff === 0 && isSlotExpiredForToday(deliverySlot)) {
+      return 'expired';
+    }
+
+    if (daysDiff === 0) {
+      const slot = deliverySlot.slot;
+      if (slot && slot.startTime) {
+        try {
+          const now = new Date();
+          const currentTime = now.getHours() * 60 + now.getMinutes();
+          const [startHour, startMin] = slot.startTime.split(':').map(Number);
+          const slotStartTime = startHour * 60 + startMin;
+          const minutesUntilSlot = slotStartTime - currentTime;
+
+          if (minutesUntilSlot < 0) {
+            return 'expired';
+          }
+
+          if (minutesUntilSlot > 0 && minutesUntilSlot < 120) {
+            return 'expiring_soon';
+          }
+        } catch (e) {
+          // Ignore errors
+        }
+      }
+    }
+
+    if (isDeliverySlotExpired(deliverySlot)) {
+      return 'expired';
+    }
+  } catch (e) {
+    console.error('Error checking slot expiration status:', e);
+  }
+
+  return 'valid';
+};
+
+const calculateCountdown = (deliverySlot) => {
+  if (!deliverySlot || !deliverySlot.date || !deliverySlot.slot?.startTime) {
+    return null;
+  }
+
+  try {
+    const today = new Date();
+    let deliveryDate;
+
+    if (deliverySlot.date instanceof Date) {
+      deliveryDate = new Date(deliverySlot.date);
+    } else if (typeof deliverySlot.date === 'string') {
+      const dateParts = deliverySlot.date.split('-');
+      if (dateParts.length === 3) {
+        const year = parseInt(dateParts[0], 10);
+        const month = parseInt(dateParts[1], 10) - 1;
+        const day = parseInt(dateParts[2], 10);
+        if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+          deliveryDate = new Date(year, month, day);
+        } else {
+          deliveryDate = new Date(deliverySlot.date);
+        }
+      } else {
+        deliveryDate = new Date(deliverySlot.date);
+      }
+    } else {
+      return null;
+    }
+
+    const selectedDateOnly = new Date(deliveryDate.getFullYear(), deliveryDate.getMonth(), deliveryDate.getDate());
+    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    if (selectedDateOnly.getTime() !== todayOnly.getTime()) {
+      return null;
+    }
+
+    const now = new Date();
+    const currentTime = now.getHours() * 60 + now.getMinutes();
+    const [startHour, startMin] = deliverySlot.slot.startTime.split(':').map(Number);
+    const slotStartTime = startHour * 60 + startMin;
+    const minutesUntilSlot = slotStartTime - currentTime;
+
+    if (minutesUntilSlot <= 0) {
+      return null;
+    }
+
+    return {
+      hours: Math.floor(minutesUntilSlot / 60),
+      minutes: minutesUntilSlot % 60
+    };
+  } catch (e) {
+    console.error('Error calculating countdown:', e);
+    return null;
+  }
+};
+
+const LAST_USED_ADDRESS_STORAGE_KEY = 'last_used_address';
+
+/** True if local last-used payload has text fields and/or a valid map pin. */
+function lastUsedAddressHasContent(parsed) {
+  if (!parsed || typeof parsed !== 'object') return false;
+  const hasText = [parsed.street, parsed.city, parsed.state].some(
+    (s) => typeof s === 'string' && s.trim().length > 0
+  );
+  return hasText || Boolean(normalizeSavedMapLocation(parsed.location));
+}
+
+function normalizeSavedMapLocation(loc) {
+  if (!loc || typeof loc !== 'object') return null;
+  const lat = Number(loc.lat);
+  const lng = Number(loc.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const accuracy = loc.accuracy;
+  const out = {
+    lat,
+    lng,
+    accuracy: typeof accuracy === 'number' && Number.isFinite(accuracy) ? accuracy : null,
+    source: typeof loc.source === 'string' && loc.source.trim() ? loc.source.trim() : 'saved_device',
+  };
+  if (typeof loc.name === 'string' && loc.name.trim()) {
+    out.name = loc.name.trim();
+  }
+  return out;
+}
+
+function readLastUsedAddressFromStorage() {
+  try {
+    if (typeof window === 'undefined') return null;
+    const raw = localStorage.getItem(LAST_USED_ADDRESS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return typeof parsed === 'object' && parsed !== null ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildLastUsedAddressPayload(address) {
+  if (!address || typeof address !== 'object') {
+    return {
+      street: '',
+      landmark: '',
+      city: '',
+      state: '',
+      zip_code: '',
+      country: 'India',
+    };
+  }
+  const base = {
+    street: address.street || '',
+    landmark: address.landmark || '',
+    city: address.city || '',
+    state: address.state || '',
+    zip_code: address.zip_code || '',
+    country: address.country || 'India',
+  };
+  const normalizedLoc = normalizeSavedMapLocation(address.location);
+  if (normalizedLoc) {
+    base.location = normalizedLoc;
+  }
+  return base;
+}
+
+/**
+ * Segment immediately before the city token in Nominatim `display_name` (often area/colony when `address.suburb` is empty).
+ */
+function areaFromDisplayName(displayName, cityBase, stateName) {
+  if (!displayName || !cityBase || typeof displayName !== 'string') return null;
+  const norm = (s) => (s && String(s).trim().toLowerCase()) || '';
+  const parts = displayName.split(',').map((s) => s.trim()).filter(Boolean);
+  const idx = parts.findIndex((p) => norm(p) === norm(cityBase));
+  if (idx <= 0) return null;
+  const candidate = parts[idx - 1];
+  if (!candidate || candidate.length > 48) return null;
+  if (/^\d{5,7}$/.test(candidate)) return null;
+  if (/^(india|भारत)$/i.test(candidate)) return null;
+  if (norm(candidate) === norm(cityBase)) return null;
+  if (stateName && norm(candidate) === norm(stateName)) return null;
+  return candidate;
+}
+
+/** Nominatim `address` (+ optional full geojson row) → "City, locality" + optional "Near … road" (checkout map preview). */
+function buildPlaceLinesFromNominatimAddress(address, geo = null) {
+  if (!address || typeof address !== 'object') return null;
+
+  const norm = (s) => (s && String(s).trim().toLowerCase()) || '';
+
+  const coreCity = address.city || address.town || address.municipality;
+  const fallbackCity = address.state_district || address.county;
+  const cityBase = coreCity || fallbackCity || address.state;
+
+  let area =
+    address.suburb ||
+    address.neighbourhood ||
+    address.city_district ||
+    address.district ||
+    address.borough ||
+    address.quarter ||
+    address.hamlet ||
+    address.village ||
+    address.locality;
+
+  if (area && cityBase && norm(area) === norm(cityBase)) {
+    area = null;
+  }
+
+  if (!area && cityBase && geo?.display_name) {
+    area = areaFromDisplayName(geo.display_name, cityBase, address.state);
+    if (area && norm(area) === norm(cityBase)) {
+      area = null;
+    }
+  }
+
+  let primaryLine = null;
+  if (cityBase && area) {
+    primaryLine = `${cityBase}, ${area}`;
+  } else if (area) {
+    primaryLine = area;
+  } else if (cityBase) {
+    primaryLine = cityBase;
+  } else if (address.state) {
+    primaryLine = address.state;
+  }
+
+  if (!primaryLine) return null;
+
+  const road =
+    address.road ||
+    address.pedestrian ||
+    address.residential ||
+    address.path ||
+    address.footway;
+  const landmarkHint =
+    address.amenity || address.shop || address.hospital || address.college || address.school;
+  const nearSubject = road || landmarkHint;
+  const nearLine = nearSubject ? `Near ${nearSubject}` : null;
+  const storageName = nearLine
+    ? `${primaryLine} — ${nearLine.replace(/^Near\s+/i, '')}`
+    : primaryLine;
+
+  return { primaryLine, nearLine, storageName };
+}
+
+async function reverseGeocodeLatLng(lat, lng) {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`,
+      {
+        headers: {
+          'User-Agent': 'CreamingoDeliveryApp/1.0 (https://creamingo.com; checkout)',
+          'Accept-Language': 'en',
+        },
+      }
+    );
+    if (!response.ok) throw new Error('Reverse geocoding failed');
+    const data = await response.json();
+    return buildPlaceLinesFromNominatimAddress(data.address, data);
+  } catch (error) {
+    console.error('Reverse geocoding error:', error);
+    return null;
+  }
+}
+
+/** Split `storageName` from `reverseGeocodeLatLng` back into primary + near line. */
+function parseStoredLocationLabel(name) {
+  if (!name || typeof name !== 'string') return { primaryLine: null, nearLine: null };
+  const trimmed = name.trim();
+  const sep = ' — ';
+  const idx = trimmed.indexOf(sep);
+  if (idx === -1) return { primaryLine: trimmed, nearLine: null };
+  const primaryLine = trimmed.slice(0, idx).trim();
+  const rest = trimmed.slice(idx + sep.length).trim();
+  const nearLine = rest ? `Near ${rest}` : null;
+  return { primaryLine, nearLine };
+}
+
+/**
+ * P1 — Checkout layout & section chrome (single card scale + auth gate accent).
+ * P0/P1 foundations: use these for every main block so mobile/desktop stay consistent.
+ */
+const CHECKOUT_FORM_CARD =
+  'rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800 overflow-hidden scroll-mt-24';
+const CHECKOUT_FORM_CARD_GATE =
+  `${CHECKOUT_FORM_CARD} border-l-4 border-l-pink-500 dark:border-l-pink-400`;
+/** Main content column: prevents grid flex children from forcing horizontal scroll */
+const CHECKOUT_MAIN_COLUMN = 'min-w-0';
+const CHECKOUT_SECTION_HEADER_BTN =
+  'ui-focus-visible flex w-full min-h-[44px] items-center justify-between p-3 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50 sm:p-4 lg:p-6 lg:pointer-events-none lg:hover:bg-transparent';
+const CHECKOUT_PRIMARY_BTN =
+  'ui-focus-visible w-full min-h-[44px] rounded-lg bg-pink-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-pink-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-pink-700 dark:hover:bg-pink-600 sm:min-h-[48px] sm:py-3';
+const CHECKOUT_SECONDARY_BTN =
+  'ui-focus-visible w-full min-h-[44px] rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700 sm:min-h-[48px] sm:py-3';
+
+/** Form field typography — aligned with cart label / meta tokens (P4) */
+const CHECKOUT_FIELD_LABEL = 'block text-cart-label mb-1 sm:mb-1.5';
+const CHECKOUT_FIELD_ERROR = 'text-form-error mt-1.5 flex items-start gap-1.5';
+const CHECKOUT_FIELD_ERROR_ICON = 'h-3.5 w-3.5 shrink-0 text-red-500 dark:text-red-400 mt-0.5';
+
+function CheckoutPageContent({ isClient }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { cartItems, getCartSummary, clearCart, isInitialized, autoUpdateExpiredSlots } = useCart();
-  const { showSuccess } = useToast();
+  const { showSuccess, showError } = useToast();
   const {
     deliveryInfo,
     currentPinCode,
-    getFormattedDeliveryCharge
+    getFormattedDeliveryCharge,
+    isValidPinCode
   } = usePinCode();
   const { customer, isAuthenticated, login, register } = useCustomerAuth();
   const { balance: walletBalance = 0, fetchBalance } = useWallet();
@@ -137,12 +598,31 @@ function CheckoutPageContent() {
   const [showSuccessIndicator, setShowSuccessIndicator] = useState(false);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [locationName, setLocationName] = useState(null);
+  /** Second line under map preview, e.g. "Near Medical College Road" (from Nominatim). */
+  const [locationNearLine, setLocationNearLine] = useState(null);
+  /** Pin drag: show updating / brief updated state above the map. */
+  const [pinGeocodePhase, setPinGeocodePhase] = useState('idle');
+  const pinGeocodeTimerRef = useRef(null);
+  const pinGeocodeHideUpdatedRef = useRef(null);
+  const pinGeocodeSeqRef = useRef(0);
   const [locationAccuracy, setLocationAccuracy] = useState(null);
   const [locationWarning, setLocationWarning] = useState(null);
+  /** Forward-geocoded center for empty-state map (delivery PIN / service area). */
+  const [serviceAreaMapCenter, setServiceAreaMapCenter] = useState(null);
+  const [serviceAreaGeocodeStatus, setServiceAreaGeocodeStatus] = useState('idle');
+  /** Inline delivery-location messages (P7); do not rely only on the top error banner. */
+  const [deliveryLocationFeedback, setDeliveryLocationFeedback] = useState(null);
+  /** Map tap hint chip only after successful "Use my location" (avoids overlap with OSM / pre-GPS UX). */
+  const [showDeliveryMapTapHint, setShowDeliveryMapTapHint] = useState(false);
+  /** Snapshot of `last_used_address` for Option A quick-fill UI (hydrates after mount). */
+  const [deviceSavedAddressSnapshot, setDeviceSavedAddressSnapshot] = useState(null);
   const authSectionRef = useRef(null);
   const [authEmail, setAuthEmail] = useState('');
   const [authStep, setAuthStep] = useState('email');
   const [authPassword, setAuthPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [showSignupConfirmPassword, setShowSignupConfirmPassword] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
   const [emailCheckResult, setEmailCheckResult] = useState(null);
@@ -176,6 +656,8 @@ function CheckoutPageContent() {
   });
 
   // Update form data when customer data loads
+  // isClient passed from wrapper to keep hook order stable
+
   useEffect(() => {
     if (customer && isAuthenticated) {
       setFormData(prev => ({
@@ -194,9 +676,11 @@ function CheckoutPageContent() {
         }
       }));
       
-      // Restore locationName if location exists and has a stored name
+      // Restore map preview lines if location has a stored label
       if (customer.address?.location?.name) {
-        setLocationName(customer.address.location.name);
+        const parsed = parseStoredLocationLabel(customer.address.location.name);
+        setLocationName(parsed.primaryLine);
+        setLocationNearLine(parsed.nearLine);
       }
     }
   }, [customer, isAuthenticated, currentPinCode]);
@@ -308,7 +792,7 @@ function CheckoutPageContent() {
         phone: signupData.phone?.trim() || undefined,
         password: signupData.password,
         referralCode: signupData.referralCode?.trim() || undefined
-      });
+      }, { source: 'checkout' });
       setSignupData(prev => ({
         ...prev,
         password: '',
@@ -321,42 +805,47 @@ function CheckoutPageContent() {
     }
   };
 
-  // Auto-reverse geocode when location exists but locationName is missing
+  // Hydrate map preview from stored `location.name`, or reverse-geocode when coords exist without a label
   useEffect(() => {
     const location = formData.address?.location;
-    if (location && typeof location.lat === 'number' && typeof location.lng === 'number') {
-      // If location has a stored name, use it
-      if (location.name) {
-        setLocationName(prev => prev || location.name);
-      }
-      // If location doesn't have a name, reverse geocode (only once per location)
-      else {
-        // Add a small delay to respect rate limits
-        const timer = setTimeout(async () => {
-          const name = await reverseGeocode(location.lat, location.lng);
-          if (name) {
-            setLocationName(name);
-            // Store the name in the location object for persistence
-            setFormData(prev => ({
-              ...prev,
-              address: {
-                ...prev.address,
-                location: {
-                  ...prev.address.location,
-                  name: name
-                }
-              }
-            }));
-          }
-        }, 1000); // 1 second delay to respect Nominatim rate limits
-        
-        return () => clearTimeout(timer);
-      }
-    } else if (!location) {
-      // Clear locationName if location is removed
+    if (!location || typeof location.lat !== 'number' || typeof location.lng !== 'number') {
       setLocationName(null);
+      setLocationNearLine(null);
+      setPinGeocodePhase('idle');
+      return;
     }
-  }, [formData.address?.location?.lat, formData.address?.location?.lng, formData.address?.location?.name]);
+
+    if (location.name) {
+      const parsed = parseStoredLocationLabel(location.name);
+      setLocationName(parsed.primaryLine);
+      setLocationNearLine(parsed.nearLine);
+      return;
+    }
+
+    if (location.source === 'map_pick') {
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      const place = await reverseGeocodeLatLng(location.lat, location.lng);
+      if (place) {
+        setLocationName(place.primaryLine);
+        setLocationNearLine(place.nearLine);
+        setFormData((prev) => ({
+          ...prev,
+          address: {
+            ...prev.address,
+            location: {
+              ...prev.address.location,
+              name: place.storageName,
+            },
+          },
+        }));
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [formData.address?.location]);
 
   // Load last used address on mount if customer is not authenticated or doesn't have address
   useEffect(() => {
@@ -367,9 +856,16 @@ function CheckoutPageContent() {
       (isAuthenticated && customer && (!customer.address || (!customer.address.street && !customer.address.city && !customer.address.state)));
     
     if (shouldLoadSavedAddress) {
-      const savedAddress = loadLastUsedAddress();
-      if (savedAddress && (!formData.address.street && !formData.address.city && !formData.address.state)) {
-        setFormData(prev => ({
+      const savedAddress = readLastUsedAddressFromStorage();
+      if (
+        savedAddress &&
+        lastUsedAddressHasContent(savedAddress) &&
+        !formData.address.street &&
+        !formData.address.city &&
+        !formData.address.state
+      ) {
+        const normalizedLoc = normalizeSavedMapLocation(savedAddress.location);
+        setFormData((prev) => ({
           ...prev,
           address: {
             ...prev.address,
@@ -377,11 +873,27 @@ function CheckoutPageContent() {
             landmark: savedAddress.landmark || prev.address.landmark,
             city: savedAddress.city || prev.address.city,
             state: savedAddress.state || prev.address.state,
-            zip_code: savedAddress.zip_code || prev.address.zip_code || currentPinCode || ''
-          }
+            zip_code: savedAddress.zip_code || prev.address.zip_code || currentPinCode || '',
+            country: savedAddress.country || prev.address.country || 'India',
+            location: normalizedLoc || prev.address.location,
+          },
         }));
+        if (normalizedLoc?.name) {
+          const parsed = parseStoredLocationLabel(normalizedLoc.name);
+          setLocationName(parsed.primaryLine);
+          setLocationNearLine(parsed.nearLine);
+        } else {
+          setLocationName(null);
+          setLocationNearLine(null);
+        }
+        if (normalizedLoc && typeof normalizedLoc.accuracy === 'number' && Number.isFinite(normalizedLoc.accuracy)) {
+          setLocationAccuracy(normalizedLoc.accuracy);
+        } else if (!normalizedLoc) {
+          setLocationAccuracy(null);
+        }
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: load last-used address once; deps would re-hydrate while user edits
   }, []); // Only run on mount
 
   const [selectedSlot, setSelectedSlot] = useState(null);
@@ -390,22 +902,51 @@ function CheckoutPageContent() {
   const [applyWalletDiscount, setApplyWalletDiscount] = useState(false);
   const [countdown, setCountdown] = useState(null); // { hours: number, minutes: number } or null
   const [dismissExpiringSoonWarning, setDismissExpiringSoonWarning] = useState(false);
+  const [isAutoSelected, setIsAutoSelected] = useState(false); // Track if slot was auto-selected
+  const [isLoadingEarliestSlot, setIsLoadingEarliestSlot] = useState(false);
   
-  // Collapsible sections state for mobile accordion
+  // Collapsible sections state for mobile accordion (Delivery Date & Time expanded by default)
   const [expandedSections, setExpandedSections] = useState({
     customerInfo: true, // Default open
     deliveryAddress: true, // Default open
-    deliverySlot: true, // Default open
+    deliverySlot: true, // Delivery Date & Time * - expanded by default so user sees slot selection first
     paymentMethod: true, // Default open
     specialInstructions: false // Default closed
   });
   
   // Order summary bottom sheet state for mobile
   const [showOrderSummarySheet, setShowOrderSummarySheet] = useState(false);
+
+  useEffect(() => {
+    if (!showOrderSummarySheet) return;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setShowOrderSummarySheet(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [showOrderSummarySheet]);
   
   // Section navigation state
   const [showSectionNav, setShowSectionNav] = useState(false);
   const [activeSection, setActiveSection] = useState('customerInfo');
+
+  const prevShowSlotSelectorRef = useRef(false);
+  useEffect(() => {
+    if (showSlotSelector && !prevShowSlotSelectorRef.current) {
+      trackCheckoutEvent('checkout_slot_selector_opened', { pinCode: currentPinCode || null });
+    }
+    prevShowSlotSelectorRef.current = showSlotSelector;
+  }, [showSlotSelector, currentPinCode]);
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'hidden' && pathname === '/checkout') {
+        trackCheckoutEvent('checkout_step_backgrounded', { step: activeSection });
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [pathname, activeSection]);
   
   // Field-level errors for better placement
   const [fieldErrors, setFieldErrors] = useState({});
@@ -415,10 +956,7 @@ function CheckoutPageContent() {
   const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState(1500); // Default value, will be fetched from API
   
   const toggleSection = (section) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }));
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
   
   // Scroll to section
@@ -486,93 +1024,96 @@ function CheckoutPageContent() {
     return () => clearTimeout(timeoutId);
   }, [formData, selectedSlot, appliedPromo, applyWalletDiscount]);
   
-  // Load saved form progress on mount
+  // Load saved form progress on mount – prefill form and address so user doesn't re-enter
   useEffect(() => {
     try {
       const savedData = localStorage.getItem('checkout_form_progress');
       if (savedData) {
         const parsed = JSON.parse(savedData);
-        
-        // Only restore if form is empty (user hasn't started filling)
+        const savedAddress = parsed.formData?.address;
+        const hasSavedAddress = savedAddress && (savedAddress.street || savedAddress.city || savedAddress.state);
+        const currentAddressEmpty = !formData.address.street && !formData.address.city && !formData.address.state;
+
+        // Full restore when form is empty (name, email, phone not filled)
         if (!formData.name && !formData.email && !formData.phone) {
           if (parsed.formData) {
             setFormData(prev => ({
               ...prev,
               ...parsed.formData,
-              // Don't restore delivery date/time if slot is expired
               deliveryDate: parsed.formData.deliveryDate || prev.deliveryDate,
-              deliveryTime: parsed.formData.deliveryTime || prev.deliveryTime
+              deliveryTime: parsed.formData.deliveryTime || prev.deliveryTime,
+              address: {
+                street: savedAddress?.street ?? prev.address.street,
+                landmark: savedAddress?.landmark ?? prev.address.landmark,
+                city: savedAddress?.city ?? prev.address.city,
+                state: savedAddress?.state ?? prev.address.state,
+                zip_code: savedAddress?.zip_code ?? prev.address.zip_code ?? currentPinCode ?? '',
+                country: savedAddress?.country ?? prev.address.country ?? 'India',
+                location: null
+              }
             }));
-            
-            // Restore locationName if location exists
-            if (parsed.formData?.address?.location?.name) {
-              setLocationName(parsed.formData.address.location.name);
-            }
+            setLocationName(null);
+            setLocationNearLine(null);
           }
-          
+
           if (parsed.selectedSlot) {
-            const restoredDate = parsed.selectedSlot.date 
+            const restoredDate = parsed.selectedSlot.date
               ? new Date(parsed.selectedSlot.date)
               : null;
-            const restoredSlot = {
-              ...parsed.selectedSlot,
-              date: restoredDate
-            };
-            
-            // Only restore slot if it's not expired
+            const restoredSlot = { ...parsed.selectedSlot, date: restoredDate };
             if (restoredDate && getSlotExpirationStatus(restoredSlot) !== 'expired') {
               setSelectedSlot(restoredSlot);
             }
           }
-          
-          // DO NOT restore promo from checkout_form_progress
-          // Promo should ONLY come from applied_promo localStorage (Cart is source of truth)
-          // Clear any stale promo from checkout_form_progress
+
           if (parsed.appliedPromo) {
             const cleanedData = { ...parsed, appliedPromo: null };
             localStorage.setItem('checkout_form_progress', JSON.stringify(cleanedData));
           }
-          
           if (parsed.applyWalletDiscount !== undefined) {
             setApplyWalletDiscount(parsed.applyWalletDiscount);
           }
+        } else if (hasSavedAddress && currentAddressEmpty) {
+          // Form has name/email/phone (e.g. logged in) but address is empty – prefill address only
+          setFormData(prev => ({
+            ...prev,
+            address: {
+              ...prev.address,
+              street: savedAddress.street || prev.address.street,
+              landmark: savedAddress.landmark || prev.address.landmark,
+              city: savedAddress.city || prev.address.city,
+              state: savedAddress.state || prev.address.state,
+              zip_code: savedAddress.zip_code || prev.address.zip_code,
+              location: null
+            }
+          }));
+          setLocationName(null);
+          setLocationNearLine(null);
         }
       }
     } catch (error) {
       console.error('Error loading saved form progress:', error);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: restore from localStorage once; deps would overwrite in-progress checkout
   }, []); // Only run on mount
   
-  // Save address to localStorage after successful order
+  // Save address to localStorage after successful order (text + optional map pin for Option A).
   const saveLastUsedAddress = (address) => {
     try {
-      const addressToSave = {
-        street: address.street || '',
-        landmark: address.landmark || '',
-        city: address.city || '',
-        state: address.state || '',
-        zip_code: address.zip_code || ''
-      };
-      localStorage.setItem('last_used_address', JSON.stringify(addressToSave));
-      console.log('Address saved to localStorage:', addressToSave);
+      const addressToSave = buildLastUsedAddressPayload(address);
+      localStorage.setItem(LAST_USED_ADDRESS_STORAGE_KEY, JSON.stringify(addressToSave));
+      setDeviceSavedAddressSnapshot(addressToSave);
     } catch (error) {
       console.error('Error saving address to localStorage:', error);
     }
   };
 
-  // Load last used address from localStorage
-  const loadLastUsedAddress = () => {
-    try {
-      const savedAddress = localStorage.getItem('last_used_address');
-      if (savedAddress) {
-        const parsed = JSON.parse(savedAddress);
-        return parsed;
-      }
-    } catch (error) {
-      console.error('Error loading saved address from localStorage:', error);
-    }
-    return null;
-  };
+  // Load last used address from localStorage (same shape as `saveLastUsedAddress` writes).
+  const loadLastUsedAddress = () => readLastUsedAddressFromStorage();
+
+  useEffect(() => {
+    setDeviceSavedAddressSnapshot(readLastUsedAddressFromStorage());
+  }, []);
   
   // Clear saved form progress after successful order
   const clearSavedFormProgress = () => {
@@ -583,10 +1124,24 @@ function CheckoutPageContent() {
     }
   };
   
+  // Delivery Date & Time: always expanded when checkout page is shown (user can collapse via header if they choose)
+  useLayoutEffect(() => {
+    if (pathname === '/checkout') {
+      setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+    }
+  }, [pathname]);
+
   // Track active section on scroll
   useEffect(() => {
     const handleScroll = () => {
-      const sections = ['customerInfo', 'deliveryAddress', 'deliverySlot', 'paymentMethod', 'specialInstructions'];
+      const sections = [
+        'checkoutAuth',
+        'customerInfo',
+        'deliverySlot',
+        'deliveryAddress',
+        'paymentMethod',
+        'specialInstructions'
+      ];
       const scrollPosition = window.scrollY + 150;
       
       for (let i = sections.length - 1; i >= 0; i--) {
@@ -608,283 +1163,46 @@ function CheckoutPageContent() {
 
   const cartSummary = getCartSummary();
 
-  // Check if delivery slot is expired (same logic as CartContext)
-  const isDeliverySlotExpired = (deliverySlot) => {
-    if (!deliverySlot || !deliverySlot.date) return false;
-    
-    try {
-      // Get delivery date - handle various formats
-      let deliveryDate;
-      if (deliverySlot.date instanceof Date) {
-        deliveryDate = new Date(deliverySlot.date);
-      } else if (typeof deliverySlot.date === 'string') {
-        // Handle YYYY-MM-DD format (stored in localStorage)
-        // Parse as local date to avoid timezone issues
-        const dateParts = deliverySlot.date.split('-');
-        if (dateParts.length === 3) {
-          const year = parseInt(dateParts[0], 10);
-          const month = parseInt(dateParts[1], 10) - 1; // Month is 0-indexed
-          const day = parseInt(dateParts[2], 10);
-          if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
-            deliveryDate = new Date(year, month, day);
-          } else {
-            // Fallback to standard parsing
-            deliveryDate = new Date(deliverySlot.date);
-          }
-        } else {
-          // Fallback to standard parsing for other formats
-          deliveryDate = new Date(deliverySlot.date);
-        }
-        
-        // Check if date is valid
-        if (isNaN(deliveryDate.getTime())) {
-          console.warn('Invalid delivery date format:', deliverySlot.date);
-          return false; // Can't determine expiry if date is invalid
-        }
-      } else {
-        return false; // Can't determine expiry
-      }
-
-      // Get current date/time in local timezone
-      const now = new Date();
-      
-      // Compare dates only (without time) using local timezone
-      // This avoids timezone issues when comparing dates
-      const deliveryDateOnly = new Date(
-        deliveryDate.getFullYear(), 
-        deliveryDate.getMonth(), 
-        deliveryDate.getDate()
-      );
-      const todayOnly = new Date(
-        now.getFullYear(), 
-        now.getMonth(), 
-        now.getDate()
-      );
-      
-      // Only consider expired if delivery date is more than 1 day in the past
-      // This is very conservative to avoid false positives
-      const daysDiff = Math.floor((todayOnly - deliveryDateOnly) / (1000 * 60 * 60 * 24));
-      return daysDiff > 1;
-    } catch (e) {
-      console.error('Error checking delivery slot expiry:', e);
-      return false; // On error, assume not expired
-    }
-  };
-
-  // Check if slot is expired for today (using start time)
-  const isSlotExpiredForToday = (deliverySlot) => {
-    if (!deliverySlot || !deliverySlot.date) return false;
-    
-    try {
-      const today = new Date();
-      let deliveryDate;
-      
-      if (deliverySlot.date instanceof Date) {
-        deliveryDate = new Date(deliverySlot.date);
-      } else if (typeof deliverySlot.date === 'string') {
-        const dateParts = deliverySlot.date.split('-');
-        if (dateParts.length === 3) {
-          const year = parseInt(dateParts[0], 10);
-          const month = parseInt(dateParts[1], 10) - 1;
-          const day = parseInt(dateParts[2], 10);
-          if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
-            deliveryDate = new Date(year, month, day);
-          } else {
-            deliveryDate = new Date(deliverySlot.date);
-          }
-        } else {
-          deliveryDate = new Date(deliverySlot.date);
-        }
-      } else {
-        return false;
-      }
-      
-      const selectedDateOnly = new Date(deliveryDate.getFullYear(), deliveryDate.getMonth(), deliveryDate.getDate());
-      const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      
-      // Only check expiration for today's date
-      if (selectedDateOnly.getTime() !== todayOnly.getTime()) {
-        return false;
-      }
-      
-      const now = new Date();
-      const currentTime = now.getHours() * 60 + now.getMinutes();
-      
-      // Get slot start time
-      const slot = deliverySlot.slot;
-      if (!slot || !slot.startTime) return false;
-      
-      try {
-        const [startHour, startMin] = slot.startTime.split(':').map(Number);
-        const slotStartTime = startHour * 60 + startMin;
-        
-        return currentTime >= slotStartTime;
-      } catch (e) {
-        console.warn('Error parsing slot start time:', e);
-        return false;
-      }
-    } catch (e) {
-      console.error('Error checking slot expiration for today:', e);
-      return false;
-    }
-  };
-
-  // Helper function to parse delivery date
-  const parseDeliveryDate = (dateInput) => {
-    if (!dateInput) return null;
-    
-    if (dateInput instanceof Date) {
-      return new Date(dateInput);
-    } else if (typeof dateInput === 'string') {
-      const dateParts = dateInput.split('-');
-      if (dateParts.length === 3) {
-        const year = parseInt(dateParts[0], 10);
-        const month = parseInt(dateParts[1], 10) - 1;
-        const day = parseInt(dateParts[2], 10);
-        if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
-          return new Date(year, month, day);
-        }
-      }
-      return new Date(dateInput);
-    }
-    return null;
-  };
-
-  // Get slot expiration status: 'expired' | 'expiring_soon' | 'valid'
-  const getSlotExpirationStatus = (deliverySlot) => {
-    if (!deliverySlot || !deliverySlot.date) return 'valid';
-    
-    try {
-      const deliveryDate = parseDeliveryDate(deliverySlot.date);
-      if (!deliveryDate || isNaN(deliveryDate.getTime())) {
-        return 'valid';
-      }
-      
-      const today = new Date();
-      const deliveryDateOnly = new Date(deliveryDate.getFullYear(), deliveryDate.getMonth(), deliveryDate.getDate());
-      const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const daysDiff = Math.floor((todayOnly - deliveryDateOnly) / (1000 * 60 * 60 * 24));
-      
-      // Check if date is in the past (yesterday or earlier)
-      if (daysDiff > 0) {
-        return 'expired';
-      }
-      
-      // Check if expired for today (time passed)
-      if (daysDiff === 0 && isSlotExpiredForToday(deliverySlot)) {
-        return 'expired';
-      }
-      
-      // Check if expiring soon (< 2 hours for today's slots)
-      if (daysDiff === 0) {
-        const slot = deliverySlot.slot;
-        if (slot && slot.startTime) {
-          try {
-            const now = new Date();
-            const currentTime = now.getHours() * 60 + now.getMinutes();
-            const [startHour, startMin] = slot.startTime.split(':').map(Number);
-            const slotStartTime = startHour * 60 + startMin;
-            const minutesUntilSlot = slotStartTime - currentTime;
-            
-            // If slot has already started (negative minutes), it's expired
-            if (minutesUntilSlot < 0) {
-              return 'expired';
-            }
-            
-            // If less than 2 hours (120 minutes) remaining, it's expiring soon
-            if (minutesUntilSlot > 0 && minutesUntilSlot < 120) {
-              return 'expiring_soon';
-            }
-          } catch (e) {
-            // Ignore errors
-          }
-        }
-      }
-      
-      // Also check the conservative expiration check (more than 1 day in past)
-      if (isDeliverySlotExpired(deliverySlot)) {
-        return 'expired';
-      }
-    } catch (e) {
-      console.error('Error checking slot expiration status:', e);
-    }
-    
-    return 'valid';
-  };
-
-  // Calculate countdown timer for today's slots
-  const calculateCountdown = (deliverySlot) => {
-    if (!deliverySlot || !deliverySlot.date || !deliverySlot.slot?.startTime) {
-      return null;
-    }
-    
-    try {
-      const today = new Date();
-      let deliveryDate;
-      
-      if (deliverySlot.date instanceof Date) {
-        deliveryDate = new Date(deliverySlot.date);
-      } else if (typeof deliverySlot.date === 'string') {
-        const dateParts = deliverySlot.date.split('-');
-        if (dateParts.length === 3) {
-          const year = parseInt(dateParts[0], 10);
-          const month = parseInt(dateParts[1], 10) - 1;
-          const day = parseInt(dateParts[2], 10);
-          if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
-            deliveryDate = new Date(year, month, day);
-          } else {
-            deliveryDate = new Date(deliverySlot.date);
-          }
-        } else {
-          deliveryDate = new Date(deliverySlot.date);
-        }
-      } else {
-        return null;
-      }
-      
-      const selectedDateOnly = new Date(deliveryDate.getFullYear(), deliveryDate.getMonth(), deliveryDate.getDate());
-      const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      
-      // Only calculate countdown for today's slots
-      if (selectedDateOnly.getTime() !== todayOnly.getTime()) {
-        return null;
-      }
-      
-      const now = new Date();
-      const currentTime = now.getHours() * 60 + now.getMinutes();
-      const [startHour, startMin] = deliverySlot.slot.startTime.split(':').map(Number);
-      const slotStartTime = startHour * 60 + startMin;
-      const minutesUntilSlot = slotStartTime - currentTime;
-      
-      if (minutesUntilSlot <= 0) {
-        return null; // Slot has already started
-      }
-      
-      return {
-        hours: Math.floor(minutesUntilSlot / 60),
-        minutes: minutesUntilSlot % 60
-      };
-    } catch (e) {
-      console.error('Error calculating countdown:', e);
-      return null;
-    }
-  };
-
-  // Check if cart items already have delivery slots selected
-  const getCartDeliverySlot = () => {
+  const getCartDeliverySlot = useCallback(() => {
     if (cartItems.length > 0 && cartItems[0].deliverySlot) {
       const slot = cartItems[0].deliverySlot;
-      // Check if the slot is expired
       if (isDeliverySlotExpired(slot)) {
-        // Return null if expired, so user needs to select a new slot
         return null;
       }
       return slot;
     }
     return null;
-  };
+  }, [cartItems]);
 
   const cartDeliverySlot = getCartDeliverySlot();
+
+  /** Tracks prior "must pick / replace slot" state to expand by default, then collapse after slot becomes valid. */
+  const prevCheckoutSlotNeedsActionRef = useRef(null);
+
+  // Open date/time picker when checkout needs a slot (none or expired); collapse after slot becomes valid again.
+  useEffect(() => {
+    if (pathname !== '/checkout') {
+      prevCheckoutSlotNeedsActionRef.current = null;
+      return;
+    }
+    if (!isInitialized) return;
+
+    const effectiveSlot = selectedSlot || cartDeliverySlot;
+    const needsAction =
+      !effectiveSlot || getSlotExpirationStatus(effectiveSlot) === 'expired';
+    const wasNeedsAction = prevCheckoutSlotNeedsActionRef.current;
+    prevCheckoutSlotNeedsActionRef.current = needsAction;
+
+    if (needsAction) {
+      setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+      setShowSlotSelector(true);
+      return;
+    }
+
+    if (wasNeedsAction === true) {
+      setShowSlotSelector(false);
+    }
+  }, [pathname, isInitialized, selectedSlot, cartDeliverySlot, cartItems.length]);
 
   // Track previous expiration status to detect changes
   const previousExpirationStatusRef = React.useRef(null);
@@ -929,6 +1247,7 @@ function CheckoutPageContent() {
         // Only clear if this is a stale slot (from cart or previous selection)
         // Don't clear if user just actively selected it
         setError('Your delivery slot has expired. Please select a new slot.');
+        setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
         setShowSlotSelector(true);
         if (selectedSlot) {
           setSelectedSlot(null);
@@ -964,6 +1283,7 @@ function CheckoutPageContent() {
       if (currentExpirationStatus === 'expired' && previousStatus !== 'expired' && !slotJustSelectedRef.current) {
         // Slot just expired - show error and open selector
         setError('Your delivery slot has just expired. Please select a new slot.');
+        setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
         setShowSlotSelector(true);
         setSelectedSlot(null);
         setFormData(prev => ({
@@ -984,6 +1304,7 @@ function CheckoutPageContent() {
           setCountdown(null);
           if (currentExpirationStatus === 'expired' && previousStatus !== 'expired' && !slotJustSelectedRef.current) {
             setError('Your delivery slot has just expired. Please select a new slot.');
+            setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
             setShowSlotSelector(true);
             setSelectedSlot(null);
             setFormData(prev => ({
@@ -1026,6 +1347,7 @@ function CheckoutPageContent() {
     // Clear selectedSlot if cartDeliverySlot is null (expired)
     if (!cartDeliverySlot && selectedSlot && hasInitializedSlot.current) {
       setSelectedSlot(null);
+      setIsAutoSelected(false); // Reset auto-selected flag
       setFormData(prev => ({
         ...prev,
         deliveryDate: '',
@@ -1033,6 +1355,11 @@ function CheckoutPageContent() {
       }));
       hasInitializedSlot.current = false;
       return;
+    }
+    
+    // Reset auto-selected flag if cart delivery slot exists (user has a slot from cart)
+    if (cartDeliverySlot) {
+      setIsAutoSelected(false);
     }
     
     // Only initialize once, and only if we don't have a selectedSlot already
@@ -1085,6 +1412,104 @@ function CheckoutPageContent() {
     // Only depend on cartDeliverySlot and currentPinCode to avoid re-initialization
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cartDeliverySlot, currentPinCode]);
+
+  // Smart Auto-Selection: Auto-select earliest available slot if no slot is selected
+  useEffect(() => {
+    // Only auto-select if:
+    // 1. No slot is currently selected
+    // 2. No cart delivery slot exists
+    // 3. Pin code is valid
+    // 4. We haven't already auto-selected
+    // 5. User hasn't manually interacted with slot selector
+    if (
+      !selectedSlot && 
+      !cartDeliverySlot && 
+      currentPinCode && 
+      isValidPinCode && 
+      !isAutoSelected &&
+      !isLoadingEarliestSlot
+    ) {
+      setIsLoadingEarliestSlot(true);
+      
+      const autoSelectEarliestSlot = async () => {
+        try {
+          const today = new Date();
+          const endDate = new Date(today);
+          endDate.setDate(today.getDate() + 6); // Check next 7 days
+          
+          const startDateStr = today.toISOString().split('T')[0];
+          const endDateStr = endDate.toISOString().split('T')[0];
+          
+          const response = await deliverySlotApi.getSlotAvailability(startDateStr, endDateStr);
+          
+          if (response.success && response.data && response.data.length > 0) {
+            // Find earliest available slot
+            const now = new Date();
+            const currentTime = now.getHours() * 60 + now.getMinutes();
+            
+            for (const item of response.data) {
+              // Check if slot is available and not expired
+              if (item.isAvailable && item.availableOrders > 0) {
+                const slotDate = new Date(item.deliveryDate);
+                const slotDateOnly = new Date(slotDate.getFullYear(), slotDate.getMonth(), slotDate.getDate());
+                const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                
+                // If slot is today, check if time hasn't passed
+                if (slotDateOnly.getTime() === todayOnly.getTime()) {
+                  const [startHour, startMin] = item.startTime.split(':').map(Number);
+                  const slotStartTime = startHour * 60 + startMin;
+                  if (currentTime >= slotStartTime) {
+                    continue; // Skip expired slots
+                  }
+                }
+                
+                // Found earliest available slot - auto-select it
+                const slotDateObj = new Date(item.deliveryDate);
+                const timeString = item.endTime 
+                  ? `${formatTime(item.startTime)} - ${formatTime(item.endTime)}`
+                  : formatTime(item.startTime);
+                
+                const autoSelectedSlot = {
+                  date: slotDateObj,
+                  slot: { 
+                    id: item.slotId,
+                    startTime: item.startTime,
+                    endTime: item.endTime
+                  },
+                  time: timeString,
+                  pinCode: currentPinCode,
+                  slotId: item.slotId
+                };
+                
+                setSelectedSlot(autoSelectedSlot);
+                setIsAutoSelected(true);
+                setFormData(prev => ({
+                  ...prev,
+                  deliveryDate: slotDateObj.toISOString().split('T')[0],
+                  deliveryTime: timeString
+                }));
+                setShowSlotSelector(false);
+
+                break; // Stop after finding first available slot
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error auto-selecting earliest slot:', error);
+          // Don't show error to user - just silently fail
+        } finally {
+          setIsLoadingEarliestSlot(false);
+        }
+      };
+      
+      // Small delay to ensure page is fully loaded
+      const timer = setTimeout(() => {
+        autoSelectEarliestSlot();
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [selectedSlot, cartDeliverySlot, currentPinCode, isValidPinCode, isAutoSelected, isLoadingEarliestSlot]);
 
   // Auto-update expired delivery slots when checkout page loads
   useEffect(() => {
@@ -1187,7 +1612,7 @@ function CheckoutPageContent() {
         clearTimeout(autoUpdateTimerRef.current);
       }
     };
-  }, [isInitialized, cartItems.length, autoUpdateExpiredSlots, selectedSlot, currentPinCode]);
+  }, [isInitialized, cartItems, getCartDeliverySlot, autoUpdateExpiredSlots, selectedSlot, currentPinCode]);
 
   const deliveryCharge = deliveryInfo?.deliveryCharge || 0;
   const subtotal = cartSummary.totalPrice;
@@ -1337,12 +1762,13 @@ function CheckoutPageContent() {
     }
   }, [appliedPromo]);
 
-  // Redirect if cart is empty
+  // Redirect if cart is empty (after cart has hydrated — avoids flash / wrong redirect during init)
   useEffect(() => {
-    if (cartItems.length === 0 && !loading) {
+    if (!isInitialized) return;
+    if (cartItems.length === 0 && !loading && !isRedirecting) {
       router.push('/cart');
     }
-  }, [cartItems, router, loading]);
+  }, [cartItems, router, loading, isRedirecting, isInitialized]);
 
   // Track when error is shown and check if form is complete
   useEffect(() => {
@@ -1474,140 +1900,409 @@ function CheckoutPageContent() {
     }
   };
 
-  // Reverse geocode coordinates to get city/locality name
-  const reverseGeocode = async (lat, lng) => {
-    try {
-      // Using OpenStreetMap Nominatim API (free, no API key required)
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-        {
-          headers: {
-            'User-Agent': 'CreamingoDeliveryApp/1.0' // Required by Nominatim
-          }
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Reverse geocoding failed');
-      }
-
-      const data = await response.json();
-      
-      // Extract city/locality from address components
-      const address = data.address || {};
-      const locality = address.locality || address.suburb || address.neighbourhood || address.village;
-      const city = address.city || address.town || address.county;
-      const state = address.state;
-      
-      // Build location name: prefer locality, then city, then state
-      let locationName = '';
-      if (locality) {
-        locationName = locality;
-        if (city && city !== locality) {
-          locationName += `, ${city}`;
-        }
-      } else if (city) {
-        locationName = city;
-      } else if (state) {
-        locationName = state;
-      }
-      
-      return locationName || null;
-    } catch (error) {
-      console.error('Reverse geocoding error:', error);
-      return null;
-    }
-  };
-
-  // Let user share their precise location (using free browser geolocation API)
+  // Browser geolocation (P7 inline feedback, P8 retry / cache-friendly options, P9 events)
   const handleUseMyLocation = () => {
     if (typeof window === 'undefined' || !navigator.geolocation) {
-      setError('Location services are not available in this browser. Please enter your address manually.');
+      setDeliveryLocationFeedback({
+        variant: 'error',
+        text: 'Location is not available in this browser. Enter your address below or drop a pin on the map.',
+      });
       return;
     }
 
     setIsFetchingLocation(true);
     setLocationName(null);
+    setLocationNearLine(null);
+    setPinGeocodePhase('idle');
     setLocationAccuracy(null);
     setLocationWarning(null);
-    setError(''); // Clear any previous errors
+    setDeliveryLocationFeedback(null);
+    setError('');
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
+    const requestPosition = (options) =>
+      new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, options);
+      });
+
+    const run = async () => {
+      const attempts = [
+        { enableHighAccuracy: true, timeout: 14000, maximumAge: 120000 },
+        { enableHighAccuracy: false, timeout: 12000, maximumAge: 300000 },
+      ];
+      let lastError;
+      for (let i = 0; i < attempts.length; i += 1) {
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          return await requestPosition(attempts[i]);
+        } catch (err) {
+          lastError = err;
+          if (err?.code === 1) {
+            throw err;
+          }
+          if (i < attempts.length - 1) {
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise((r) => setTimeout(r, 450));
+          }
+        }
+      }
+      throw lastError;
+    };
+
+    run()
+      .then(async (position) => {
         const { latitude, longitude, accuracy } = position.coords || {};
-
-        // Safeguard: only update if we received valid coordinates
-        if (typeof latitude === 'number' && typeof longitude === 'number') {
-          // Validate and check accuracy
-          let accuracyInMeters = typeof accuracy === 'number' ? accuracy : null;
-          
-          // Validate accuracy - reject obviously invalid values (>100km is clearly wrong)
-          // Typical accuracy ranges: GPS (5-10m), WiFi/cell (100-1000m), IP-based (1000-50000m)
-          if (accuracyInMeters && (accuracyInMeters > 100000 || accuracyInMeters < 0)) {
-            // Invalid accuracy value - ignore it
-            accuracyInMeters = null;
-            console.warn('Invalid accuracy value received:', accuracy);
-          }
-          
-          setLocationAccuracy(accuracyInMeters);
-          
-          // Show warning (not error) if accuracy is poor but valid
-          if (accuracyInMeters && accuracyInMeters > 1000 && accuracyInMeters <= 100000) {
-            const accuracyKm = (accuracyInMeters / 1000).toFixed(1);
-            setLocationWarning(`Location accuracy is approximately ${accuracyKm} km. The detected location may not be precise. Please verify the address below.`);
-          } else if (accuracyInMeters === null) {
-            setLocationWarning('Location accuracy information is unavailable. Please verify the detected location is correct.');
-          } else {
-            setLocationWarning(null); // Clear warning if accuracy is good
-          }
-
-          // Reverse geocode to get city/locality name (with delay to respect rate limits)
-          const locationNameResult = await reverseGeocode(latitude, longitude);
-          setLocationName(locationNameResult);
-
-          setFormData((prev) => ({
-            ...prev,
-            address: {
-              ...prev.address,
-              location: {
-                lat: latitude,
-                lng: longitude,
-                accuracy: accuracyInMeters,
-                source: 'browser_geolocation',
-                name: locationNameResult || null // Store the name for persistence
-              }
-            }
-          }));
+        if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+          setIsFetchingLocation(false);
+          setDeliveryLocationFeedback({
+            variant: 'error',
+            text: 'Got a response without usable coordinates. Try again or place a pin on the map.',
+          });
+          return;
         }
 
+        let accuracyInMeters = typeof accuracy === 'number' ? accuracy : null;
+        if (accuracyInMeters && (accuracyInMeters > 100000 || accuracyInMeters < 0)) {
+          accuracyInMeters = null;
+        }
+        setLocationAccuracy(accuracyInMeters);
+        setLocationWarning(null);
+
+        const place = await reverseGeocodeLatLng(latitude, longitude);
+        if (place) {
+          setLocationName(place.primaryLine);
+          setLocationNearLine(place.nearLine);
+        } else {
+          setLocationName(null);
+          setLocationNearLine(null);
+        }
+
+        setFormData((prev) => ({
+          ...prev,
+          address: {
+            ...prev.address,
+            location: {
+              lat: latitude,
+              lng: longitude,
+              accuracy: accuracyInMeters,
+              source: 'browser_geolocation',
+              name: place?.storageName || null,
+            },
+          },
+        }));
+        setShowDeliveryMapTapHint(true);
+
+        trackCheckoutEvent('checkout_location_granted', {
+          accuracyM: accuracyInMeters ?? undefined,
+          hasPlaceName: Boolean(place?.primaryLine),
+        });
+
+        setDeliveryLocationFeedback({
+          variant: 'success',
+          text: 'Location set ✓ Adjust pin if needed.',
+        });
         setIsFetchingLocation(false);
-      },
-      (geoError) => {
+      })
+      .catch((geoError) => {
         console.error('Error fetching location:', geoError);
         setIsFetchingLocation(false);
         setLocationName(null);
+        setLocationNearLine(null);
+        setPinGeocodePhase('idle');
         setLocationAccuracy(null);
         setLocationWarning(null);
-        
-        let errorMessage = 'Unable to detect your location. ';
-        if (geoError.code === geoError.PERMISSION_DENIED) {
-          errorMessage += 'Please allow location access in your browser settings.';
-        } else if (geoError.code === geoError.POSITION_UNAVAILABLE) {
-          errorMessage += 'Location information is unavailable. Please enter the address manually.';
-        } else if (geoError.code === geoError.TIMEOUT) {
-          errorMessage += 'Location request timed out. Please try again or enter the address manually.';
+
+        const code = geoError?.code;
+        if (code === 1) {
+          trackCheckoutEvent('checkout_location_denied', { reason: 'permission_denied' });
+          setDeliveryLocationFeedback({
+            variant: 'error',
+            text: 'Location access was blocked. Allow it in browser settings if you want, or drop a pin on the map—we only use this to help the driver find you.',
+          });
+        } else if (code === 2) {
+          trackCheckoutEvent('checkout_location_denied', { reason: 'position_unavailable' });
+          setDeliveryLocationFeedback({
+            variant: 'error',
+            text: 'Your device could not determine location. Try again, place a pin on the map, or continue with your typed address.',
+          });
+        } else if (code === 3) {
+          trackCheckoutEvent('checkout_location_denied', { reason: 'timeout' });
+          setDeliveryLocationFeedback({
+            variant: 'error',
+            text: 'Location timed out. Try again, or set the pin on the map instead.',
+          });
         } else {
-          errorMessage += 'Please check permission settings or enter the address manually.';
+          trackCheckoutEvent('checkout_location_error', { reason: 'unknown' });
+          setDeliveryLocationFeedback({
+            variant: 'error',
+            text: 'Could not read your location. Use the map pin or enter your address manually.',
+          });
         }
-        setError(errorMessage);
-      },
-      {
-        enableHighAccuracy: true, // Request GPS if available
-        timeout: 20000, // Increased timeout to allow GPS to get fix
-        maximumAge: 0 // Force fresh location - don't use cached data
-      }
-    );
+      });
   };
+
+  /** Optional pin: user tapped the map to fine-tune coordinates (full address still required). */
+  const handleDeliveryMapPinMove = useCallback((lat, lng) => {
+    if (isFetchingLocation) return;
+    setDeliveryLocationFeedback(null);
+    setPinGeocodePhase('updating');
+    setFormData((prev) => ({
+      ...prev,
+      address: {
+        ...prev.address,
+        location: {
+          lat,
+          lng,
+          accuracy: null,
+          source: 'map_pick',
+          name: null,
+        },
+      },
+    }));
+    setLocationName(null);
+    setLocationNearLine(null);
+
+    if (pinGeocodeTimerRef.current) {
+      clearTimeout(pinGeocodeTimerRef.current);
+    }
+    if (pinGeocodeHideUpdatedRef.current) {
+      clearTimeout(pinGeocodeHideUpdatedRef.current);
+      pinGeocodeHideUpdatedRef.current = null;
+    }
+    const seq = ++pinGeocodeSeqRef.current;
+    pinGeocodeTimerRef.current = setTimeout(async () => {
+      const place = await reverseGeocodeLatLng(lat, lng);
+      if (seq !== pinGeocodeSeqRef.current) return;
+      if (place) {
+        setLocationName(place.primaryLine);
+        setLocationNearLine(place.nearLine);
+        setFormData((prev) => ({
+          ...prev,
+          address: {
+            ...prev.address,
+            location: {
+              ...prev.address.location,
+              lat,
+              lng,
+              accuracy: null,
+              source: 'map_pick',
+              name: place.storageName,
+            },
+          },
+        }));
+        setPinGeocodePhase('updated');
+      } else {
+        setPinGeocodePhase('idle');
+      }
+      pinGeocodeHideUpdatedRef.current = setTimeout(() => {
+        pinGeocodeHideUpdatedRef.current = null;
+        if (seq === pinGeocodeSeqRef.current) {
+          setPinGeocodePhase('idle');
+        }
+      }, 2200);
+    }, 550);
+  }, [isFetchingLocation]);
+
+  const handleClearDeliveryLocation = useCallback(() => {
+    setDeliveryLocationFeedback(null);
+    setShowDeliveryMapTapHint(false);
+    if (pinGeocodeTimerRef.current) {
+      clearTimeout(pinGeocodeTimerRef.current);
+      pinGeocodeTimerRef.current = null;
+    }
+    if (pinGeocodeHideUpdatedRef.current) {
+      clearTimeout(pinGeocodeHideUpdatedRef.current);
+      pinGeocodeHideUpdatedRef.current = null;
+    }
+    pinGeocodeSeqRef.current += 1;
+    setPinGeocodePhase('idle');
+    setFormData((prev) => ({
+      ...prev,
+      address: {
+        ...prev.address,
+        location: null,
+      },
+    }));
+    setLocationName(null);
+    setLocationNearLine(null);
+    setLocationAccuracy(null);
+    setLocationWarning(null);
+  }, []);
+
+  const profileAddressAvailable = useMemo(() => {
+    if (!isAuthenticated || !customer?.address) return false;
+    const a = customer.address;
+    return Boolean(
+      (typeof a.street === 'string' && a.street.trim()) ||
+        (typeof a.city === 'string' && a.city.trim()) ||
+        (typeof a.state === 'string' && a.state.trim())
+    );
+  }, [isAuthenticated, customer]);
+
+  const applyLastUsedAddress = useCallback(() => {
+    const saved = readLastUsedAddressFromStorage();
+    if (!lastUsedAddressHasContent(saved)) {
+      showError('No saved address', 'We could not find a previous delivery address on this device.');
+      return;
+    }
+    const normalizedLoc = normalizeSavedMapLocation(saved.location);
+    setFormData((prev) => ({
+      ...prev,
+      address: {
+        ...prev.address,
+        street: saved.street || '',
+        landmark: saved.landmark || '',
+        city: saved.city || '',
+        state: saved.state || '',
+        zip_code: saved.zip_code || prev.address.zip_code || currentPinCode || '',
+        country: saved.country || prev.address.country || 'India',
+        location: normalizedLoc || null,
+      },
+    }));
+    if (normalizedLoc?.name) {
+      const parsed = parseStoredLocationLabel(normalizedLoc.name);
+      setLocationName(parsed.primaryLine);
+      setLocationNearLine(parsed.nearLine);
+    } else {
+      setLocationName(null);
+      setLocationNearLine(null);
+    }
+    if (normalizedLoc && typeof normalizedLoc.accuracy === 'number' && Number.isFinite(normalizedLoc.accuracy)) {
+      setLocationAccuracy(normalizedLoc.accuracy);
+    } else {
+      setLocationAccuracy(null);
+    }
+    setDeliveryLocationFeedback(null);
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next['address.street'];
+      delete next['address.city'];
+      delete next['address.state'];
+      delete next['address.zip_code'];
+      return next;
+    });
+    trackCheckoutEvent('checkout_quick_fill_last_device_address', {
+      hasPin: Boolean(normalizedLoc),
+    });
+    showSuccess('Address applied', 'Last delivery address from this device has been filled in.');
+  }, [currentPinCode, showError, showSuccess]);
+
+  const applyProfileAddress = useCallback(() => {
+    if (!isAuthenticated || !customer?.address) return;
+    const a = customer.address;
+    if (
+      !(typeof a.street === 'string' && a.street.trim()) &&
+      !(typeof a.city === 'string' && a.city.trim()) &&
+      !(typeof a.state === 'string' && a.state.trim())
+    ) {
+      return;
+    }
+    const locForForm = normalizeSavedMapLocation(a.location);
+    setFormData((prev) => ({
+      ...prev,
+      address: {
+        ...prev.address,
+        street: a.street || '',
+        landmark: a.landmark || '',
+        city: a.city || '',
+        state: a.state || '',
+        zip_code: a.zip_code || prev.address.zip_code || currentPinCode || '',
+        country: a.country || prev.address.country || 'India',
+        location: locForForm,
+      },
+    }));
+    if (locForForm?.name) {
+      const parsed = parseStoredLocationLabel(locForForm.name);
+      setLocationName(parsed.primaryLine);
+      setLocationNearLine(parsed.nearLine);
+    } else if (a.location && typeof a.location.name === 'string' && a.location.name.trim()) {
+      const parsed = parseStoredLocationLabel(a.location.name.trim());
+      setLocationName(parsed.primaryLine);
+      setLocationNearLine(parsed.nearLine);
+    } else {
+      setLocationName(null);
+      setLocationNearLine(null);
+    }
+    if (locForForm && typeof locForForm.accuracy === 'number' && Number.isFinite(locForForm.accuracy)) {
+      setLocationAccuracy(locForForm.accuracy);
+    } else {
+      setLocationAccuracy(null);
+    }
+    setDeliveryLocationFeedback(null);
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next['address.street'];
+      delete next['address.city'];
+      delete next['address.state'];
+      delete next['address.zip_code'];
+      return next;
+    });
+    trackCheckoutEvent('checkout_quick_fill_profile_address', { hasPin: Boolean(locForForm) });
+    showSuccess('Address applied', 'Your account delivery address has been filled in.');
+  }, [isAuthenticated, customer, currentPinCode, showSuccess]);
+
+  // Approximate map center from delivery PIN (Nominatim; debounced for usage policy).
+  useEffect(() => {
+    if (!currentPinCode || !isValidPinCode) {
+      setServiceAreaMapCenter(null);
+      setServiceAreaGeocodeStatus('idle');
+      return;
+    }
+
+    let cancelled = false;
+    setServiceAreaGeocodeStatus('loading');
+    setServiceAreaMapCenter(null);
+
+    const timer = setTimeout(async () => {
+      const headers = {
+        'User-Agent': 'CreamingoCheckout/1.0 (https://creamingo.com; delivery pin map)',
+      };
+      const tryFetch = async (url) => {
+        const res = await fetch(url, { headers });
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (!Array.isArray(data) || !data[0] || data[0].lat == null || data[0].lon == null) return null;
+        const lat = parseFloat(data[0].lat);
+        const lng = parseFloat(data[0].lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        return { lat, lng };
+      };
+
+      try {
+        const pin = String(currentPinCode).trim();
+        const postalUrl = `https://nominatim.openstreetmap.org/search?format=json&countrycodes=in&postalcode=${encodeURIComponent(pin)}&limit=1`;
+        const fallbackUrl = `https://nominatim.openstreetmap.org/search?format=json&countrycodes=in&q=${encodeURIComponent(`${pin} India`)}&limit=1`;
+        let pair = await tryFetch(postalUrl);
+        if (!pair && !cancelled) {
+          await new Promise((r) => setTimeout(r, 1100));
+          if (cancelled) return;
+          pair = await tryFetch(fallbackUrl);
+        }
+        if (cancelled) return;
+        if (pair) {
+          setServiceAreaMapCenter(pair);
+          setServiceAreaGeocodeStatus('ok');
+        } else {
+          setServiceAreaMapCenter(null);
+          setServiceAreaGeocodeStatus('error');
+        }
+      } catch {
+        if (!cancelled) {
+          setServiceAreaMapCenter(null);
+          setServiceAreaGeocodeStatus('error');
+        }
+      }
+    }, 900);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [currentPinCode, isValidPinCode]);
+
+  const hasDeliveryLocationPin =
+    Boolean(formData.address?.location) &&
+    typeof formData.address?.location?.lat === 'number' &&
+    typeof formData.address?.location?.lng === 'number';
 
   const handleSlotSelect = (slot) => {
     // Clear any existing error messages when selecting a new slot
@@ -1630,6 +2325,7 @@ function CheckoutPageContent() {
     if (expirationStatus === 'expired') {
       // Slot is expired, don't set it and show error
       setError('The selected delivery slot has expired. Please choose a different slot.');
+      setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
       setShowSlotSelector(true); // Keep selector open
       return;
     }
@@ -1648,6 +2344,9 @@ function CheckoutPageContent() {
     if (isSlotChanged) {
       setDismissExpiringSoonWarning(false);
     }
+    
+    // Clear auto-selected flag when user manually selects a slot
+    setIsAutoSelected(false);
     
     // Set the new slot
     setSelectedSlot(normalizedSlot);
@@ -1717,6 +2416,7 @@ function CheckoutPageContent() {
     const currentSlot = selectedSlot || cartDeliverySlot;
     if (!currentSlot) {
       setError('Please select a delivery date and time slot to place your order.');
+      setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
       setShowSlotSelector(true);
       return false;
     }
@@ -1725,6 +2425,7 @@ function CheckoutPageContent() {
     const expirationStatus = getSlotExpirationStatus(currentSlot);
     if (expirationStatus === 'expired') {
       setError('Your delivery slot has expired. Please select a new slot.');
+      setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
       setShowSlotSelector(true); // Auto-open slot selector
       return false;
     }
@@ -1744,6 +2445,7 @@ function CheckoutPageContent() {
     // Check if slot is selected first
     if (!selectedSlot && !cartDeliverySlot) {
       setError('Please select a delivery date and time slot to place your order.');
+      setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
       setShowSlotSelector(true);
       return;
     }
@@ -1759,6 +2461,7 @@ function CheckoutPageContent() {
       const expirationStatus = getSlotExpirationStatus(currentSlot);
       if (expirationStatus === 'expired') {
         setError('Your delivery slot has expired. Please select a new slot before placing your order.');
+        setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
         setShowSlotSelector(true);
         setSelectedSlot(null);
         setFormData(prev => ({
@@ -2197,27 +2900,65 @@ function CheckoutPageContent() {
     }
   };
 
-  // Don't show empty cart message if we're redirecting after successful order
-  if (cartItems.length === 0 && !isRedirecting) {
+  // Cart still loading from storage / context — avoid empty-checkout UI or redirect race (P0)
+  if (!isInitialized) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen overflow-x-hidden bg-gray-50 dark:bg-gray-900">
         <Header />
-        <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 200px)' }}>
-          <div className="text-center">
-            <ShoppingBag className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Your cart is empty</h2>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">Add items to your cart before checkout</p>
-            <button
-              onClick={() => router.push('/')}
-              className="px-6 py-2 bg-pink-600 dark:bg-pink-700 text-white rounded-lg hover:bg-pink-700 dark:hover:bg-pink-600 transition-colors"
-            >
-              Continue Shopping
-            </button>
+        <div className="mx-auto max-w-7xl overflow-x-hidden px-3 py-6 sm:px-4 lg:px-8">
+          <div className="mb-6 h-8 w-48 animate-pulse rounded-lg bg-gray-200 dark:bg-gray-800" />
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_400px]">
+            <div className="min-w-0 space-y-4">
+              <div className="h-40 animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800" />
+              <div className="h-32 animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800" />
+            </div>
+            <div className="hidden h-64 animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800 lg:block" />
           </div>
         </div>
-        {/* Footer: Hidden visually for better UX, but kept in DOM for SEO */}
-        <div className="hidden">
-        <Footer />
+        <div className="hidden" aria-hidden>
+          <Footer />
+        </div>
+      </div>
+    );
+  }
+
+  // Confirmed empty cart (not mid–order success redirect)
+  if (cartItems.length === 0 && !isRedirecting) {
+    return (
+      <div className="min-h-screen overflow-x-hidden bg-gray-50 dark:bg-gray-900">
+        <Header />
+        <div
+          className="flex items-center justify-center px-4"
+          style={{ minHeight: 'calc(100vh - 200px)' }}
+          role="status"
+          aria-live="polite"
+        >
+          <div className="max-w-md text-center">
+            <ShoppingBag className="mx-auto mb-4 h-16 w-16 text-gray-300 dark:text-gray-600" aria-hidden />
+            <h2 className="mb-2 text-xl font-bold text-gray-900 dark:text-gray-100">Your cart is empty</h2>
+            <p className="mb-6 text-cart-body text-gray-600 dark:text-gray-400">
+              Add something to your cart to continue checkout, or return to your cart.
+            </p>
+            <div className="flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:justify-center">
+              <button
+                type="button"
+                onClick={() => router.push('/cart')}
+                className="ui-focus-visible min-h-[44px] rounded-lg bg-pink-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-pink-700 dark:bg-pink-700 dark:hover:bg-pink-600"
+              >
+                Go to cart
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push('/')}
+                className="ui-focus-visible min-h-[44px] rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
+              >
+                Continue shopping
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="hidden" aria-hidden>
+          <Footer />
         </div>
       </div>
     );
@@ -2226,17 +2967,22 @@ function CheckoutPageContent() {
   // Show loading/redirecting state while redirecting
   if (isRedirecting) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen overflow-x-hidden bg-gray-50 dark:bg-gray-900">
         <Header />
-        <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 200px)' }}>
+        <div
+          className="flex items-center justify-center px-4"
+          style={{ minHeight: 'calc(100vh - 200px)' }}
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
           <div className="text-center">
-            <Loader2 className="w-12 h-12 mx-auto mb-4 text-pink-600 dark:text-pink-400 animate-spin" />
-            <p className="text-gray-600 dark:text-gray-400">Redirecting to order confirmation...</p>
+            <Loader2 className="mx-auto mb-4 h-12 w-12 animate-spin text-pink-600 dark:text-pink-400" aria-hidden />
+            <p className="text-cart-body text-gray-600 dark:text-gray-400">Redirecting to order confirmation…</p>
           </div>
         </div>
-        {/* Footer: Hidden visually for better UX, but kept in DOM for SEO */}
-        <div className="hidden">
-        <Footer />
+        <div className="hidden" aria-hidden>
+          <Footer />
         </div>
       </div>
     );
@@ -2246,33 +2992,41 @@ function CheckoutPageContent() {
   // This prevents showing the cart page briefly
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen overflow-x-hidden bg-gray-50 dark:bg-gray-900">
       <Header />
       
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 lg:py-8 pb-24 lg:pb-8">
+      <div className="mx-auto max-w-7xl overflow-x-hidden px-3 py-4 pb-24 sm:px-4 sm:py-6 lg:px-8 lg:pb-8">
         {/* Page Header */}
         <div className="mb-4 sm:mb-6">
           <button
+            type="button"
             onClick={() => router.push('/cart')}
-            className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-pink-600 dark:hover:text-pink-400 transition-colors mb-3 sm:mb-4"
+            className="ui-focus-visible mb-3 flex min-h-[44px] items-center gap-2 rounded-lg text-gray-600 transition-colors hover:text-pink-700 dark:text-gray-400 dark:hover:text-pink-400 sm:mb-4"
           >
             <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
             <span className="text-sm sm:text-base font-medium">Back to Cart</span>
           </button>
           
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">Checkout</h1>
-          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-0.5 sm:mt-1">Complete your order details</p>
+          <h1 className="heading-page">Checkout</h1>
+          <p className="text-cart-subtitle mt-0.5 text-gray-600 dark:text-gray-400 sm:mt-1">
+            {isAuthenticated
+              ? 'Add your details, choose delivery, then pay.'
+              : 'Sign in, choose delivery, then pay.'}
+          </p>
         </div>
 
         {error && (
-          <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2 sm:gap-3">
-            <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
-            <p className="text-sm sm:text-base text-red-700 dark:text-red-300">{error}</p>
+          <div
+            className="mb-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20 sm:mb-6 sm:gap-3 sm:p-4"
+            role="alert"
+          >
+            <AlertCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400 sm:h-5 sm:w-5" aria-hidden />
+            <p className="text-cart-body text-red-800 dark:text-red-200">{error}</p>
           </div>
         )}
 
-        {/* Delivery Slot Warning Banner - Prominent warning for expired/expiring slots */}
-        {(selectedSlot || cartDeliverySlot) && !showSlotSelector && (() => {
+        {/* Delivery Slot Warning Banner — blocking (expired) vs soft (expiring soon) */}
+        {isClient && (selectedSlot || cartDeliverySlot) && !showSlotSelector && (() => {
           const currentSlot = selectedSlot || cartDeliverySlot;
           if (!currentSlot) return null;
           
@@ -2280,33 +3034,30 @@ function CheckoutPageContent() {
           const isExpired = expirationStatus === 'expired';
           const isExpiringSoon = expirationStatus === 'expiring_soon';
           
-          // Debug: Log expiration status (can be removed in production)
-          if (process.env.NODE_ENV === 'development') {
-            console.log('Slot expiration status:', {
-              expirationStatus,
-              slotDate: currentSlot.date,
-              slotTime: currentSlot.time || currentSlot.slot?.startTime,
-              countdown
-            });
-          }
-          
           if (isExpired) {
             return (
-              <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-800 rounded-lg animate-pulse">
+              <div
+                className="mb-4 sm:mb-6 rounded-xl border-2 border-red-500 bg-red-50 p-3 shadow-sm dark:border-red-500 dark:bg-red-950/50 sm:p-4"
+                role="alert"
+              >
                 <div className="flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <h3 className="text-sm sm:text-base font-bold text-red-800 dark:text-red-300 mb-1">
-                      ⚠️ Delivery Slot Expired
+                  <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <h3 className="heading-subsection mb-1 flex items-center gap-2 text-red-900 dark:text-red-200">
+                      <span className="min-w-0">Delivery slot expired</span>
                     </h3>
-                    <p className="text-xs sm:text-sm text-red-700 dark:text-red-400 mb-2">
+                    <p className="text-form-helper mb-3 text-red-800 dark:text-red-200">
                       Your selected delivery slot has expired. Please select a new slot to continue with your order.
                     </p>
                     <button
-                      onClick={() => setShowSlotSelector(true)}
-                      className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-600 transition-colors font-medium"
+                      type="button"
+                      onClick={() => {
+                        setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+                        setShowSlotSelector(true);
+                      }}
+                      className="ui-focus-visible min-h-[44px] rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600 sm:min-h-[48px]"
                     >
-                      Select New Slot
+                      Select new slot
                     </button>
                   </div>
                 </div>
@@ -2314,38 +3065,47 @@ function CheckoutPageContent() {
             );
           } else if (isExpiringSoon && !dismissExpiringSoonWarning) {
             return (
-              <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-300 dark:border-yellow-800 rounded-lg relative">
+              <div
+                className="relative mb-4 sm:mb-6 rounded-xl border border-yellow-400/90 bg-yellow-50/95 p-3 dark:border-yellow-600 dark:bg-yellow-950/35 sm:p-4"
+                role="status"
+              >
                 <button
+                  type="button"
                   onClick={() => setDismissExpiringSoonWarning(true)}
-                  className="absolute top-2 right-2 sm:top-3 sm:right-3 p-1 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 rounded-full transition-colors"
-                  aria-label="Close warning"
+                  className="ui-focus-visible absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-full text-yellow-800 transition-colors hover:bg-yellow-100 dark:text-yellow-200 dark:hover:bg-yellow-900/40 sm:right-3 sm:top-3"
+                  aria-label="Dismiss expiring slot reminder"
                 >
-                  <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <X className="h-5 w-5" aria-hidden />
                 </button>
-                <div className="flex items-start gap-3 pr-6 sm:pr-8">
-                  <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <h3 className="text-sm sm:text-base font-bold text-yellow-800 dark:text-yellow-300 mb-1">
-                      ⏰ Delivery Slot Expiring Soon
+                <div className="flex items-start gap-3 pr-12 sm:pr-14">
+                  <Clock className="mt-0.5 h-5 w-5 shrink-0 text-yellow-700 dark:text-yellow-300 sm:h-6 sm:w-6" aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <h3 className="heading-subsection mb-1 text-yellow-900 dark:text-yellow-200">
+                      Delivery slot expiring soon
                     </h3>
-                    <p className="text-xs sm:text-sm text-yellow-700 dark:text-yellow-400 mb-2">
+                    <p className="text-form-helper mb-3 text-yellow-900/95 dark:text-yellow-100/90">
                       {countdown 
                         ? `Your delivery slot expires in ${countdown.hours} hour${countdown.hours !== 1 ? 's' : ''} ${countdown.minutes} minute${countdown.minutes !== 1 ? 's' : ''}. Please complete your order soon or select a new slot.`
                         : 'Your delivery slot is expiring soon. Please complete your order quickly or select a new slot.'}
                     </p>
                     <div className="flex flex-wrap gap-2">
                       <button
-                        onClick={() => setShowSlotSelector(true)}
-                        className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm border border-yellow-600 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300 rounded-lg hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition-colors font-medium"
+                        type="button"
+                        onClick={() => {
+                          setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+                          setShowSlotSelector(true);
+                        }}
+                        className="ui-focus-visible min-h-[44px] rounded-lg border border-yellow-600 px-4 py-2.5 text-sm font-medium text-yellow-900 transition-colors hover:bg-yellow-100 dark:border-yellow-500 dark:text-yellow-100 dark:hover:bg-yellow-900/40 sm:min-h-[48px]"
                       >
-                        Change Slot
+                        Change slot
                       </button>
                       <button
+                        type="button"
                         onClick={handlePlaceOrder}
                         disabled={loading || !selectedSlot || !isAuthenticated}
-                        className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-yellow-600 dark:bg-yellow-700 text-white rounded-lg hover:bg-yellow-700 dark:hover:bg-yellow-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="ui-focus-visible min-h-[44px] rounded-lg bg-yellow-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-yellow-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-yellow-700 dark:hover:bg-yellow-600 sm:min-h-[48px]"
                       >
-                        Complete Order Now
+                        Complete order now
                       </button>
                     </div>
                   </div>
@@ -2356,25 +3116,29 @@ function CheckoutPageContent() {
           return null;
         })()}
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-4 sm:gap-6 lg:gap-8">
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-[1fr_400px] lg:gap-8">
           {/* LEFT SECTION: Form */}
-          <div className="space-y-4 sm:space-y-6">
+          <div className={`space-y-4 sm:space-y-6 ${CHECKOUT_MAIN_COLUMN}`}>
             {!isAuthenticated && (
+              <div className="space-y-2 sm:space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                  1 · Account
+                </p>
               <div
                 id="checkoutAuth"
                 ref={authSectionRef}
-                className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-pink-500 dark:border-pink-400 border border-gray-200 dark:border-gray-700 overflow-hidden scroll-mt-24"
+                className={CHECKOUT_FORM_CARD_GATE}
               >
                 <div className="p-3 sm:p-4 lg:p-6 border-b border-gray-100 dark:border-gray-700">
                   <div className="flex items-start gap-3">
                     <div className="p-2 rounded-lg bg-pink-100 dark:bg-pink-900/30">
                       <Lock className="w-4 h-4 sm:w-5 sm:h-5 text-pink-600 dark:text-pink-400" />
                     </div>
-                    <div>
-                      <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">
+                    <div className="min-w-0">
+                      <h2 className="heading-section text-gray-900 dark:text-gray-100">
                         Sign in to place your order
                       </h2>
-                      <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      <p className="text-form-helper mt-1">
                         Use your email to continue. We will prompt you to sign in or create an account.
                       </p>
                     </div>
@@ -2383,16 +3147,16 @@ function CheckoutPageContent() {
 
                 <div className="px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6">
                   {authError && (
-                    <div className="mb-3 sm:mb-4 p-2.5 sm:p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-xs sm:text-sm text-red-700 dark:text-red-300 flex items-start gap-2">
-                      <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                      <span>{authError}</span>
+                    <div className="mb-3 sm:mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-2.5 dark:border-red-800 dark:bg-red-900/20 sm:p-3">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" aria-hidden />
+                      <span className="min-w-0 text-sm leading-snug text-red-800 dark:text-red-200">{authError}</span>
                     </div>
                   )}
 
                   {authStep === 'email' && (
                     <form onSubmit={handleCheckEmail} className="space-y-3 sm:space-y-4">
-                      <div>
-                        <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                      <div className="space-y-1">
+                        <label className={CHECKOUT_FIELD_LABEL}>
                           Email *
                         </label>
                         <input
@@ -2400,14 +3164,14 @@ function CheckoutPageContent() {
                           value={authEmail}
                           onChange={(e) => setAuthEmail(e.target.value)}
                           required
-                          className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                          className="w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
                           placeholder="your@email.com"
                         />
                       </div>
                       <button
                         type="submit"
                         disabled={authLoading}
-                        className="w-full px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-semibold bg-pink-600 dark:bg-pink-700 text-white rounded-lg hover:bg-pink-700 dark:hover:bg-pink-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className={CHECKOUT_PRIMARY_BTN}
                       >
                         {authLoading ? 'Checking...' : 'Continue'}
                       </button>
@@ -2416,27 +3180,41 @@ function CheckoutPageContent() {
 
                   {authStep === 'login' && (
                     <form onSubmit={handleLoginSubmit} className="space-y-3 sm:space-y-4">
-                      <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                        Account found for <span className="font-semibold text-gray-900 dark:text-gray-100">{authEmail}</span>
+                      <div className="text-form-context">
+                        Account found for <span className="text-cart-body-strong text-gray-900 dark:text-gray-100">{authEmail}</span>
                         {emailCheckResult?.customer?.name ? ` • Welcome back, ${emailCheckResult.customer.name}` : ''}
                       </div>
-                      <div>
-                        <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                      <div className="space-y-1">
+                        <label className={CHECKOUT_FIELD_LABEL}>
                           Password *
                         </label>
-                        <input
-                          type="password"
-                          value={authPassword}
-                          onChange={(e) => setAuthPassword(e.target.value)}
-                          required
-                          className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
-                          placeholder="Enter your password"
-                        />
+                        <div className="relative">
+                          <input
+                            type={showLoginPassword ? 'text' : 'password'}
+                            value={authPassword}
+                            onChange={(e) => setAuthPassword(e.target.value)}
+                            required
+                            className="w-full pr-10 px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                            placeholder="Enter your password"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowLoginPassword(prev => !prev)}
+                            aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                          >
+                            {showLoginPassword ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
                       </div>
                       <button
                         type="submit"
                         disabled={authLoading}
-                        className="w-full px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-semibold bg-pink-600 dark:bg-pink-700 text-white rounded-lg hover:bg-pink-700 dark:hover:bg-pink-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className={CHECKOUT_PRIMARY_BTN}
                       >
                         {authLoading ? 'Signing in...' : 'Sign in'}
                       </button>
@@ -2446,7 +3224,7 @@ function CheckoutPageContent() {
                           setAuthStep('email');
                           setAuthError('');
                         }}
-                        className="w-full text-xs sm:text-sm text-gray-600 dark:text-gray-400 hover:text-pink-600 dark:hover:text-pink-400 transition-colors"
+                        className="text-form-helper w-full text-center text-gray-600 transition-colors hover:text-pink-600 dark:text-gray-400 dark:hover:text-pink-400"
                       >
                         Use a different email
                       </button>
@@ -2455,78 +3233,110 @@ function CheckoutPageContent() {
 
                   {authStep === 'signup' && (
                     <form onSubmit={handleSignupSubmit} className="space-y-3 sm:space-y-4">
-                      <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                        New account for <span className="font-semibold text-gray-900 dark:text-gray-100">{authEmail}</span>
+                      <div className="text-form-context">
+                        New account for <span className="text-cart-body-strong text-gray-900 dark:text-gray-100">{authEmail}</span>
                       </div>
-                      <div>
-                        <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                      <div className="space-y-1">
+                        <label className={CHECKOUT_FIELD_LABEL}>
                           Full Name *
                         </label>
                         <input
                           type="text"
+                          autoComplete="name"
                           value={signupData.name}
                           onChange={(e) => setSignupData(prev => ({ ...prev, name: e.target.value }))}
                           required
-                          className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                          className="w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
                           placeholder="Enter your full name"
                         />
                       </div>
-                      <div>
-                        <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                      <div className="space-y-1">
+                        <label className={CHECKOUT_FIELD_LABEL}>
                           Mobile Number
                         </label>
                         <input
                           type="tel"
+                          autoComplete="tel"
                           value={signupData.phone}
                           onChange={(e) => setSignupData(prev => ({ ...prev, phone: e.target.value }))}
-                          className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                          className="w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
                           placeholder="Enter mobile number"
                         />
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                        <div>
-                          <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                        <div className="space-y-1">
+                          <label className={CHECKOUT_FIELD_LABEL}>
                             Password *
                           </label>
-                          <input
-                            type="password"
-                            value={signupData.password}
-                            onChange={(e) => setSignupData(prev => ({ ...prev, password: e.target.value }))}
-                            required
-                            className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
-                            placeholder="Create a password"
-                          />
+                          <div className="relative">
+                            <input
+                              type={showSignupPassword ? 'text' : 'password'}
+                              autoComplete="new-password"
+                              value={signupData.password}
+                              onChange={(e) => setSignupData(prev => ({ ...prev, password: e.target.value }))}
+                              required
+                              className="w-full pr-10 px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                              placeholder="Create a password"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowSignupPassword(prev => !prev)}
+                              aria-label={showSignupPassword ? 'Hide password' : 'Show password'}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                            >
+                              {showSignupPassword ? (
+                                <EyeOff className="w-4 h-4" />
+                              ) : (
+                                <Eye className="w-4 h-4" />
+                              )}
+                            </button>
+                          </div>
                         </div>
-                        <div>
-                          <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                        <div className="space-y-1">
+                          <label className={CHECKOUT_FIELD_LABEL}>
                             Confirm Password *
                           </label>
-                          <input
-                            type="password"
-                            value={signupData.confirmPassword}
-                            onChange={(e) => setSignupData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                            required
-                            className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
-                            placeholder="Confirm password"
-                          />
+                          <div className="relative">
+                            <input
+                              type={showSignupConfirmPassword ? 'text' : 'password'}
+                              autoComplete="new-password"
+                              value={signupData.confirmPassword}
+                              onChange={(e) => setSignupData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                              required
+                              className="w-full pr-10 px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                              placeholder="Confirm password"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowSignupConfirmPassword(prev => !prev)}
+                              aria-label={showSignupConfirmPassword ? 'Hide password' : 'Show password'}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                            >
+                              {showSignupConfirmPassword ? (
+                                <EyeOff className="w-4 h-4" />
+                              ) : (
+                                <Eye className="w-4 h-4" />
+                              )}
+                            </button>
+                          </div>
                         </div>
                       </div>
-                      <div>
-                        <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                      <div className="space-y-1">
+                        <label className={CHECKOUT_FIELD_LABEL}>
                           Referral Code (optional)
                         </label>
                         <input
                           type="text"
                           value={signupData.referralCode}
                           onChange={(e) => setSignupData(prev => ({ ...prev, referralCode: e.target.value }))}
-                          className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
+                          className="w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 border-gray-300 dark:border-gray-600 focus:ring-pink-500 dark:focus:ring-pink-400"
                           placeholder="Enter referral code"
                         />
                       </div>
                       <button
                         type="submit"
                         disabled={authLoading}
-                        className="w-full px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-semibold bg-pink-600 dark:bg-pink-700 text-white rounded-lg hover:bg-pink-700 dark:hover:bg-pink-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className={CHECKOUT_PRIMARY_BTN}
                       >
                         {authLoading ? 'Creating account...' : 'Create account'}
                       </button>
@@ -2536,7 +3346,7 @@ function CheckoutPageContent() {
                           setAuthStep('email');
                           setAuthError('');
                         }}
-                        className="w-full text-xs sm:text-sm text-gray-600 dark:text-gray-400 hover:text-pink-600 dark:hover:text-pink-400 transition-colors"
+                        className="text-form-helper w-full text-center text-gray-600 transition-colors hover:text-pink-600 dark:text-gray-400 dark:hover:text-pink-400"
                       >
                         Use a different email
                       </button>
@@ -2544,36 +3354,41 @@ function CheckoutPageContent() {
                   )}
                 </div>
               </div>
-            )}
-
-            {isAuthenticated && (
-              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 sm:p-4 text-xs sm:text-sm text-green-700 dark:text-green-300 flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
-                Signed in as <span className="font-semibold">{customer?.email || 'customer'}</span>
               </div>
             )}
 
-            {/* Customer Information - Collapsible on Mobile */}
-            <div id="customerInfo" className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-blue-500 dark:border-blue-400 border border-gray-200 dark:border-gray-700 overflow-hidden scroll-mt-24">
-              {/* Header - Clickable on Mobile */}
-              <button
-                onClick={() => toggleSection('customerInfo')}
-                className="w-full lg:pointer-events-none flex items-center justify-between p-3 sm:p-4 lg:p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors lg:hover:bg-transparent"
-              >
-                <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  <div className="p-1.5 sm:p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                    <User className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <span className="text-blue-900 dark:text-blue-100">Customer Information</span>
-              </h2>
-                <ChevronDown className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform duration-200 lg:hidden ${expandedSections.customerInfo ? 'rotate-180' : ''}`} />
-              </button>
-              
-              {/* Content - Collapsible on Mobile */}
-              <div className={`px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6 transition-all duration-300 lg:block ${expandedSections.customerInfo ? 'block' : 'hidden'}`}>
-                <div className="space-y-3 sm:space-y-4">
-                <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+            {isAuthenticated && (
+              <div className="space-y-3 sm:space-y-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                  1 · Account
+                </p>
+                <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 p-3 text-form-helper text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-200 sm:p-4">
+                  <CheckCircle className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400" aria-hidden />
+                  <span className="min-w-0">
+                    Signed in as <span className="text-cart-meta-strong text-green-900 dark:text-green-100">{customer?.email || 'customer'}</span>
+                  </span>
+                </div>
+                <div id="customerInfo" className={CHECKOUT_FORM_CARD}>
+                {/* Header - Clickable on Mobile */}
+                <button
+                  type="button"
+                  onClick={() => toggleSection('customerInfo')}
+                  className={CHECKOUT_SECTION_HEADER_BTN}
+                >
+                  <h2 className="heading-section flex min-w-0 items-center gap-2 text-left">
+                    <span className="shrink-0 rounded-lg bg-gray-100 p-1.5 dark:bg-gray-700/80 sm:p-2">
+                      <User className="h-4 w-4 text-gray-600 dark:text-gray-300 sm:h-5 sm:w-5" />
+                    </span>
+                    <span className="text-gray-900 dark:text-gray-100">Your details</span>
+                  </h2>
+                  <ChevronDown className={`h-5 w-5 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400 lg:hidden ${expandedSections.customerInfo ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {/* Content - Collapsible on Mobile */}
+                <div className={`px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6 transition-all duration-300 lg:block ${expandedSections.customerInfo ? 'block' : 'hidden'}`}>
+                  <div className="space-y-3 sm:space-y-4">
+                  <div className="space-y-1">
+                  <label className={CHECKOUT_FIELD_LABEL}>
                     Full Name *
                   </label>
                   <input
@@ -2582,7 +3397,7 @@ function CheckoutPageContent() {
                     value={formData.name}
                     onChange={handleInputChange}
                     required
-                    className={`w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                    className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
                       fieldErrors.name 
                         ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
                         : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400'
@@ -2590,16 +3405,16 @@ function CheckoutPageContent() {
                     placeholder="Enter your full name"
                   />
                   {fieldErrors.name && (
-                    <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" />
-                      {fieldErrors.name}
+                    <p className={CHECKOUT_FIELD_ERROR} role="alert">
+                      <AlertCircle className={CHECKOUT_FIELD_ERROR_ICON} aria-hidden />
+                      <span className="min-w-0">{fieldErrors.name}</span>
                     </p>
                   )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                  <div>
-                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                  <div className="space-y-1">
+                    <label className={CHECKOUT_FIELD_LABEL}>
                       <Mail className="w-3.5 h-3.5 sm:w-4 sm:h-4 inline mr-1" />
                       Email *
                     </label>
@@ -2609,7 +3424,7 @@ function CheckoutPageContent() {
                       value={formData.email}
                       onChange={handleInputChange}
                       required
-                      className={`w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
                         fieldErrors.email 
                           ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
                           : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400'
@@ -2617,15 +3432,15 @@ function CheckoutPageContent() {
                       placeholder="your@email.com"
                     />
                     {fieldErrors.email && (
-                      <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {fieldErrors.email}
+                      <p className={CHECKOUT_FIELD_ERROR} role="alert">
+                        <AlertCircle className={CHECKOUT_FIELD_ERROR_ICON} aria-hidden />
+                        <span className="min-w-0">{fieldErrors.email}</span>
                       </p>
                     )}
                   </div>
 
-                  <div>
-                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                  <div className="space-y-1">
+                    <label className={CHECKOUT_FIELD_LABEL}>
                       <Phone className="w-3.5 h-3.5 sm:w-4 sm:h-4 inline mr-1" />
                       Phone *
                     </label>
@@ -2636,7 +3451,7 @@ function CheckoutPageContent() {
                       onChange={handleInputChange}
                       required
                       maxLength={15}
-                      className={`w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
                         fieldErrors.phone 
                           ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
                           : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400'
@@ -2644,277 +3459,51 @@ function CheckoutPageContent() {
                       placeholder="10-digit phone number"
                     />
                     {fieldErrors.phone && (
-                      <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {fieldErrors.phone}
+                      <p className={CHECKOUT_FIELD_ERROR} role="alert">
+                        <AlertCircle className={CHECKOUT_FIELD_ERROR_ICON} aria-hidden />
+                        <span className="min-w-0">{fieldErrors.phone}</span>
                       </p>
                     )}
+                  </div>
                   </div>
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* Delivery Address - Collapsible on Mobile */}
-            <div id="deliveryAddress" className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-green-500 dark:border-green-400 border border-gray-200 dark:border-gray-700 overflow-hidden scroll-mt-24">
-              {/* Header - Clickable on Mobile */}
-              <button
-                onClick={() => toggleSection('deliveryAddress')}
-                className="w-full lg:pointer-events-none flex items-center justify-between p-3 sm:p-4 lg:p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors lg:hover:bg-transparent"
-              >
-                <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  <div className="p-1.5 sm:p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                    <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 dark:text-green-400" />
-                  </div>
-                  <span className="text-green-900 dark:text-green-100">Delivery Address</span>
-              </h2>
-                <ChevronDown className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform duration-200 lg:hidden ${expandedSections.deliveryAddress ? 'rotate-180' : ''}`} />
-              </button>
-              
-              {/* Content - Collapsible on Mobile */}
-              <div className={`px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6 transition-all duration-300 lg:block ${expandedSections.deliveryAddress ? 'block' : 'hidden'}`}>
-              <div className="space-y-3 sm:space-y-4">
-              <div>
-                  {/* Optional precise location capture for delivery */}
-                  <div className="mb-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
-                    <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-gray-600 dark:text-gray-300">
-                      <MapPin className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
-                      <span className="font-medium">Delivery location (optional)</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleUseMyLocation}
-                      disabled={isFetchingLocation}
-                      className={`group relative inline-flex items-center gap-2 text-xs sm:text-sm text-blue-700 dark:text-blue-300 font-semibold px-4 py-2 rounded-lg border-2 border-blue-400 dark:border-blue-600 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-800/30 hover:from-blue-100 hover:to-blue-200 dark:hover:from-blue-900/50 dark:hover:to-blue-800/40 hover:border-blue-500 dark:hover:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-md hover:shadow-lg hover:shadow-blue-200/50 dark:hover:shadow-blue-900/30 active:scale-95 ${
-                        isFetchingLocation ? 'grayscale-[0.3] backdrop-blur-[2px] pointer-events-none' : ''
-                      }`}
-                    >
-                      {/* Overlay when fetching location */}
-                      {isFetchingLocation && (
-                        <div className="absolute inset-0 bg-white/30 dark:bg-gray-900/30 rounded-lg backdrop-blur-[1px] z-10"></div>
-                      )}
-                      {/* Subtle pulsing location indicator - only when not fetching */}
-                      {!isFetchingLocation && (
-                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-blue-500 rounded-full animate-pulse opacity-80"></span>
-                      )}
-                      {/* GPS/Location icon with rotation when fetching */}
-                      <div className={`relative ${isFetchingLocation ? 'animate-spin' : ''}`}>
-                        <Navigation className="w-4 h-4 text-blue-600 dark:text-blue-400" strokeWidth={2.5} />
-                      </div>
-                      {/* Map pin icon as secondary indicator */}
-                      <MapPin className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" strokeWidth={2} />
-                      <span className="relative z-10">
-                        {isFetchingLocation ? (
-                          <span className="flex items-center gap-1.5">
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            Detecting location…
-                          </span>
-                        ) : (
-                          'Use my current location'
-                        )}
-                      </span>
-                    </button>
-                  </div>
-
-                  {formData.address?.location && typeof formData.address.location.lat === 'number' && typeof formData.address.location.lng === 'number' && (
-                    <div className="mb-1 space-y-1">
-                      <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">
-                        Location captured: {locationName ? `${locationName} ` : ''}({formData.address.location.lat.toFixed(4)}, {formData.address.location.lng.toFixed(4)}). Add street & landmark for accurate delivery.
-                      </p>
-                      {/* Location Warning (separate from error) */}
-                      {locationWarning && (
-                        <div className="p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
-                          <p className="text-[10px] sm:text-xs text-yellow-700 dark:text-yellow-300 flex items-start gap-1.5">
-                            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                            <span>{locationWarning}</span>
-                          </p>
-                        </div>
-                      )}
-                      {/* Accuracy indicator (only show if valid) */}
-                      {locationAccuracy && locationAccuracy <= 100000 && (
-                        <p className={`text-[10px] sm:text-xs flex items-center gap-1 ${
-                          locationAccuracy <= 100 
-                            ? 'text-green-600 dark:text-green-400' 
-                            : locationAccuracy <= 500 
-                              ? 'text-yellow-600 dark:text-yellow-400' 
-                              : 'text-orange-600 dark:text-orange-400'
-                        }`}>
-                          <AlertCircle className="w-3 h-3" />
-                          {locationAccuracy <= 100 
-                            ? `High accuracy (~${Math.round(locationAccuracy)}m)` 
-                            : locationAccuracy <= 500 
-                              ? `Moderate accuracy (~${Math.round(locationAccuracy)}m) - Please verify address` 
-                              : `Low accuracy (~${(locationAccuracy / 1000).toFixed(1)}km) - Location may be inaccurate, please verify and correct if needed`}
-                        </p>
-                      )}
-                      <p className="text-[10px] text-gray-400 dark:text-gray-500 italic">
-                        💡 Tip: If the location seems incorrect, please manually enter your complete address below.
-                      </p>
-                    </div>
-                  )}
-
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
-                    <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 inline mr-1" />
-                    Street Address *
-                  </label>
-                  
-                  <div className="relative">
-                  <input
-                    type="text"
-                    name="address.street"
-                    value={formData.address.street}
-                    onChange={handleInputChange}
-                    required
-                      className={`w-full px-2.5 sm:px-4 py-1.5 sm:py-2 pr-10 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 transition-all duration-300 ${
-                      fieldErrors['address.street'] 
-                        ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
-                          : formData.address.street && addressScore >= 75
-                          ? 'border-green-400 dark:border-green-500 focus:ring-green-500 dark:focus:ring-green-400'
-                          : formData.address.street && addressScore >= 50
-                          ? 'border-yellow-400 dark:border-yellow-500 focus:ring-yellow-500 dark:focus:ring-yellow-400'
-                        : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
-                    }`}
-                      placeholder={formData.address.street ? "Add more details..." : "e.g., Flat 201, Green Valley Apartments, MG Road"}
-                    />
-                    {/* Checkmark icon when address is ≥75% complete */}
-                    {formData.address.street && addressScore >= 75 && (
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                        <CheckCircle className="w-5 h-5 text-green-500 dark:text-green-400 animate-in fade-in duration-300" />
-                      </div>
-                    )}
-                  </div>
-                  
-                  {fieldErrors['address.street'] && (
-                    <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" />
-                      {fieldErrors['address.street']}
-                    </p>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                  <div>
-                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
-                      Landmark (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      name="address.landmark"
-                      value={formData.address.landmark}
-                      onChange={handleInputChange}
-                      className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500 dark:focus:ring-green-400 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500"
-                      placeholder="Nearby landmark or location (optional)"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
-                      City *
-                    </label>
-                    <input
-                      type="text"
-                      name="address.city"
-                      value={formData.address.city}
-                      onChange={handleInputChange}
-                      required
-                      className={`w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
-                        fieldErrors['address.city'] 
-                          ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
-                          : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
-                      }`}
-                      placeholder="City"
-                    />
-                    {fieldErrors['address.city'] && (
-                      <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {fieldErrors['address.city']}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                  <div>
-                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
-                      State *
-                    </label>
-                    <input
-                      type="text"
-                      name="address.state"
-                      value={formData.address.state}
-                      onChange={handleInputChange}
-                      required
-                      className={`w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
-                        fieldErrors['address.state'] 
-                          ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
-                          : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
-                      }`}
-                      placeholder="State"
-                    />
-                    {fieldErrors['address.state'] && (
-                      <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {fieldErrors['address.state']}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
-                      PIN Code *
-                    </label>
-                    <input
-                      type="text"
-                      name="address.zip_code"
-                      value={formData.address.zip_code}
-                      onChange={handleInputChange}
-                      required
-                      maxLength={6}
-                      className={`w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
-                        fieldErrors['address.zip_code'] 
-                          ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
-                          : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
-                      }`}
-                      placeholder="6-digit PIN code"
-                    />
-                    {fieldErrors['address.zip_code'] && (
-                      <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {fieldErrors['address.zip_code']}
-                      </p>
-                    )}
-                  </div>
-                  </div>
-                </div>
               </div>
-            </div>
+            )}
 
+            <div className="space-y-4 sm:space-y-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                2 · Delivery
+              </p>
             {/* Delivery Slot - Always Visible - Collapsible on Mobile */}
-            <div id="deliverySlot" className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-purple-500 dark:border-purple-400 border border-gray-200 dark:border-gray-700 overflow-hidden scroll-mt-24">
+            <div id="deliverySlot" className={CHECKOUT_FORM_CARD}>
               {/* Header - Clickable on Mobile */}
               <button
+                type="button"
                 onClick={() => toggleSection('deliverySlot')}
-                className="w-full lg:pointer-events-none flex items-center justify-between p-3 sm:p-4 lg:p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors lg:hover:bg-transparent"
+                className={CHECKOUT_SECTION_HEADER_BTN}
               >
-                <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  <div className="p-1.5 sm:p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-                    <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-purple-600 dark:text-purple-400" />
-                  </div>
-                  <span className="text-purple-900 dark:text-purple-100">Delivery Date & Time *</span>
-              </h2>
-                <ChevronDown className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform duration-200 lg:hidden ${expandedSections.deliverySlot ? 'rotate-180' : ''}`} />
+                <h2 className="heading-section flex min-w-0 items-center gap-2 text-left">
+                  <span className="shrink-0 rounded-lg bg-gray-100 p-1.5 dark:bg-gray-700/80 sm:p-2">
+                    <Calendar className="h-4 w-4 text-gray-600 dark:text-gray-300 sm:h-5 sm:w-5" />
+                  </span>
+                  <span className="text-gray-900 dark:text-gray-100">Date &amp; time *</span>
+                </h2>
+                <ChevronDown className={`h-5 w-5 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400 lg:hidden ${expandedSections.deliverySlot ? 'rotate-180' : ''}`} />
               </button>
               
               {/* Content - Collapsible on Mobile */}
               <div className={`px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6 transition-all duration-300 lg:block ${expandedSections.deliverySlot ? 'block' : 'hidden'}`}>
               {/* Field error for delivery slot */}
               {fieldErrors.deliverySlot && (
-                <div className="mb-3 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
-                  <p className="text-xs text-red-700 dark:text-red-300">{fieldErrors.deliverySlot}</p>
-                </div>
+                <p className={`${CHECKOUT_FIELD_ERROR} mb-3`} role="alert">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-red-500 dark:text-red-400 mt-0.5" aria-hidden />
+                  <span className="min-w-0">{fieldErrors.deliverySlot}</span>
+                </p>
               )}
               {/* Always-visible slot display */}
-              {(selectedSlot || cartDeliverySlot) && !showSlotSelector && (() => {
+              {isClient && (selectedSlot || cartDeliverySlot) && !showSlotSelector && (() => {
                 const currentSlot = selectedSlot || cartDeliverySlot;
                 const expirationStatus = getSlotExpirationStatus(currentSlot);
                 const isExpired = expirationStatus === 'expired';
@@ -2942,9 +3531,11 @@ function CheckoutPageContent() {
                   badgeBorder = 'border-2 border-green-200 dark:border-green-800';
                   badgeText = 'text-green-800 dark:text-green-300';
                   badgeIcon = <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 dark:text-green-400 flex-shrink-0" />;
-                  badgeMessage = countdown 
-                    ? `Slot expires in ${countdown.hours}h ${countdown.minutes}m`
-                    : 'Delivery Slot Selected';
+                  badgeMessage = isAutoSelected && selectedSlot
+                    ? 'Delivery Slot Pre-selected (Earliest Available)'
+                    : countdown 
+                      ? `Slot expires in ${countdown.hours}h ${countdown.minutes}m`
+                      : 'Delivery Slot Selected';
                 }
                 
                 return (
@@ -2953,22 +3544,34 @@ function CheckoutPageContent() {
                       <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
                         {badgeIcon}
                         <div className="flex-1 min-w-0">
-                          <p className={`text-xs sm:text-sm font-medium ${badgeText} mb-1`}>
-                            {badgeMessage}
-                          </p>
-                          <p className={`text-xs sm:text-sm ${badgeText} opacity-90`}>
-                            {formatDeliveryDate(currentSlot.date)} • {formatTimeSlot(currentSlot)}
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <p className={`text-cart-body font-semibold ${badgeText}`}>
+                              {badgeMessage}
                             </p>
+                            {isAutoSelected && selectedSlot && (
+                              <span className="px-2 py-0.5 text-[10px] sm:text-xs font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded border border-blue-200 dark:border-blue-800">
+                                Auto-selected
+                              </span>
+                            )}
                           </div>
+                          <p className={`text-form-helper ${badgeText}`}>
+                            {formatDeliveryDate(currentSlot.date)} • {formatTimeSlot(currentSlot)}
+                          </p>
                         </div>
+                      </div>
                       <button
-                        onClick={() => setShowSlotSelector(true)}
-                        className="px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium whitespace-nowrap flex-shrink-0"
+                        type="button"
+                        onClick={() => {
+                          setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+                          setShowSlotSelector(true);
+                          setIsAutoSelected(false); // Clear auto-selected flag when user manually changes
+                        }}
+                        className="inline-flex min-h-[44px] shrink-0 items-center justify-center whitespace-nowrap rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
                       >
                         Change
                       </button>
-                      </div>
                     </div>
+                  </div>
                 );
               })()}
                   
@@ -2976,10 +3579,14 @@ function CheckoutPageContent() {
                 /* Show Select Button if no slot */
                 !(selectedSlot || cartDeliverySlot) && (
                   <button
-                    onClick={() => setShowSlotSelector(true)}
-                    className="w-full px-3 sm:px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
+                    type="button"
+                    onClick={() => {
+                      setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+                      setShowSlotSelector(true);
+                    }}
+                    className={CHECKOUT_PRIMARY_BTN}
                   >
-                    Select Delivery Slot
+                    Select delivery slot
                   </button>
                 )
               ) : (
@@ -2992,6 +3599,7 @@ function CheckoutPageContent() {
                   />
                   {(selectedSlot || cartDeliverySlot) && (
                     <button
+                      type="button"
                       onClick={() => {
                         setShowSlotSelector(false);
                         // If selectedSlot exists, keep it; otherwise reset to cart's original slot
@@ -3015,9 +3623,9 @@ function CheckoutPageContent() {
                           }));
                         }
                       }}
-                      className="w-full px-3 sm:px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
+                      className={CHECKOUT_SECONDARY_BTN}
                     >
-                      Cancel {selectedSlot ? '(Keep Current Slot)' : '(Use Cart Slot)'}
+                      {selectedSlot ? 'Cancel (keep current slot)' : 'Cancel (use cart slot)'}
                     </button>
                   )}
                 </div>
@@ -3025,20 +3633,407 @@ function CheckoutPageContent() {
               </div>
             </div>
 
-            {/* Payment Method - Collapsible on Mobile */}
-            <div id="paymentMethod" className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-orange-500 dark:border-orange-400 border border-gray-200 dark:border-gray-700 overflow-hidden scroll-mt-24">
+            {/* Delivery Address - Collapsible on Mobile */}
+            <div id="deliveryAddress" className={CHECKOUT_FORM_CARD}>
               {/* Header - Clickable on Mobile */}
               <button
-                onClick={() => toggleSection('paymentMethod')}
-                className="w-full lg:pointer-events-none flex items-center justify-between p-3 sm:p-4 lg:p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors lg:hover:bg-transparent"
+                type="button"
+                onClick={() => toggleSection('deliveryAddress')}
+                className={CHECKOUT_SECTION_HEADER_BTN}
               >
-                <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  <div className="p-1.5 sm:p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
-                    <CreditCard className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600 dark:text-orange-400" />
+                <h2 className="heading-section flex min-w-0 items-center gap-2 text-left">
+                  <span className="shrink-0 rounded-lg bg-gray-100 p-1.5 dark:bg-gray-700/80 sm:p-2">
+                    <MapPin className="h-4 w-4 text-gray-600 dark:text-gray-300 sm:h-5 sm:w-5" />
+                  </span>
+                  <span className="text-gray-900 dark:text-gray-100">Delivery address</span>
+                </h2>
+                <ChevronDown className={`h-5 w-5 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400 lg:hidden ${expandedSections.deliveryAddress ? 'rotate-180' : ''}`} />
+              </button>
+              
+              {/* Content - Collapsible on Mobile */}
+              <div className={`px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6 transition-all duration-300 lg:block ${expandedSections.deliveryAddress ? 'block' : 'hidden'}`}>
+              <div className="space-y-3 sm:space-y-4">
+              {(lastUsedAddressHasContent(deviceSavedAddressSnapshot) || profileAddressAvailable) && (
+                <div className="rounded-lg border border-gray-200 bg-white px-3 py-3 dark:border-gray-600 dark:bg-gray-800/80">
+                  <p className="text-cart-label font-semibold text-gray-900 dark:text-gray-100">
+                    Quick fill
+                  </p>
+                  <p className="mt-1 text-form-helper text-gray-600 dark:text-gray-400">
+                    Use a saved address on this device or from your account. You can still edit everything below.
+                  </p>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    {lastUsedAddressHasContent(deviceSavedAddressSnapshot) ? (
+                      <button
+                        type="button"
+                        onClick={applyLastUsedAddress}
+                        className={`${CHECKOUT_SECONDARY_BTN} sm:min-w-0 sm:flex-1 sm:px-3`}
+                      >
+                        Use last delivery address
+                      </button>
+                    ) : null}
+                    {profileAddressAvailable ? (
+                      <button
+                        type="button"
+                        onClick={applyProfileAddress}
+                        className={`${CHECKOUT_SECONDARY_BTN} sm:min-w-0 sm:flex-1 sm:px-3`}
+                      >
+                        Use profile address
+                      </button>
+                    ) : null}
                   </div>
-                  <span className="text-orange-900 dark:text-orange-100">Payment Method *</span>
-              </h2>
-                <ChevronDown className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform duration-200 lg:hidden ${expandedSections.paymentMethod ? 'rotate-180' : ''}`} />
+                  {lastUsedAddressHasContent(deviceSavedAddressSnapshot) &&
+                  deviceSavedAddressSnapshot?.zip_code &&
+                  currentPinCode &&
+                  String(deviceSavedAddressSnapshot.zip_code).trim() !== String(currentPinCode).trim() ? (
+                    <p className="mt-2 text-form-helper text-amber-800 dark:text-amber-200/90" role="status">
+                      Your cart uses PIN {currentPinCode}. The saved address uses PIN{' '}
+                      {String(deviceSavedAddressSnapshot.zip_code).trim()} — confirm it matches your delivery area
+                      before ordering.
+                    </p>
+                  ) : null}
+                </div>
+              )}
+              <div>
+                  {/* Delivery location: copy + GPS grouped on lg so the CTA reads as one block with the map below */}
+                  <div className="mb-2 space-y-3 rounded-xl border border-gray-200 bg-gradient-to-br from-white via-white to-pink-50/40 p-3 shadow-sm dark:border-gray-600 dark:from-gray-800 dark:via-gray-800 dark:to-pink-950/25 sm:p-4 lg:space-y-0 lg:border-l-4 lg:border-l-pink-500 lg:p-5">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-8">
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <p className="flex items-start gap-2 text-cart-body font-medium text-gray-900 dark:text-gray-100">
+                          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-pink-600 dark:text-pink-400" aria-hidden />
+                          <span>Set your delivery location on the map</span>
+                        </p>
+                        <p
+                          id="checkout-delivery-map-hint"
+                          className="flex items-start gap-2 text-form-helper text-gray-600 dark:text-gray-400"
+                        >
+                          <Move className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-500 dark:text-gray-500" aria-hidden />
+                          <span>
+                            Move the pin to adjust{' '}
+                            <span className="text-gray-500 dark:text-gray-500">(If required)</span>
+                          </span>
+                        </p>
+                      </div>
+                      <div className="shrink-0 lg:flex lg:justify-end">
+                        <button
+                          type="button"
+                          onClick={handleUseMyLocation}
+                          disabled={isFetchingLocation}
+                          className={`${CHECKOUT_PRIMARY_BTN} w-full min-w-0 lg:w-auto lg:min-w-[220px] lg:px-6 lg:py-3 lg:shadow-md lg:transition-[box-shadow,transform] lg:hover:shadow-lg lg:active:scale-[0.98] ${
+                            isFetchingLocation ? 'pointer-events-none opacity-80' : ''
+                          }`}
+                        >
+                          {isFetchingLocation ? (
+                            <span className="inline-flex items-center justify-center gap-2">
+                              <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                              Locating…
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center justify-center gap-2">
+                              <Navigation className="h-4 w-4 shrink-0 lg:h-[1.125rem] lg:w-[1.125rem]" strokeWidth={2} aria-hidden />
+                              Use my location
+                            </span>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                    {deliveryLocationFeedback && (
+                      <div
+                        role={deliveryLocationFeedback.variant === 'error' ? 'alert' : 'status'}
+                        aria-live="polite"
+                        className={`rounded-lg border px-3 py-2 text-sm ${
+                          deliveryLocationFeedback.variant === 'success'
+                            ? 'border-green-200 bg-green-50 text-green-900 dark:border-green-800 dark:bg-green-900/25 dark:text-green-100'
+                            : deliveryLocationFeedback.variant === 'error'
+                              ? 'border-red-200 bg-red-50 text-red-900 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-100'
+                              : 'border-gray-200 bg-gray-50 text-gray-800 dark:border-gray-600 dark:bg-gray-800/80 dark:text-gray-100'
+                        }`}
+                      >
+                        {deliveryLocationFeedback.text}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Service-area + pinned maps — extra bottom space so sticky bar does not crowd the map */}
+                  <div className="space-y-4 pb-[max(2.5rem,env(safe-area-inset-bottom,0px))] sm:pb-[max(3rem,env(safe-area-inset-bottom,0px))]">
+                  {/* Service-area map before a pin exists (PIN forward geocode) */}
+                  {!hasDeliveryLocationPin && isValidPinCode && currentPinCode && (
+                    <div
+                      className="space-y-2"
+                      role="region"
+                      aria-label={`Delivery location map for PIN ${currentPinCode}`}
+                      aria-describedby="checkout-delivery-map-hint"
+                    >
+                      {serviceAreaGeocodeStatus === 'loading' && (
+                        <div
+                          className="flex h-[min(143px,24.75vh)] w-full items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/60 sm:h-[min(260px,45vh)]"
+                          role="status"
+                          aria-live="polite"
+                        >
+                          <Loader2 className="h-8 w-8 shrink-0 animate-spin text-pink-600 dark:text-pink-400" aria-hidden />
+                          <span className="sr-only">Loading map for your PIN</span>
+                        </div>
+                      )}
+                      {serviceAreaGeocodeStatus === 'error' && (
+                        <p className="text-form-helper">
+                          We could not place the map for PIN {currentPinCode}. You can still use your current location
+                          or enter your address below.
+                        </p>
+                      )}
+                      {serviceAreaGeocodeStatus === 'ok' && serviceAreaMapCenter && (
+                        <CheckoutDeliveryMap
+                          key={`pin-preview-${currentPinCode}-${serviceAreaMapCenter.lat}-${serviceAreaMapCenter.lng}`}
+                          centerLat={serviceAreaMapCenter.lat}
+                          centerLng={serviceAreaMapCenter.lng}
+                          zoom={11}
+                          onPinMove={handleDeliveryMapPinMove}
+                          readOnly={isFetchingLocation}
+                          showTapHint={showDeliveryMapTapHint}
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  {/* Map + summary when a delivery pin exists */}
+                  {hasDeliveryLocationPin && (
+                    <div
+                      className="space-y-2"
+                      role="region"
+                      aria-labelledby="checkout-delivery-map-title"
+                      aria-describedby="checkout-delivery-map-hint"
+                    >
+                      <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-600 dark:bg-gray-700/50">
+                        <p
+                          id="checkout-delivery-map-title"
+                          className="text-form-legal font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+                        >
+                          Map preview
+                        </p>
+                        <div className="space-y-1.5">
+                          <p className="text-sm leading-snug text-gray-700 dark:text-gray-300">
+                            <span aria-hidden>📍</span>{' '}
+                            <span className="font-medium">Delivering to:</span>{' '}
+                            {pinGeocodePhase === 'updating' ? (
+                              <span className="font-semibold text-gray-500 dark:text-gray-400">
+                                Updating location…
+                              </span>
+                            ) : (
+                              <span className="break-words font-semibold text-gray-900 dark:text-gray-100">
+                                {locationName ||
+                                  `${formData.address.location.lat.toFixed(5)}, ${formData.address.location.lng.toFixed(5)}`}
+                              </span>
+                            )}
+                          </p>
+                          {locationNearLine && pinGeocodePhase !== 'updating' ? (
+                            <p className="text-form-helper leading-snug text-gray-600 dark:text-gray-300">
+                              {locationNearLine}
+                            </p>
+                          ) : null}
+                          {pinGeocodePhase === 'updated' && locationName ? (
+                            <p className="text-xs font-medium text-green-700 dark:text-green-400" role="status">
+                              Updated — {locationName}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                      <CheckoutDeliveryMap
+                        key={`pin-set-${formData.address.location.lat}-${formData.address.location.lng}`}
+                        centerLat={formData.address.location.lat}
+                        centerLng={formData.address.location.lng}
+                        zoom={18}
+                        markerLat={formData.address.location.lat}
+                        markerLng={formData.address.location.lng}
+                        accuracyM={
+                          typeof formData.address.location.accuracy === 'number'
+                            ? formData.address.location.accuracy
+                            : locationAccuracy
+                        }
+                        onPinMove={handleDeliveryMapPinMove}
+                        readOnly={isFetchingLocation}
+                        showTapHint={showDeliveryMapTapHint}
+                      />
+                      <div className="flex justify-center sm:justify-start">
+                        <button
+                          type="button"
+                          onClick={handleClearDeliveryLocation}
+                          disabled={isFetchingLocation}
+                          className="ui-focus-visible text-sm font-medium text-gray-600 underline-offset-2 hover:text-gray-900 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:text-gray-100"
+                        >
+                          Clear location
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  </div>
+
+                  <div className="space-y-1">
+                  <label className={CHECKOUT_FIELD_LABEL}>
+                    <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 inline mr-1" />
+                    Street Address *
+                  </label>
+                  
+                  <div className="relative">
+                  <input
+                    type="text"
+                    name="address.street"
+                    value={formData.address.street}
+                    onChange={handleInputChange}
+                    required
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 pr-10 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 transition-all duration-300 ${
+                      fieldErrors['address.street'] 
+                        ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
+                          : formData.address.street && addressScore >= 75
+                          ? 'border-green-400 dark:border-green-500 focus:ring-green-500 dark:focus:ring-green-400'
+                          : formData.address.street && addressScore >= 50
+                          ? 'border-yellow-400 dark:border-yellow-500 focus:ring-yellow-500 dark:focus:ring-yellow-400'
+                        : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
+                    }`}
+                      placeholder={formData.address.street ? "Add more details..." : "e.g., Flat 201, Green Valley Apartments, MG Road"}
+                    />
+                    {/* Checkmark icon when address is ≥75% complete */}
+                    {formData.address.street && addressScore >= 75 && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                        <CheckCircle className="w-5 h-5 text-green-500 dark:text-green-400 animate-in fade-in duration-300" />
+                      </div>
+                    )}
+                  </div>
+                  
+                  {fieldErrors['address.street'] && (
+                    <p className={CHECKOUT_FIELD_ERROR} role="alert">
+                      <AlertCircle className={CHECKOUT_FIELD_ERROR_ICON} aria-hidden />
+                      <span className="min-w-0">{fieldErrors['address.street']}</span>
+                    </p>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="space-y-1">
+                    <label className={CHECKOUT_FIELD_LABEL}>
+                      Landmark (Optional)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        name="address.landmark"
+                        value={formData.address.landmark}
+                        onChange={handleInputChange}
+                        className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 pr-10 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                          formData.address.landmark.trim().length >= 3
+                            ? 'border-green-400 dark:border-green-500 focus:ring-green-500 dark:focus:ring-green-400'
+                            : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
+                        }`}
+                        placeholder="Nearby landmark or location (optional)"
+                      />
+                      {formData.address.landmark.trim().length >= 3 && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                          <CheckCircle className="w-5 h-5 text-green-500 dark:text-green-400 animate-in fade-in duration-300" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className={CHECKOUT_FIELD_LABEL}>
+                      City *
+                    </label>
+                    <input
+                      type="text"
+                      name="address.city"
+                      value={formData.address.city}
+                      onChange={handleInputChange}
+                      required
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                        fieldErrors['address.city'] 
+                          ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
+                          : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
+                      }`}
+                      placeholder="City"
+                    />
+                    {fieldErrors['address.city'] && (
+                      <p className={CHECKOUT_FIELD_ERROR} role="alert">
+                        <AlertCircle className={CHECKOUT_FIELD_ERROR_ICON} aria-hidden />
+                        <span className="min-w-0">{fieldErrors['address.city']}</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="space-y-1">
+                    <label className={CHECKOUT_FIELD_LABEL}>
+                      State *
+                    </label>
+                    <input
+                      type="text"
+                      name="address.state"
+                      value={formData.address.state}
+                      onChange={handleInputChange}
+                      required
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                        fieldErrors['address.state'] 
+                          ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
+                          : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
+                      }`}
+                      placeholder="State"
+                    />
+                    {fieldErrors['address.state'] && (
+                      <p className={CHECKOUT_FIELD_ERROR} role="alert">
+                        <AlertCircle className={CHECKOUT_FIELD_ERROR_ICON} aria-hidden />
+                        <span className="min-w-0">{fieldErrors['address.state']}</span>
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className={CHECKOUT_FIELD_LABEL}>
+                      PIN Code *
+                    </label>
+                    <input
+                      type="text"
+                      name="address.zip_code"
+                      value={formData.address.zip_code}
+                      onChange={handleInputChange}
+                      required
+                      maxLength={6}
+                      className={`w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                        fieldErrors['address.zip_code'] 
+                          ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-500' 
+                          : 'border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-400'
+                      }`}
+                      placeholder="6-digit PIN code"
+                    />
+                    {fieldErrors['address.zip_code'] && (
+                      <p className={CHECKOUT_FIELD_ERROR} role="alert">
+                        <AlertCircle className={CHECKOUT_FIELD_ERROR_ICON} aria-hidden />
+                        <span className="min-w-0">{fieldErrors['address.zip_code']}</span>
+                      </p>
+                    )}
+                  </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            </div>
+
+            <div className="space-y-4 sm:space-y-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                3 · Payment
+              </p>
+            {/* Payment Method - Collapsible on Mobile */}
+            <div id="paymentMethod" className={CHECKOUT_FORM_CARD}>
+              {/* Header - Clickable on Mobile */}
+              <button
+                type="button"
+                onClick={() => toggleSection('paymentMethod')}
+                className={CHECKOUT_SECTION_HEADER_BTN}
+              >
+                <h2 className="heading-section flex min-w-0 items-center gap-2 text-left">
+                  <span className="shrink-0 rounded-lg bg-gray-100 p-1.5 dark:bg-gray-700/80 sm:p-2">
+                    <CreditCard className="h-4 w-4 text-gray-600 dark:text-gray-300 sm:h-5 sm:w-5" />
+                  </span>
+                  <span className="text-gray-900 dark:text-gray-100">Payment *</span>
+                </h2>
+                <ChevronDown className={`h-5 w-5 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400 lg:hidden ${expandedSections.paymentMethod ? 'rotate-180' : ''}`} />
               </button>
               
               {/* Content - Collapsible on Mobile */}
@@ -3047,9 +4042,9 @@ function CheckoutPageContent() {
                 {['cash', 'upi', 'card', 'wallet'].map((method) => (
                   <label
                     key={method}
-                    className={`flex items-center gap-2 sm:gap-3 p-3 sm:p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                    className={`flex min-h-[48px] cursor-pointer items-center gap-2 rounded-lg border-2 p-3 transition-all has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-pink-600 has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-white dark:has-[:focus-visible]:ring-pink-500 dark:has-[:focus-visible]:ring-offset-gray-900 sm:min-h-[52px] sm:gap-3 sm:p-4 ${
                       formData.paymentMethod === method
-                        ? 'border-pink-500 dark:border-pink-400 bg-pink-50 dark:bg-pink-900/30'
+                        ? 'border-pink-500 bg-pink-50 dark:border-pink-400 dark:bg-pink-900/30'
                         : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                     }`}
                   >
@@ -3059,9 +4054,9 @@ function CheckoutPageContent() {
                       value={method}
                       checked={formData.paymentMethod === method}
                       onChange={handleInputChange}
-                      className="w-4 h-4 text-pink-600 dark:text-pink-400 focus:ring-pink-500 dark:focus:ring-pink-400"
+                      className="h-5 w-5 shrink-0 text-pink-600 focus:ring-pink-500 dark:text-pink-400 dark:focus:ring-pink-400"
                     />
-                    <span className="text-sm sm:text-base font-medium text-gray-900 dark:text-gray-100 capitalize">
+                    <span className="text-cart-body font-semibold capitalize text-gray-900 dark:text-gray-100">
                       {method === 'upi' ? 'UPI' : method}
                     </span>
                   </label>
@@ -3071,87 +4066,111 @@ function CheckoutPageContent() {
             </div>
 
             {/* Special Instructions - Optional - Collapsible on All Devices */}
-            <div id="specialInstructions" className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-gray-400 dark:border-gray-500 border border-gray-200 dark:border-gray-700 overflow-hidden scroll-mt-24">
+            <div id="specialInstructions" className={CHECKOUT_FORM_CARD}>
               {/* Header - Clickable on All Devices */}
               <button
+                type="button"
                 onClick={() => toggleSection('specialInstructions')}
-                className="w-full flex items-center justify-between p-3 sm:p-4 lg:p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                className={CHECKOUT_SECTION_HEADER_BTN}
               >
-                <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  <div className="p-1.5 sm:p-2 rounded-lg bg-gray-100 dark:bg-gray-700">
-                    <Lock className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 dark:text-gray-400" />
-                  </div>
-                  <span className="text-gray-700 dark:text-gray-300">Special Instructions (Optional)</span>
+                <h2 className="heading-section flex min-w-0 items-center gap-2 text-left">
+                  <span className="shrink-0 rounded-lg bg-gray-100 p-1.5 dark:bg-gray-700/80 sm:p-2">
+                    <Lock className="h-4 w-4 text-gray-600 dark:text-gray-300 sm:h-5 sm:w-5" />
+                  </span>
+                  <span className="text-gray-900 dark:text-gray-100">Special instructions (optional)</span>
                 </h2>
-                <ChevronDown className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform duration-200 ${expandedSections.specialInstructions ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`h-5 w-5 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-400 ${expandedSections.specialInstructions ? 'rotate-180' : ''}`} />
               </button>
               
               {/* Content - Collapsible on All Devices */}
               <div className={`px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6 transition-all duration-300 ${expandedSections.specialInstructions ? 'block' : 'hidden'}`}>
+              <div className="space-y-1">
               <textarea
                 name="specialInstructions"
                 value={formData.specialInstructions}
                 onChange={handleInputChange}
                   rows={3}
                 maxLength={150}
-                  className="w-full px-2.5 sm:px-4 py-1.5 sm:py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:focus:ring-gray-400 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                  className="w-full px-2.5 sm:px-4 py-2.5 sm:py-3 min-h-[44px] sm:min-h-[48px] leading-[1.15] text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:focus:ring-gray-400 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500"
                 placeholder="Any special delivery instructions or notes (optional)..."
               />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 sm:mt-2">
+                <p className="text-form-helper">
                 {formData.specialInstructions.length}/150 characters
               </p>
               </div>
+              </div>
+            </div>
             </div>
           </div>
 
           {/* RIGHT SECTION: Order Summary - Visible on All Devices */}
-          <div className="lg:sticky lg:top-24 h-fit mb-8 lg:mb-0">
-            <div className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-pink-500 dark:border-pink-400 border border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-xl dark:shadow-black/30 p-3 sm:p-4 lg:p-5 space-y-3 sm:space-y-4">
-              {/* Header with Icon */}
-              <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
-                <div className="p-1.5 rounded-lg bg-pink-100 dark:bg-pink-900/30">
-                  <ShoppingBag className="w-4 h-4 text-pink-600 dark:text-pink-400" />
+          <div className={`mb-8 h-fit lg:sticky lg:top-24 lg:mb-0 ${CHECKOUT_MAIN_COLUMN}`}>
+            <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:shadow-black/20 sm:p-4 lg:p-5">
+              <div className="flex items-center justify-between gap-2 border-b border-gray-200 pb-3 dark:border-gray-700">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="shrink-0 rounded-lg bg-gray-100 p-1.5 dark:bg-gray-700/80">
+                    <ShoppingBag className="h-4 w-4 text-gray-700 dark:text-gray-300" />
+                  </div>
+                  <h2 className="heading-section">Order summary</h2>
                 </div>
-                <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">Order Summary</h2>
+                <span className="shrink-0 tabular-nums text-cart-meta">
+                  {cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'}
+                </span>
               </div>
 
-              {/* Cart Items - Organized by Type */}
-              <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
+              <div className="flex flex-col gap-1">
+              <div className="relative">
+                <div className="custom-scrollbar max-h-[min(360px,55vh)] space-y-4 overflow-y-auto pb-6 pr-1 sm:max-h-[400px]">
                 {/* Separate Deal Items */}
                 {cartItems.filter(item => item.is_deal_item).length > 0 && (
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 pb-1.5 border-b border-green-200 dark:border-green-700">
-                      <div className="p-1 rounded-md bg-green-100 dark:bg-green-900/30">
-                        <Tag className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
+                    <div className="flex items-center gap-2 border-b border-gray-200 pb-2 dark:border-gray-700">
+                      <div className="rounded-md bg-gray-100 p-1 dark:bg-gray-700/80">
+                        <Tag className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
                       </div>
-                      <h3 className="text-xs sm:text-sm font-bold text-green-700 dark:text-green-400 uppercase tracking-wide">
-                        Special Deals ({cartItems.filter(item => item.is_deal_item).length})
+                      <h3 className="text-cart-label">
+                        Special deals ({cartItems.filter(item => item.is_deal_item).length})
                       </h3>
                     </div>
                     {cartItems.filter(item => item.is_deal_item).map((item) => {
                       const itemPrice = item.deal_price || 1;
                       const itemTotal = itemPrice * item.quantity;
                       const totalItemPrice = item.totalPrice || itemTotal;
+                      const dealThumbSrc = resolveEntityImageUrl(item.product);
 
                       return (
-                        <div key={item.id} className="flex gap-3 p-3 rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800 shadow-sm">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-2 mb-1.5">
-                              <div className="flex-1 min-w-0">
-                                <h4 className="font-bold text-sm sm:text-base text-gray-900 dark:text-gray-100 line-clamp-2 mb-1">
+                        <div
+                          key={item.id}
+                          className="flex gap-2 rounded-lg border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800 sm:gap-3 sm:p-3"
+                        >
+                          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-700 sm:h-20 sm:w-20">
+                            {dealThumbSrc ? (
+                              <Image
+                                src={dealThumbSrc}
+                                alt={item.product?.name || 'Deal product'}
+                                fill
+                                className="object-cover"
+                                sizes="80px"
+                              />
+                            ) : null}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-1.5 flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <h4 className="text-cart-card-title line-clamp-2 mb-1">
                                   {item.product.name}
                                 </h4>
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200 text-[10px] font-bold rounded-md">
-                                  <Gift className="w-3 h-3" />
-                                  DEAL
+                                <span className="text-cart-pill inline-flex items-center gap-1 rounded-md bg-green-100 px-2 py-0.5 text-green-800 dark:bg-green-900/40 dark:text-green-200">
+                                  <Gift className="h-3 w-3" />
+                                  Deal
                                 </span>
                               </div>
-                              <span className="text-base sm:text-lg font-extrabold text-green-600 dark:text-green-400 whitespace-nowrap ml-2">
+                              <span className="ml-2 shrink-0 tabular-nums text-cart-summary-value text-green-700 dark:text-green-400">
                                 {formatPrice(totalItemPrice)}
                               </span>
                             </div>
-                            <div className="flex items-center justify-between mt-2 pt-2 border-t border-green-200 dark:border-green-700">
-                              <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">Quantity: {item.quantity}</span>
+                            <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 dark:border-gray-700">
+                              <span className="text-cart-meta">Quantity: {item.quantity}</span>
                             </div>
                           </div>
                         </div>
@@ -3163,15 +4182,22 @@ function CheckoutPageContent() {
                 {/* Regular Items */}
                 {cartItems.filter(item => !item.is_deal_item).length > 0 && (
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 pb-1.5 border-b border-pink-200 dark:border-pink-700">
-                      <div className="p-1 rounded-md bg-pink-100 dark:bg-pink-900/30">
-                        <Package className="w-3.5 h-3.5 text-pink-600 dark:text-pink-400" />
+                    <div className="flex items-center gap-2 border-b border-gray-200 pb-2 dark:border-gray-700">
+                      <div className="rounded-md bg-gray-100 p-1 dark:bg-gray-700/80">
+                        <Package className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
                       </div>
-                      <h3 className="text-xs sm:text-sm font-bold text-pink-700 dark:text-pink-400 uppercase tracking-wide">
+                      <h3 className="text-cart-label">
                         Products ({cartItems.filter(item => !item.is_deal_item).length})
                       </h3>
                     </div>
-                    {cartItems.filter(item => !item.is_deal_item).map((item) => {
+                    <div
+                      className={
+                        cartItems.filter((i) => !i.is_deal_item).length > 1
+                          ? 'space-y-2 rounded-lg border border-gray-200 bg-gray-100 p-2 dark:border-gray-700 dark:bg-gray-900/35'
+                          : 'space-y-2'
+                      }
+                    >
+                    {cartItems.filter(item => !item.is_deal_item).map((item, index) => {
                       // Calculate price
                       const itemPrice = item.variant?.discounted_price || item.product.discounted_price || item.product.base_price;
                       const itemTotal = itemPrice * item.quantity;
@@ -3198,22 +4224,40 @@ function CheckoutPageContent() {
                       const productDetails = [];
                       if (itemWeight) productDetails.push(itemWeight);
                       if (item.flavor) productDetails.push(item.flavor.name);
-                      if (item.tier) productDetails.push(`${item.tier} Tier`);
+                      if (item.tier) {
+                        const tierLabel = String(item.tier).trim();
+                        productDetails.push(/tier/i.test(tierLabel) ? tierLabel : `${tierLabel} Tier`);
+                      }
+                      const multiRegularRows = cartItems.filter((i) => !i.is_deal_item).length > 1;
+                      const lineThumbSrc = resolveEntityImageUrl(item.product);
 
                       return (
-                        <div key={item.id} className="flex gap-3 p-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow">
+                        <div
+                          key={item.id}
+                          className={`flex gap-2 rounded-lg border p-2.5 sm:gap-3 sm:p-3 ${
+                            multiRegularRows
+                              ? index % 2 === 1
+                                ? 'border-gray-300 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/90'
+                                : 'border-gray-300 bg-white dark:bg-gray-800'
+                              : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
+                          }`}
+                        >
                           {/* Product Image */}
-                          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden flex-shrink-0 shadow-sm">
-                            <img
-                              src={item.product.image_url}
-                              alt={item.product.name}
-                              className="w-full h-full object-cover"
-                            />
+                          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-700 sm:h-20 sm:w-20">
+                            {lineThumbSrc ? (
+                              <Image
+                                src={lineThumbSrc}
+                                alt={item.product?.name || 'Product'}
+                                fill
+                                className="object-cover"
+                                sizes="80px"
+                              />
+                            ) : null}
                           </div>
                           
                           {/* Product Details */}
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold text-sm sm:text-base text-gray-900 dark:text-gray-100 line-clamp-2 mb-1.5">
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-cart-card-title mb-1.5 line-clamp-2">
                               {item.product.name}
                             </h4>
                             
@@ -3253,7 +4297,9 @@ function CheckoutPageContent() {
                                           </span>
                                         ) : (
                                           <>
-                                            <span className="text-purple-500 dark:text-purple-400 font-semibold">➕</span>
+                                            <span className="text-cart-meta font-semibold text-gray-400 dark:text-gray-500" aria-hidden>
+                                              +
+                                            </span>
                                             <span className="text-gray-700 dark:text-gray-300 font-medium">
                                               {combo.name || 'Combo Item'} × {combo.quantity || 1} = {formatPrice(comboTotalPrice)}
                                             </span>
@@ -3267,17 +4313,17 @@ function CheckoutPageContent() {
                             )}
                             
                             {/* Quantity and Price */}
-                            <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
-                              <span className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
-                                Qty: <span className="font-semibold">{item.quantity}</span>
+                            <div className="mt-2 flex items-center justify-between border-t border-gray-200 pt-2 dark:border-gray-600">
+                              <span className="text-cart-meta">
+                                Qty: <span className="text-cart-meta-strong">{item.quantity}</span>
                               </span>
                               <div className="text-right">
                                 {comboTotal > 0 && (
-                                  <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">
+                                  <div className="mb-0.5 text-cart-meta tabular-nums">
                                     {formatPrice(itemTotal)} + {formatPrice(comboTotal)}
                                   </div>
                                 )}
-                                <span className="text-sm sm:text-base font-bold text-pink-600 dark:text-pink-400">
+                                <span className="text-cart-summary-value">
                                   {formatPrice(totalItemPrice)}
                                 </span>
                               </div>
@@ -3286,104 +4332,116 @@ function CheckoutPageContent() {
                         </div>
                       );
                     })}
+                    </div>
                   </div>
                 )}
+                </div>
+                <div
+                  className="pointer-events-none absolute inset-x-0 bottom-0 h-6 rounded-b-lg bg-gradient-to-t from-white to-transparent dark:from-gray-800"
+                  aria-hidden
+                />
+              </div>
+              {cartItems.length > 1 && (
+                <p className="text-center text-cart-page-meta sm:text-left">Scroll the list above to see every line item.</p>
+              )}
               </div>
 
               {/* Price Breakdown */}
-              <div className="space-y-2 pt-2 border-t-2 border-gray-200 dark:border-gray-700">
+              <div className="border-t border-gray-200 pt-3 dark:border-gray-700">
+                <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div className="divide-y divide-gray-200 dark:divide-gray-700">
                 {/* 1. Subtotal */}
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300">Subtotal ({cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'})</span>
-                  <span className="text-sm sm:text-base font-semibold text-gray-900 dark:text-gray-100">{formatPrice(subtotal)}</span>
+                <div className="flex items-center justify-between gap-3 bg-white px-3 py-2.5 dark:bg-gray-800/40">
+                  <span className="min-w-0 text-cart-label">
+                    Subtotal ({cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'})
+                  </span>
+                  <span className="shrink-0 text-right text-cart-summary-value">{formatPrice(subtotal)}</span>
                 </div>
 
                 {/* 2. Promo Discount */}
                 {appliedPromo && promoDiscount > 0 && (
-                  <div className="flex items-center justify-between text-green-700 dark:text-green-400 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg p-2 border border-green-200 dark:border-green-800">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-1.5 h-1.5 rounded-full bg-green-500 dark:bg-green-400"></div>
-                      <span className="text-sm sm:text-base font-semibold">Promo Discount</span>
-                    </div>
-                    <span className="text-sm sm:text-base font-bold">-{formatPrice(promoDiscount)}</span>
+                  <div className="flex items-center justify-between gap-3 bg-white px-3 py-2.5 dark:bg-gray-800/40">
+                    <span className="min-w-0 text-cart-label">Promo discount</span>
+                    <span className="shrink-0 text-right text-sm font-semibold tabular-nums text-green-700 dark:text-green-400 sm:text-base">
+                      -{formatPrice(promoDiscount)}
+                    </span>
                   </div>
                 )}
 
                 {/* 3. Delivery Charge */}
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300">Delivery Charge</span>
-                  <span className="text-sm sm:text-base font-semibold">
+                <div className="flex items-center justify-between gap-3 bg-white px-3 py-2.5 dark:bg-gray-800/40">
+                  <span className="min-w-0 text-cart-label">Delivery</span>
+                  <span className="shrink-0 text-right text-cart-summary-value">
                     {finalDeliveryCharge === 0 ? (
-                      <span className="text-green-600 dark:text-green-400 font-bold">FREE</span>
+                      <span className="font-semibold text-green-600 dark:text-green-400">Free</span>
                     ) : (
-                      <span className="text-gray-900 dark:text-gray-100">{formatPrice(finalDeliveryCharge)}</span>
+                      formatPrice(finalDeliveryCharge)
                     )}
                   </span>
                 </div>
 
                 {/* 4. Wallet Balance (Box) - Fixed height to prevent layout shift */}
                 {isAuthenticated && walletBalance > 0 && (
-                  <div className="bg-pink-50 dark:bg-pink-900/20 rounded-lg p-2 border border-pink-200 dark:border-pink-800 min-h-[80px]">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <Wallet className="w-4 h-4 text-pink-600 dark:text-pink-400" />
-                        <span className="text-sm sm:text-base font-medium text-gray-900 dark:text-gray-100">Wallet Balance</span>
+                  <div className="min-h-[80px] space-y-2 bg-gray-50 px-3 py-2.5 dark:bg-gray-900/30">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <Wallet className="h-4 w-4 shrink-0 text-gray-600 dark:text-gray-400" />
+                        <span className="text-cart-label">Wallet balance</span>
                       </div>
-                      <span className="text-sm sm:text-base font-semibold text-pink-600 dark:text-pink-400">{formatPrice(walletBalance)}</span>
+                      <span className="shrink-0 tabular-nums text-cart-summary-value">{formatPrice(walletBalance)}</span>
                     </div>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
+                    <label className="flex cursor-pointer items-start gap-2">
                       <input
                         type="checkbox"
                         checked={applyWalletDiscount}
                         onChange={(e) => setApplyWalletDiscount(e.target.checked)}
-                        className="w-4 h-4 text-pink-600 dark:text-pink-400 rounded focus:ring-pink-500 dark:focus:ring-pink-400"
+                        className="mt-0.5 h-4 w-4 shrink-0 rounded text-pink-600 focus:ring-pink-500 dark:text-pink-400 dark:focus:ring-pink-400"
                       />
-                      <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">
-                        Use wallet (up to {formatPrice(maxWalletDiscount)} - 10% of order)
+                      <span className="text-cart-meta text-gray-700 dark:text-gray-300">
+                        Use wallet (up to {formatPrice(maxWalletDiscount)}, 10% of order)
                       </span>
                     </label>
-                    {/* Always reserve space for wallet discount line to prevent height fluctuation */}
-                    <div className={`flex items-center justify-between mt-1.5 pt-1.5 border-t border-pink-200 dark:border-pink-800 transition-opacity duration-200 ${applyWalletDiscount && walletDiscount > 0 ? 'opacity-100' : 'opacity-0 h-[24px]'}`}>
-                      <span className="text-sm sm:text-base font-medium text-pink-600 dark:text-pink-400">Wallet Discount</span>
-                      <span className="text-sm sm:text-base font-semibold text-pink-600 dark:text-pink-400">
+                    <div className={`flex items-center justify-between border-t border-gray-200 pt-2 transition-opacity duration-200 dark:border-gray-700 ${applyWalletDiscount && walletDiscount > 0 ? 'opacity-100' : 'opacity-0 h-[22px]'}`}>
+                      <span className="text-cart-label">Wallet discount</span>
+                      <span className="text-cart-summary-value text-pink-700 dark:text-pink-400">
                         {applyWalletDiscount && walletDiscount > 0 ? `-${formatPrice(walletDiscount)}` : '-₹0'}
                       </span>
                     </div>
                   </div>
                 )}
+                  </div>
+                </div>
 
                 {/* 5. Final Total (Amount to Pay) */}
-                <div className="border-t-2 border-pink-200 dark:border-pink-800 pt-2.5 mt-2.5 bg-gradient-to-r from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20 rounded-lg p-3 -mx-1">
-                  <div className="flex justify-between items-center">
-                    <span className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">Amount to Pay</span>
-                    <span className="text-xl sm:text-2xl font-extrabold text-pink-600 dark:text-pink-400">
-                      {formatPrice(total)}
-                    </span>
-                  </div>
+                <div className="mt-3 flex items-end justify-between gap-3 border-t-2 border-gray-300 pt-4 dark:border-gray-600">
+                  <span className="text-cart-total-label leading-tight">Amount to pay</span>
+                  <span className="text-checkout-due-amount leading-none">{formatPrice(total)}</span>
                 </div>
               </div>
 
-              {/* Error Alert - Desktop Only - Above Place Order Button */}
-              {(error || (!selectedSlot && !cartDeliverySlot)) && (
+              {/* Error Alert - Desktop Only - Shown when user tries to place order without slot or other validation fails */}
+              {error && (
                 <div 
                   data-error-alert
                   className="hidden lg:block mb-3 p-3 sm:p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-800 rounded-lg"
                 >
                   <div className="flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <h3 className="text-sm sm:text-base font-bold text-red-800 dark:text-red-300 mb-1">
-                        ⚠️ Unable to Place Order
-                      </h3>
-                      <p className="text-xs sm:text-sm text-red-700 dark:text-red-400">
+                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" aria-hidden />
+                    <div className="min-w-0 flex-1">
+                      <h3 className="heading-subsection mb-1 text-red-900 dark:text-red-200">Unable to place order</h3>
+                      <p className="text-form-helper text-red-800 dark:text-red-300">
                         {error || 'Please select a delivery date and time slot to place your order.'}
                       </p>
-                      {!selectedSlot && !cartDeliverySlot && !error && (
+                      {(!selectedSlot && !cartDeliverySlot) && (
                         <button
-                          onClick={() => setShowSlotSelector(true)}
-                          className="mt-2 px-3 py-1.5 text-xs bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-600 transition-colors font-medium"
+                          type="button"
+                          onClick={() => {
+                            setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+                            setShowSlotSelector(true);
+                          }}
+                          className="ui-focus-visible mt-2 min-h-[40px] rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600"
                         >
-                          Select Delivery Slot
+                          Select delivery slot
                         </button>
                       )}
                     </div>
@@ -3394,12 +4452,13 @@ function CheckoutPageContent() {
               {/* Place Order Button - Hidden on mobile (shown in sticky bar) */}
               <button
                 data-place-order-button
+                type="button"
                 onClick={() => {
                   setShowSuccessIndicator(false);
                   handlePlaceOrder();
                 }}
                 disabled={loading || !isAuthenticated}
-                className={`hidden lg:flex w-full py-3 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all duration-200 font-semibold text-lg shadow-lg dark:shadow-xl dark:shadow-black/30 hover:shadow-xl transform hover:scale-[1.02] items-center justify-center gap-2 ${
+                className={`ui-focus-visible hidden w-full items-center justify-center gap-2 bg-gradient-to-r from-pink-600 to-rose-600 py-3 text-lg font-semibold text-white shadow-lg transition-all duration-200 hover:scale-[1.02] hover:from-pink-700 hover:to-rose-700 hover:shadow-xl dark:from-pink-700 dark:to-rose-700 dark:shadow-xl dark:shadow-black/30 dark:hover:from-pink-600 dark:hover:to-rose-600 lg:flex ${
                   loading || !isAuthenticated
                     ? 'opacity-50 cursor-not-allowed transform-none'
                     : (!selectedSlot && !cartDeliverySlot)
@@ -3426,10 +4485,10 @@ function CheckoutPageContent() {
               </button>
 
               {/* Security Badge */}
-              <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
-                <div className="flex items-center justify-center gap-1.5 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                  <Lock className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
-                  <span>Secure checkout • Your payment information is safe</span>
+              <div className="border-t border-gray-200 pt-2 dark:border-gray-700">
+                <div className="flex items-center justify-center gap-1.5 text-cart-page-meta">
+                  <Lock className="h-3.5 w-3.5 shrink-0 text-green-600 dark:text-green-400" aria-hidden />
+                  <span>Secure checkout · Your payment information is safe</span>
                 </div>
               </div>
             </div>
@@ -3437,93 +4496,98 @@ function CheckoutPageContent() {
         </div>
       </div>
 
-      {/* Mobile Sticky Checkout Bar */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-2xl dark:shadow-black/50 z-40">
-        <div className="max-w-7xl mx-auto px-3 py-2.5">
-          {/* Error Alert - Mobile - Above Place Order Button */}
-          {(error || (!selectedSlot && !cartDeliverySlot)) && (
-            <div 
+      {/* Mobile Sticky Checkout Bar — same vertical rhythm as cart (48px row, py-1.5 shell) */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-gray-200 bg-white pb-[max(0.25rem,env(safe-area-inset-bottom))] shadow-lg dark:border-gray-700 dark:bg-gray-800 dark:shadow-black/40">
+        <div className="mx-auto max-w-7xl px-2 py-1.5">
+          {error && (
+            <div
               data-error-alert
-              className="mb-2 p-3 bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-800 rounded-lg"
+              className="mb-2 rounded-lg border-2 border-red-300 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/40"
+              role="alert"
             >
               <div className="flex items-start gap-2.5">
-                <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-xs font-bold text-red-800 dark:text-red-300 mb-1">
-                    ⚠️ Unable to Place Order
-                  </h3>
-                  <p className="text-[11px] text-red-700 dark:text-red-400 leading-tight">
+                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-400" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <h3 className="heading-subsection mb-1 text-red-900 dark:text-red-200">Unable to place order</h3>
+                  <p className="text-form-legal text-red-800 dark:text-red-200">
                     {error || 'Please select a delivery date and time slot to place your order.'}
                   </p>
-                  {!selectedSlot && !cartDeliverySlot && !error && (
+                  {(!selectedSlot && !cartDeliverySlot) && (
                     <button
-                      onClick={() => setShowSlotSelector(true)}
-                      className="mt-1.5 px-2.5 py-1 text-[10px] bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-600 transition-colors font-medium"
+                      type="button"
+                      onClick={() => {
+                        setExpandedSections(prev => ({ ...prev, deliverySlot: true }));
+                        setShowSlotSelector(true);
+                      }}
+                      className="ui-focus-visible mt-2 min-h-[40px] rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600"
                     >
-                      Select Slot
+                      Select delivery slot
                     </button>
                   )}
                 </div>
               </div>
             </div>
           )}
-          
-          {/* Total and Checkout Button Row */}
-          <div className="flex items-center gap-2.5 mb-1">
-            {/* Total Box - 30% width */}
-            <div className="w-[30%] min-w-[90px] bg-gray-50 dark:bg-gray-700/50 rounded-lg px-2.5 py-2 border border-pink-300 dark:border-pink-500/50 flex flex-col items-center justify-center">
-              <div className="flex items-baseline gap-0.5 justify-center mb-0.5">
-                <p className="text-base font-bold text-pink-600 dark:text-pink-400 leading-tight">{formatPrice(total)}</p>
-                {appliedPromo && promoDiscount > 0 && (
-                  <span className="text-[10px] text-green-600 dark:text-green-400 font-semibold">
-                    -{formatPrice(promoDiscount)}
-                  </span>
-                )}
+
+          <div className="mb-1 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowOrderSummarySheet(true)}
+              className="ui-focus-visible flex h-[48px] min-h-[48px] w-[28vw] min-w-[86px] max-w-[40%] shrink-0 items-center justify-between gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-left dark:border-gray-600 dark:bg-gray-800/80"
+              aria-label="View order summary and price breakdown"
+              aria-expanded={showOrderSummarySheet}
+            >
+              <div className="flex min-w-0 flex-1 flex-col justify-center text-center leading-tight">
+                <p className="truncate text-[13px] font-semibold tabular-nums text-pink-600 dark:text-pink-400">
+                  {formatPrice(total)}
+                </p>
+                <span className="truncate text-cart-meta font-medium text-gray-600 dark:text-gray-300">
+                  {cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'}
+                  {appliedPromo && promoDiscount > 0 ? ` · −${formatPrice(promoDiscount)}` : ''}
+                </span>
               </div>
-              <span className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight">
-                {cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'}
-              </span>
-            </div>
-            
-            {/* Checkout Button - 70% width */}
+              <ChevronUp className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400" aria-hidden />
+            </button>
+
             <button
               data-place-order-button
+              type="button"
               onClick={() => {
                 setShowSuccessIndicator(false);
                 handlePlaceOrder();
               }}
               disabled={loading || !isAuthenticated}
-              className={`flex-1 w-[70%] h-[56px] bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all font-bold text-base shadow-lg dark:shadow-xl dark:shadow-black/30 flex items-center justify-center gap-2 ${
+              className={`ui-focus-visible flex h-[48px] min-h-[48px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-pink-600 to-rose-600 py-1.5 text-[13px] font-bold text-white shadow-lg transition-all hover:from-pink-700 hover:to-rose-700 active:scale-[0.98] dark:from-pink-700 dark:to-rose-700 dark:shadow-xl dark:shadow-black/30 dark:hover:from-pink-600 dark:hover:to-rose-600 ${
                 loading || !isAuthenticated
-                  ? 'opacity-50 cursor-not-allowed active:scale-100'
-                  : (!selectedSlot && !cartDeliverySlot)
-                    ? 'opacity-75 cursor-pointer active:scale-95'
-                    : 'active:scale-95'
+                  ? 'cursor-not-allowed opacity-50'
+                  : !selectedSlot && !cartDeliverySlot
+                    ? 'cursor-pointer opacity-90'
+                    : ''
               }`}
             >
               {loading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>PLACING...</span>
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                  <span>Placing…</span>
                 </>
               ) : showSuccessIndicator ? (
                 <>
-                  <CheckCircle className="w-4 h-4" />
-                  <span>READY TO PLACE</span>
+                  <CheckCircle className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="truncate">Ready</span>
                 </>
               ) : (
                 <>
-                  <Lock className="w-4 h-4" />
-                  <span>PLACE ORDER</span>
+                  <Lock className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="truncate">Place order</span>
                 </>
               )}
             </button>
           </div>
-          
-          {/* Security Badge */}
-          <div className="flex items-center justify-center">
-            <p className="text-[9px] text-gray-400 dark:text-gray-500">
-              🔒 Secure checkout
+
+          <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 px-0.5 pb-0.5 text-center leading-snug">
+            <p className="flex items-center justify-center gap-1 text-cart-meta text-gray-400 dark:text-gray-500">
+              <Lock className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
+              <span>Secure checkout</span>
             </p>
           </div>
         </div>
@@ -3539,63 +4603,93 @@ function CheckoutPageContent() {
           />
           
           {/* Bottom Sheet */}
-          <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 rounded-t-3xl shadow-2xl dark:shadow-black/50 z-50 max-h-[85vh] flex flex-col transform transition-transform duration-300 ease-out">
+          <div
+            id="checkout-mobile-summary-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="checkout-summary-sheet-title"
+            className="lg:hidden fixed bottom-0 left-0 right-0 z-50 flex max-h-[85vh] flex-col rounded-t-3xl bg-white shadow-2xl transition-transform duration-300 ease-out dark:bg-gray-800 dark:shadow-black/50"
+          >
             {/* Handle Bar */}
-            <div className="flex justify-center pt-3 pb-2">
-              <div className="w-12 h-1.5 bg-gray-300 dark:bg-gray-600 rounded-full" />
+            <div className="flex justify-center pb-2 pt-3">
+              <div className="h-1.5 w-12 rounded-full bg-gray-300 dark:bg-gray-500" aria-hidden />
             </div>
             
             {/* Header */}
-            <div className="px-4 pb-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Order Summary</h2>
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 pb-3 dark:border-gray-600">
+              <div className="min-w-0">
+                <h2 id="checkout-summary-sheet-title" className="heading-section text-gray-900 dark:text-gray-100">
+                  Order summary
+                </h2>
+                <p className="mt-0.5 tabular-nums text-cart-meta text-gray-500 dark:text-gray-400">
+                  {cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'}
+                </p>
+              </div>
               <button
+                type="button"
                 onClick={() => setShowOrderSummarySheet(false)}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-                aria-label="Close"
+                className="ui-focus-visible flex h-11 w-11 items-center justify-center rounded-full text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                aria-label="Close order summary"
               >
-                <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                <X className="h-5 w-5" aria-hidden />
               </button>
             </div>
             
             {/* Scrollable Content */}
             <div className="flex-1 overflow-y-auto px-4 py-4">
-              {/* Cart Items - Organized by Type */}
-              <div className="space-y-4 mb-4">
+              <div className="flex flex-col gap-1">
+              <div className="relative">
+                <div className="custom-scrollbar max-h-[min(50vh,380px)] space-y-4 overflow-y-auto pb-6 pr-1">
                 {/* Separate Deal Items */}
                 {cartItems.filter(item => item.is_deal_item).length > 0 && (
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 pb-1.5 border-b border-green-200 dark:border-green-700">
-                      <div className="p-1 rounded-md bg-green-100 dark:bg-green-900/30">
-                        <Tag className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
+                    <div className="flex items-center gap-2 border-b border-gray-200 pb-2 dark:border-gray-700">
+                      <div className="rounded-md bg-gray-100 p-1 dark:bg-gray-700/80">
+                        <Tag className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
                       </div>
-                      <h3 className="text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wide">
-                        Special Deals ({cartItems.filter(item => item.is_deal_item).length})
+                      <h3 className="text-cart-label">
+                        Special deals ({cartItems.filter(item => item.is_deal_item).length})
                       </h3>
                     </div>
                     {cartItems.filter(item => item.is_deal_item).map((item) => {
                       const itemPrice = item.deal_price || 1;
                       const itemTotal = itemPrice * item.quantity;
                       const totalItemPrice = item.totalPrice || itemTotal;
+                      const dealThumbSrc = resolveEntityImageUrl(item.product);
 
                       return (
-                        <div key={item.id} className="flex gap-3 p-3 rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800 shadow-sm">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-2 mb-1.5">
-                              <div className="flex-1 min-w-0">
-                                <h4 className="font-bold text-sm text-gray-900 dark:text-gray-100 line-clamp-2 mb-1">
+                        <div
+                          key={item.id}
+                          className="flex gap-2 rounded-lg border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800 sm:gap-3 sm:p-3"
+                        >
+                          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-700 sm:h-20 sm:w-20">
+                            {dealThumbSrc ? (
+                              <Image
+                                src={dealThumbSrc}
+                                alt={item.product?.name || 'Deal product'}
+                                fill
+                                className="object-cover"
+                                sizes="80px"
+                              />
+                            ) : null}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-1.5 flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <h4 className="text-cart-card-title mb-1 line-clamp-2">
                                   {item.product.name}
                                 </h4>
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200 text-[10px] font-bold rounded-md">
-                                  <Gift className="w-3 h-3" />
-                                  DEAL
+                                <span className="text-cart-pill inline-flex items-center gap-1 rounded-md bg-green-100 px-2 py-0.5 text-green-800 dark:bg-green-900/40 dark:text-green-200">
+                                  <Gift className="h-3 w-3" />
+                                  Deal
                                 </span>
                               </div>
-                              <span className="text-base font-extrabold text-green-600 dark:text-green-400 whitespace-nowrap ml-2">
+                              <span className="ml-2 shrink-0 tabular-nums text-cart-summary-value text-green-700 dark:text-green-400">
                                 {formatPrice(totalItemPrice)}
                               </span>
                             </div>
-                            <div className="flex items-center justify-between mt-2 pt-2 border-t border-green-200 dark:border-green-700">
-                              <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">Quantity: {item.quantity}</span>
+                            <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 dark:border-gray-700">
+                              <span className="text-cart-meta">Quantity: {item.quantity}</span>
                             </div>
                           </div>
                         </div>
@@ -3607,20 +4701,24 @@ function CheckoutPageContent() {
                 {/* Regular Items */}
                 {cartItems.filter(item => !item.is_deal_item).length > 0 && (
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 pb-1.5 border-b border-pink-200 dark:border-pink-700">
-                      <div className="p-1 rounded-md bg-pink-100 dark:bg-pink-900/30">
-                        <Package className="w-3.5 h-3.5 text-pink-600 dark:text-pink-400" />
+                    <div className="flex items-center gap-2 border-b border-gray-200 pb-2 dark:border-gray-700">
+                      <div className="rounded-md bg-gray-100 p-1 dark:bg-gray-700/80">
+                        <Package className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
                       </div>
-                      <h3 className="text-xs font-bold text-pink-700 dark:text-pink-400 uppercase tracking-wide">
+                      <h3 className="text-cart-label">
                         Products ({cartItems.filter(item => !item.is_deal_item).length})
                       </h3>
                     </div>
-                    {cartItems.filter(item => !item.is_deal_item).map((item) => {
-                      // Calculate price
+                    <div
+                      className={
+                        cartItems.filter((i) => !i.is_deal_item).length > 1
+                          ? 'space-y-2 rounded-lg border border-gray-200 bg-gray-100 p-2 dark:border-gray-700 dark:bg-gray-900/35'
+                          : 'space-y-2'
+                      }
+                    >
+                    {cartItems.filter(item => !item.is_deal_item).map((item, index) => {
                       const itemPrice = item.variant?.discounted_price || item.product.discounted_price || item.product.base_price;
                       const itemTotal = itemPrice * item.quantity;
-                      
-                      // Calculate combo total
                       const calculateComboTotal = (combos) => {
                         if (!combos || combos.length === 0) return 0;
                         return combos.reduce((sum, combo) => {
@@ -3633,72 +4731,80 @@ function CheckoutPageContent() {
                           return sum + (comboUnitPrice * combo.quantity);
                         }, 0);
                       };
-                      
                       const comboTotal = calculateComboTotal(item.combos);
                       const totalItemPrice = item.totalPrice || (itemTotal + comboTotal);
-                      
-                      // Get product details
                       const itemWeight = item.variant?.weight || item.product?.base_weight || null;
                       const productDetails = [];
                       if (itemWeight) productDetails.push(itemWeight);
                       if (item.flavor) productDetails.push(item.flavor.name);
-                      if (item.tier) productDetails.push(`${item.tier} Tier`);
+                      if (item.tier) {
+                        const tierLabel = String(item.tier).trim();
+                        productDetails.push(/tier/i.test(tierLabel) ? tierLabel : `${tierLabel} Tier`);
+                      }
+                      const multiRegularRows = cartItems.filter((i) => !i.is_deal_item).length > 1;
+                      const lineThumbSrc = resolveEntityImageUrl(item.product);
 
                       return (
-                        <div key={item.id} className="flex gap-3 p-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm">
-                          {/* Product Image */}
-                          <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden flex-shrink-0 shadow-sm">
-                            <img
-                              src={item.product.image_url}
-                              alt={item.product.name}
-                              className="w-full h-full object-cover"
-                            />
+                        <div
+                          key={item.id}
+                          className={`flex gap-2 rounded-lg border p-2.5 sm:gap-3 sm:p-3 ${
+                            multiRegularRows
+                              ? index % 2 === 1
+                                ? 'border-gray-300 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/90'
+                                : 'border-gray-300 bg-white dark:bg-gray-800'
+                              : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
+                          }`}
+                        >
+                          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-700 sm:h-20 sm:w-20">
+                            {lineThumbSrc ? (
+                              <Image
+                                src={lineThumbSrc}
+                                alt={item.product?.name || 'Product'}
+                                fill
+                                className="object-cover"
+                                sizes="80px"
+                              />
+                            ) : null}
                           </div>
-                          
-                          {/* Product Details */}
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold text-sm text-gray-900 dark:text-gray-100 line-clamp-2 mb-1.5">
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-cart-card-title mb-1.5 line-clamp-2">
                               {item.product.name}
                             </h4>
-                            
-                            {/* Product Specifications */}
                             {productDetails.length > 0 && (
-                              <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                              <div className="mb-2 flex flex-wrap items-center gap-1.5">
                                 {productDetails.map((detail, idx) => (
-                                  <span key={idx} className="inline-flex items-center px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-[10px] font-medium rounded">
+                                  <span key={idx} className="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-300 sm:text-xs">
                                     {detail}
                                   </span>
                                 ))}
                               </div>
                             )}
-                            
-                            {/* Add-ons/Combos */}
                             {item.combos && item.combos.length > 0 && (
                               <div className="mb-2">
-                                <div className="flex items-center gap-1 mb-1.5">
-                                  <Gift className="w-3 h-3 text-purple-500 dark:text-purple-400" />
-                                  <span className="text-[10px] font-semibold text-purple-600 dark:text-purple-400">
+                                <div className="mb-1.5 flex items-center gap-1">
+                                  <Gift className="h-3 w-3 text-purple-500 dark:text-purple-400" />
+                                  <span className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 sm:text-xs">
                                     {item.combos.length} Add-on{item.combos.length > 1 ? 's' : ''}
                                   </span>
                                 </div>
                                 <div className="space-y-1">
                                   {item.combos.map((combo, idx) => {
-                                    // Calculate individual combo price
                                     const comboUnitPrice = (combo.discount_percentage > 0 || (combo.discounted_price && combo.discounted_price < combo.price))
                                       ? (combo.discounted_price || combo.price)
                                       : combo.price;
                                     const comboTotalPrice = (comboUnitPrice || 0) * (combo.quantity || 1);
-                                    
                                     return (
-                                      <div key={idx} className="flex items-center gap-1.5 text-[10px]">
+                                      <div key={idx} className="flex items-center gap-1.5 text-[10px] sm:text-xs">
                                         {idx === 0 ? (
-                                          <span className="text-gray-700 dark:text-gray-300 font-medium">
+                                          <span className="font-medium text-gray-700 dark:text-gray-300">
                                             {combo.name || 'Combo Item'} × {combo.quantity || 1} = {formatPrice(comboTotalPrice)}
                                           </span>
                                         ) : (
                                           <>
-                                            <span className="text-purple-500 dark:text-purple-400 font-semibold">➕</span>
-                                            <span className="text-gray-700 dark:text-gray-300 font-medium">
+                                            <span className="text-cart-meta font-semibold text-gray-400 dark:text-gray-500" aria-hidden>
+                                              +
+                                            </span>
+                                            <span className="font-medium text-gray-700 dark:text-gray-300">
                                               {combo.name || 'Combo Item'} × {combo.quantity || 1} = {formatPrice(comboTotalPrice)}
                                             </span>
                                           </>
@@ -3709,109 +4815,111 @@ function CheckoutPageContent() {
                                 </div>
                               </div>
                             )}
-                            
-                            {/* Quantity and Price */}
-                            <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
-                              <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                                Qty: <span className="font-semibold">{item.quantity}</span>
+                            <div className="mt-2 flex items-center justify-between border-t border-gray-200 pt-2 dark:border-gray-600">
+                              <span className="text-cart-meta">
+                                Qty: <span className="text-cart-meta-strong">{item.quantity}</span>
                               </span>
                               <div className="text-right">
                                 {comboTotal > 0 && (
-                                  <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">
+                                  <div className="mb-0.5 text-cart-meta tabular-nums">
                                     {formatPrice(itemTotal)} + {formatPrice(comboTotal)}
                                   </div>
                                 )}
-                                <span className="text-sm font-bold text-pink-600 dark:text-pink-400">
-                                  {formatPrice(totalItemPrice)}
-                                </span>
+                                <span className="text-cart-summary-value">{formatPrice(totalItemPrice)}</span>
                               </div>
                             </div>
                           </div>
                         </div>
                       );
                     })}
+                    </div>
                   </div>
                 )}
+                </div>
+                <div
+                  className="pointer-events-none absolute inset-x-0 bottom-0 h-6 rounded-b-lg bg-gradient-to-t from-white to-transparent dark:from-gray-800"
+                  aria-hidden
+                />
+              </div>
+              {cartItems.length > 1 && (
+                <p className="text-center text-cart-page-meta sm:text-left">Scroll the list above to see every line item.</p>
+              )}
               </div>
 
-              {/* Price Breakdown */}
-              <div className="space-y-3 pt-1 border-t border-gray-200 dark:border-gray-700">
-                {/* 1. Subtotal */}
-                <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                  <span>Subtotal ({cartSummary.totalItems} items)</span>
-                  <span className="font-medium">{formatPrice(subtotal)}</span>
-                </div>
-
-                {/* 2. Promo Discount */}
-                {appliedPromo && promoDiscount > 0 && (
-                  <div className="flex items-center justify-between text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-lg p-2">
-                    <span className="text-sm font-medium">Promo Discount</span>
-                    <span className="font-semibold">-{formatPrice(promoDiscount)}</span>
-                  </div>
-                )}
-
-                {/* 3. Delivery Charge */}
-                <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                  <span>Delivery Charge</span>
-                  <span className="font-medium">
-                    {finalDeliveryCharge === 0 ? (
-                      <span className="text-green-600 dark:text-green-400 font-semibold">FREE</span>
-                    ) : (
-                      formatPrice(finalDeliveryCharge)
-                    )}
-                  </span>
-                </div>
-
-                {/* 4. Wallet Balance */}
-                {isAuthenticated && walletBalance > 0 && (
-                  <div className="bg-pink-50 dark:bg-pink-900/20 rounded-lg p-3 border border-pink-200 dark:border-pink-800">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Wallet className="w-4 h-4 text-pink-600 dark:text-pink-400" />
-                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Wallet Balance</span>
+              {/* Price Breakdown (matches desktop summary) */}
+              <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700">
+                <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                    <div className="flex items-center justify-between gap-3 bg-white px-3 py-2.5 dark:bg-gray-800/40">
+                      <span className="min-w-0 text-cart-label">
+                        Subtotal ({cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'})
+                      </span>
+                      <span className="shrink-0 text-right text-cart-summary-value">{formatPrice(subtotal)}</span>
+                    </div>
+                    {appliedPromo && promoDiscount > 0 && (
+                      <div className="flex items-center justify-between gap-3 bg-white px-3 py-2.5 dark:bg-gray-800/40">
+                        <span className="min-w-0 text-cart-label">Promo discount</span>
+                        <span className="shrink-0 text-right text-sm font-semibold tabular-nums text-green-700 dark:text-green-400 sm:text-base">
+                          -{formatPrice(promoDiscount)}
+                        </span>
                       </div>
-                      <span className="text-sm font-semibold text-pink-600 dark:text-pink-400">{formatPrice(walletBalance)}</span>
-                    </div>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={applyWalletDiscount}
-                        onChange={(e) => setApplyWalletDiscount(e.target.checked)}
-                        className="w-4 h-4 text-pink-600 dark:text-pink-400 rounded focus:ring-pink-500 dark:focus:ring-pink-400"
-                      />
-                      <span className="text-xs text-gray-700 dark:text-gray-300">
-                        Use wallet (up to {formatPrice(maxWalletDiscount)} - 10% of order)
-                      </span>
-                    </label>
-                    {applyWalletDiscount && walletDiscount > 0 && (
-                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-pink-200 dark:border-pink-800">
-                      <span className="text-sm font-medium text-pink-600 dark:text-pink-400">Wallet Discount</span>
-                      <span className="text-sm font-semibold text-pink-600 dark:text-pink-400">
-                          -{formatPrice(walletDiscount)}
+                    )}
+                    <div className="flex items-center justify-between gap-3 bg-white px-3 py-2.5 dark:bg-gray-800/40">
+                      <span className="min-w-0 text-cart-label">Delivery</span>
+                      <span className="shrink-0 text-right text-cart-summary-value">
+                        {finalDeliveryCharge === 0 ? (
+                          <span className="font-semibold text-green-600 dark:text-green-400">Free</span>
+                        ) : (
+                          formatPrice(finalDeliveryCharge)
+                        )}
                       </span>
                     </div>
+                    {isAuthenticated && walletBalance > 0 && (
+                      <div className="min-h-[80px] space-y-2 bg-gray-50 px-3 py-2.5 dark:bg-gray-900/30">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <Wallet className="h-4 w-4 shrink-0 text-gray-600 dark:text-gray-400" />
+                            <span className="text-cart-label">Wallet balance</span>
+                          </div>
+                          <span className="shrink-0 tabular-nums text-cart-summary-value">{formatPrice(walletBalance)}</span>
+                        </div>
+                        <label className="flex cursor-pointer items-start gap-2">
+                          <input
+                            type="checkbox"
+                            checked={applyWalletDiscount}
+                            onChange={(e) => setApplyWalletDiscount(e.target.checked)}
+                            className="mt-0.5 h-4 w-4 shrink-0 rounded text-pink-600 focus:ring-pink-500 dark:text-pink-400 dark:focus:ring-pink-400"
+                          />
+                          <span className="text-cart-meta text-gray-700 dark:text-gray-300">
+                            Use wallet (up to {formatPrice(maxWalletDiscount)}, 10% of order)
+                          </span>
+                        </label>
+                        <div
+                          className={`flex items-center justify-between border-t border-gray-200 pt-2 transition-opacity duration-200 dark:border-gray-700 ${applyWalletDiscount && walletDiscount > 0 ? 'opacity-100' : 'opacity-0 h-[22px]'}`}
+                        >
+                          <span className="text-cart-label">Wallet discount</span>
+                          <span className="text-cart-summary-value text-pink-700 dark:text-pink-400">
+                            {applyWalletDiscount && walletDiscount > 0 ? `-${formatPrice(walletDiscount)}` : '-₹0'}
+                          </span>
+                        </div>
+                      </div>
                     )}
                   </div>
-                )}
-
-                {/* 5. Final Total */}
-                <div className="border-t-2 border-gray-300 dark:border-gray-600 pt-3 mt-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">Amount to Pay</span>
-                    <span className="text-2xl font-bold text-pink-600 dark:text-pink-400">
-                      {formatPrice(total)}
-                    </span>
-                  </div>
-                  </div>
+                </div>
+                <div className="mt-3 flex items-end justify-between gap-3 border-t-2 border-gray-300 pt-4 dark:border-gray-600">
+                  <span className="text-cart-total-label leading-tight">Amount to pay</span>
+                  <span className="text-checkout-due-amount leading-none">{formatPrice(total)}</span>
                 </div>
               </div>
+            </div>
 
             {/* Footer with Security Badge */}
-            <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700">
-                <p className="text-xs text-center text-gray-500 dark:text-gray-400">
-                  🔒 Secure checkout • Your payment information is safe
-                </p>
+            <div className="border-t border-gray-200 px-4 py-3 dark:border-gray-700">
+              <div className="flex items-center justify-center gap-1.5 text-cart-page-meta">
+                <Lock className="h-3.5 w-3.5 shrink-0 text-green-600 dark:text-green-400" aria-hidden />
+                <span>Secure checkout · Your payment information is safe</span>
               </div>
+            </div>
             </div>
         </>
       )}
@@ -3826,6 +4934,23 @@ function CheckoutPageContent() {
 }
 
 export default function CheckoutPage() {
-  return <CheckoutPageContent />;
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
+          <div className="h-6 w-40 bg-gray-200 dark:bg-gray-800 rounded" />
+          <div className="mt-4 h-32 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700" />
+        </div>
+      </div>
+    );
+  }
+
+  return <CheckoutPageContent isClient />;
 }
 

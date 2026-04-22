@@ -8,6 +8,23 @@
  * SEO-Safe: This is frontend-only and doesn't affect URLs, meta tags, or canonical URLs.
  */
 
+/** Category slugs where subcategory names are not cake flavors — keep the stored product title. */
+const LISTING_CATEGORY_SLUGS_WITHOUT_FLAVOR_SWAP = new Set([
+  'small-treats-desserts',
+  'flowers',
+  'sweets-dry-fruits'
+]);
+
+/**
+ * Whether listing pages should run flavor ↔ subcategory title swapping for this category.
+ * Small Treats, Flowers, and Sweets use section names (Pastries, Rose Bouquet, etc.), not flavors.
+ */
+export const shouldUseDynamicListingTitle = (categorySlug) => {
+  if (!categorySlug || typeof categorySlug !== 'string') return true;
+  const key = categorySlug.trim().toLowerCase();
+  return !LISTING_CATEGORY_SLUGS_WITHOUT_FLAVOR_SWAP.has(key);
+};
+
 /**
  * Generate a dynamic product title based on the current subcategory
  * @param {string} productName - The original product name

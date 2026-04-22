@@ -12,18 +12,26 @@ import {
   Layers,
   MapPin,
   Calendar,
-  ChevronRight
+  ChevronRight,
+  Flower2,
+  Palette,
+  Leaf
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { usePinCode } from '../../../../contexts/PinCodeContext';
 import { useWishlist } from '../../../../contexts/WishlistContext';
-import DeliverySlotSelector from '../../../../components/DeliverySlotSelector';
-import OrderSlotManager from '../../../../utils/orderSlotManager';
+import { useCustomerAuth } from '../../../../contexts/CustomerAuthContext';
+import { useAuthModal } from '../../../../contexts/AuthModalContext';
+import { useToast } from '../../../../contexts/ToastContext';
+import { addToMidnightWishDraft } from '../../../../utils/midnightWishDraft';
+import DeliverySlotPreview from '../../../../components/DeliverySlotPreview';
 import ProductCombos from './ProductCombos';
 import FlavorSelector from './FlavorSelector';
 import MakeItAComboModal from './MakeItAComboModal';
 import weightTierApi from '../../../../api/weightTierApi';
 import addOnApi from '../../../../api/addOnApi';
 import { formatPrice } from '../../../../utils/priceFormatter';
+import { resolveProductFormProfileFromProduct, isCakeProfile, FLOWERS_PDP_LABELS } from '../../../../utils/productFormProfile';
 
 const ProductSummary = ({ 
   product, 
@@ -39,16 +47,27 @@ const ProductSummary = ({
   onDynamicContentUpdate,
   displayTitle,
   selectedTier,
-  onTierChange
+  onTierChange,
+  hideMobileStickyCTA = false
 }) => {
+  const formProfile = useMemo(
+    () => resolveProductFormProfileFromProduct(product),
+    [product]
+  );
+  const isCake = isCakeProfile(formProfile);
+  const showStorefrontFlavorPicker = isCake || formProfile === 'treats';
+
+  const router = useRouter();
   const { currentPinCode, isDeliveryAvailable, formatPinCode, getDeliveryLocality, getFormattedDeliveryCharge, validatePinCodeDebounced, tempValidationStatus, tempPinCode, checkPinCode } = usePinCode();
   const { isInWishlist, toggleWishlist } = useWishlist();
+  const { isAuthenticated } = useCustomerAuth();
+  const { openAuthModal } = useAuthModal();
+  const { showSuccess } = useToast();
   const [localPin, setLocalPin] = useState('');
   const isFavorite = product ? isInWishlist(product.id) : false;
   const [showShareMenu, setShowShareMenu] = useState(false);
   const MESSAGE_LIMIT = 25;
   const [cakeMessage, setCakeMessage] = useState('');
-  const [selectedDeliverySlot, setSelectedDeliverySlot] = useState(null);
   const [selectedCombos, setSelectedCombos] = useState([]);
   const [showComboModal, setShowComboModal] = useState(false);
   // Load global combo selections synchronously on initial render to prevent layout shift
@@ -72,9 +91,7 @@ const ProductSummary = ({
   });
   const [showToast, setShowToast] = useState(false);
   const [showAddToCartConfirm, setShowAddToCartConfirm] = useState(false);
-  const [showTimeSlotNotification, setShowTimeSlotNotification] = useState(false);
-  const [pendingAction, setPendingAction] = useState(null); // 'combo' | 'cart' | null
-  const deliverySlotRef = useRef(null);
+  const [showDeliveryNotification, setShowDeliveryNotification] = useState(false);
   const pinCodeRef = useRef(null);
 
   // Sync combo selections from localStorage on mount (backup for SSR/hydration)
@@ -123,9 +140,45 @@ const ProductSummary = ({
     }
   }, [comboSelections.length]); // Only trigger when combo count changes
 
+  // Clear delivery notification once pincode is available
+  useEffect(() => {
+    if (currentPinCode) {
+      setShowDeliveryNotification(false);
+    }
+  }, [currentPinCode]);
+
   // Check if all required fields are completed for Add to Cart
-  const isAddToCartEnabled = currentPinCode && selectedDeliverySlot;
+  const isAddToCartEnabled = !!currentPinCode;
   const [dynamicContent, setDynamicContent] = useState(null);
+  const flowerPdpHighlights = useMemo(() => {
+    if (formProfile !== 'flowers') return null;
+    const desc =
+      (dynamicContent && dynamicContent.description) ||
+      product?.description ||
+      '';
+    if (!desc || typeof desc !== 'string') return null;
+    const cakeEraShapes = new Set(['Round', 'Square', 'Rectangular', 'Heart']);
+    const h = {};
+    for (const line of desc.split('\n')) {
+      const trimmedLine = line.trim();
+      if (trimmedLine.includes('Arrangement Style:')) {
+        const v = trimmedLine.replace('Arrangement Style:', '').trim();
+        h.arrangement = cakeEraShapes.has(v) ? '' : v;
+      } else if (trimmedLine.includes('Flower Type / Variety:')) {
+        h.flowers = trimmedLine.replace('Flower Type / Variety:', '').trim();
+      } else if (trimmedLine.includes('Color Theme:')) {
+        h.color = trimmedLine.replace('Color Theme:', '').trim();
+      } else if (trimmedLine.includes('Number of Stems:')) {
+        h.stems = trimmedLine.replace('Number of Stems:', '').trim();
+      } else if (trimmedLine.includes('Add-ons:')) {
+        h.addOns = trimmedLine.replace('Add-ons:', '').trim();
+      } else if (trimmedLine.includes('Occasion Tags:')) {
+        h.occasions = trimmedLine.replace('Occasion Tags:', '').trim();
+      }
+    }
+    const hasAny = Object.values(h).some((v) => v && String(v).trim());
+    return hasAny ? h : null;
+  }, [formProfile, dynamicContent, product?.description]);
   const [isPriceSectionVisible, setIsPriceSectionVisible] = useState(true);
   const priceSectionRef = useRef(null);
   const [weightTierMappings, setWeightTierMappings] = useState({});
@@ -188,25 +241,24 @@ const ProductSummary = ({
     return product.base_price;
   };
 
-  // Helper: check if both pincode and time slot are selected
+  // Helper: check if delivery details are selected
   const areDeliveryDetailsComplete = () => {
-    return !!currentPinCode && !!selectedDeliverySlot;
+    return !!currentPinCode;
   };
 
   const scrollToMissingDeliveryDetail = () => {
     try {
-      const targetRef = !currentPinCode ? pinCodeRef : deliverySlotRef;
-      targetRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      pinCodeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) {
       console.error('Error scrolling to missing delivery detail:', e);
     }
   };
 
-  // Enhanced order handlers with slot management
+  // Enhanced order handlers with delivery detail checks
   const handleAddToCart = async (orderData) => {
     try {
-      // Check if delivery details are complete (pincode + time slot)
-      if (isDeliveryAvailable && !areDeliveryDetailsComplete()) {
+      // Check if delivery details are complete (pincode)
+      if (isDeliveryAvailable() && !areDeliveryDetailsComplete()) {
         setShowToast(true);
         setTimeout(() => setShowToast(false), 4000);
         scrollToMissingDeliveryDetail();
@@ -253,32 +305,6 @@ const ProductSummary = ({
         });
       }
 
-      // If delivery slot is selected, decrement available orders
-      if (orderData.deliverySlot) {
-        // Handle different slot object structures
-        const slotId = orderData.deliverySlot.slotId || orderData.deliverySlot.slot?.id;
-        const deliveryDate = orderData.deliverySlot.deliveryDate || orderData.deliverySlot.date;
-        const formattedDate = OrderSlotManager.formatDeliveryDate(deliveryDate);
-        
-        // Only proceed if we have both slotId and valid date
-        if (slotId && formattedDate) {
-          const slotResult = await OrderSlotManager.handleOrderPlacement({
-            deliverySlotId: slotId,
-            deliveryDate: formattedDate,
-            quantity: quantity
-          });
-
-          if (!slotResult.success) {
-            console.warn('Failed to update delivery slot availability:', slotResult.message);
-          }
-        } else {
-          console.warn('OrderSlotManager: Missing slotId or deliveryDate', {
-            slotId,
-            deliveryDate,
-            formattedDate
-          });
-        }
-      }
     } catch (error) {
       console.error('Error in handleAddToCart:', error);
       throw error;
@@ -292,32 +318,6 @@ const ProductSummary = ({
         await onBuyNow(orderData);
       }
 
-      // If delivery slot is selected, decrement available orders
-      if (orderData.deliverySlot) {
-        // Handle different slot object structures
-        const slotId = orderData.deliverySlot.slotId || orderData.deliverySlot.slot?.id;
-        const deliveryDate = orderData.deliverySlot.deliveryDate || orderData.deliverySlot.date;
-        const formattedDate = OrderSlotManager.formatDeliveryDate(deliveryDate);
-        
-        // Only proceed if we have both slotId and valid date
-        if (slotId && formattedDate) {
-          const slotResult = await OrderSlotManager.handleOrderPlacement({
-            deliverySlotId: slotId,
-            deliveryDate: formattedDate,
-            quantity: quantity
-          });
-
-          if (!slotResult.success) {
-            console.warn('Failed to update delivery slot availability:', slotResult.message);
-          }
-        } else {
-          console.warn('OrderSlotManager: Missing slotId or deliveryDate', {
-            slotId,
-            deliveryDate,
-            formattedDate
-          });
-        }
-      }
     } catch (error) {
       console.error('Error in handleBuyNow:', error);
       throw error;
@@ -370,32 +370,37 @@ const ProductSummary = ({
   // Calculate total price including combos - for Add to Cart button and other uses
   const totalPrice = useMemo(() => productOnlyPrice + comboTotal, [productOnlyPrice, comboTotal]);
 
-  // Infer servings dynamically from weight when variant changes
+  // Infer servings dynamically from weight when variant changes.
+  // Keep this in sync with admin-panel calculateServings() for consistency.
   const inferServingsFromWeight = (weightText) => {
     if (!weightText) return null;
-    // Normalize to kilograms number
-    const lower = String(weightText).toLowerCase().trim();
-    let kg = 0;
-    const kgMatch = lower.match(/([0-9]*\.?[0-9]+)\s*(kg|kilogram|kilograms)/);
-    const gmMatch = lower.match(/([0-9]*\.?[0-9]+)\s*(g|gm|gram|grams)/);
-    if (kgMatch) {
-      kg = parseFloat(kgMatch[1]);
-    } else if (gmMatch) {
-      kg = parseFloat(gmMatch[1]) / 1000;
-    } else {
-      // try parsing like "1500 gm" or "1.5kg" without space
-      const compactKg = lower.match(/([0-9]*\.?[0-9]+)kg/);
-      if (compactKg) kg = parseFloat(compactKg[1]);
+    const match = String(weightText).trim().match(/^(\d+(?:\.\d+)?)\s*(.*)$/);
+    if (!match) return null;
+
+    const [, numberStr, unitRaw] = match;
+    const number = parseFloat(numberStr);
+    if (isNaN(number)) return null;
+
+    let weightInGrams = number;
+    const unitLower = String(unitRaw || '').toLowerCase();
+
+    if (unitLower === 'kg' || unitLower === 'kilogram' || unitLower === 'kilograms') {
+      weightInGrams = number * 1000;
+    } else if (unitLower === 'lb' || unitLower === 'pound' || unitLower === 'pounds') {
+      weightInGrams = number * 453.592;
+    } else if (unitLower === 'oz' || unitLower === 'ounce' || unitLower === 'ounces') {
+      weightInGrams = number * 28.3495;
     }
-    if (!kg || isNaN(kg)) return null;
-    // Heuristic mapping (common cake servings)
-    if (kg <= 0.6) return '4–6 servings';
-    if (kg <= 1.0) return '8–10 servings';
-    if (kg <= 1.5) return '12–15 servings';
-    if (kg <= 2.0) return '16–20 servings';
-    if (kg <= 2.5) return '20–25 servings';
-    if (kg <= 3.0) return '24–30 servings';
-    return `${Math.round(kg * 10)}+ servings`;
+    // For g/gm/gram/grams (and unknown units), keep numeric value as-is.
+
+    const minServings = Math.floor(weightInGrams / 100);
+    const maxServings = Math.round(weightInGrams / 83.33);
+
+    if (minServings <= 0 && maxServings <= 0) return null;
+    if (minServings === maxServings) {
+      return `${minServings} serving${minServings !== 1 ? 's' : ''}`;
+    }
+    return `${minServings}–${maxServings} servings`;
   };
 
   // Generate badges
@@ -406,9 +411,13 @@ const ProductSummary = ({
   if (product.is_eggless) badges.push({ text: 'Eggless Available', color: 'bg-blue-500' });
 
   const handleFavoriteToggle = async () => {
-    if (product) {
-      await toggleWishlist(product.id);
+    if (!product) return;
+    if (!isAuthenticated) {
+      if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('pending_wishlist_add', String(product.id));
+      openAuthModal();
+      return;
     }
+    await toggleWishlist(product.id);
   };
 
   const handleShare = (platform) => {
@@ -560,7 +569,7 @@ const ProductSummary = ({
         <div className="flex items-start justify-between gap-3 w-full min-w-0 overflow-visible max-w-full">
           <div className="flex-1 min-w-0 pr-2 overflow-visible max-w-full">
             <h1 className="text-[17px] sm:text-lg lg:text-[22px] font-semibold text-gray-900 dark:text-gray-100 leading-snug flex items-center gap-2 overflow-visible">
-              {/* Veg/Non-Veg icon sized to text using em units for perfect alignment */}
+              {formProfile !== 'flowers' && (
             <span
                 className={`inline-flex items-center justify-center align-middle w-[0.95em] h-[0.95em] border-2 ${product.is_eggless ? 'border-green-600 dark:border-green-500' : 'border-red-600 dark:border-red-500'} rounded-[3px] flex-shrink-0`}
             aria-label={product.is_eggless ? 'Eggless (Vegetarian)' : 'Contains Egg (Non‑Vegetarian)'}
@@ -569,6 +578,7 @@ const ProductSummary = ({
                 <span className={`block rounded-full ${product.is_eggless ? 'bg-green-600 dark:bg-green-500' : 'bg-red-600 dark:bg-red-500'}`}
                   style={{ width: '0.5em', height: '0.5em' }} />
           </span>
+              )}
               <span className="leading-snug line-clamp-2">
                 {dynamicContent ? dynamicContent.name : (displayTitle || product.name)}
               </span>
@@ -586,6 +596,73 @@ const ProductSummary = ({
                 {product.review_count || 0} reviews
               </a>
             </div>
+            {flowerPdpHighlights && (
+              <div
+                className="mt-2.5 rounded-lg border border-rose-200/60 dark:border-rose-800/45 bg-gradient-to-br from-rose-50/90 to-white dark:from-rose-950/30 dark:to-gray-900/40 px-3 py-2.5 space-y-1.5"
+                aria-label="Product highlights"
+              >
+                {flowerPdpHighlights.arrangement ? (
+                  <div className="flex items-start gap-2 text-xs text-gray-800 dark:text-gray-100">
+                    <Flower2 className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" aria-hidden />
+                    <span>
+                      <span className="text-gray-500 dark:text-gray-400">Arrangement</span>
+                      <span className="mx-1 text-gray-300 dark:text-gray-600">·</span>
+                      <span className="font-semibold">{flowerPdpHighlights.arrangement}</span>
+                    </span>
+                  </div>
+                ) : null}
+                {flowerPdpHighlights.flowers ? (
+                  <div className="flex items-start gap-2 text-xs text-gray-800 dark:text-gray-100">
+                    <Layers className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" aria-hidden />
+                    <span>
+                      <span className="text-gray-500 dark:text-gray-400">Flowers</span>
+                      <span className="mx-1 text-gray-300 dark:text-gray-600">·</span>
+                      <span className="font-semibold">{flowerPdpHighlights.flowers}</span>
+                    </span>
+                  </div>
+                ) : null}
+                {flowerPdpHighlights.color ? (
+                  <div className="flex items-start gap-2 text-xs text-gray-800 dark:text-gray-100">
+                    <Palette className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" aria-hidden />
+                    <span>
+                      <span className="text-gray-500 dark:text-gray-400">Color</span>
+                      <span className="mx-1 text-gray-300 dark:text-gray-600">·</span>
+                      <span className="font-semibold">{flowerPdpHighlights.color}</span>
+                    </span>
+                  </div>
+                ) : null}
+                {flowerPdpHighlights.stems ? (
+                  <div className="flex items-start gap-2 text-xs text-gray-800 dark:text-gray-100">
+                    <Leaf className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" aria-hidden />
+                    <span>
+                      <span className="text-gray-500 dark:text-gray-400">Stems</span>
+                      <span className="mx-1 text-gray-300 dark:text-gray-600">·</span>
+                      <span className="font-semibold">{flowerPdpHighlights.stems}</span>
+                    </span>
+                  </div>
+                ) : null}
+                {flowerPdpHighlights.addOns ? (
+                  <div className="flex items-start gap-2 text-xs text-gray-800 dark:text-gray-100">
+                    <Gift className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" aria-hidden />
+                    <span>
+                      <span className="text-gray-500 dark:text-gray-400">Add-ons</span>
+                      <span className="mx-1 text-gray-300 dark:text-gray-600">·</span>
+                      <span className="font-semibold">{flowerPdpHighlights.addOns}</span>
+                    </span>
+                  </div>
+                ) : null}
+                {flowerPdpHighlights.occasions ? (
+                  <div className="flex items-start gap-2 text-xs text-gray-800 dark:text-gray-100">
+                    <Calendar className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" aria-hidden />
+                    <span>
+                      <span className="text-gray-500 dark:text-gray-400">Occasions</span>
+                      <span className="mx-1 text-gray-300 dark:text-gray-600">·</span>
+                      <span className="font-semibold">{flowerPdpHighlights.occasions}</span>
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+            )}
       </div>
 
           {/* Desktop actions next to title - flex-shrink-0 prevents cutting */}
@@ -615,6 +692,20 @@ const ProductSummary = ({
                 </div>
               )}
             </div>
+            <button
+              onClick={() => {
+                if (!product) return;
+                const variant = selectedVariant ? { id: selectedVariant.id, name: selectedVariant.name, weight: selectedVariant.weight, price: selectedVariant.price, discounted_price: selectedVariant.discounted_price } : null;
+                addToMidnightWishDraft(product, variant, quantity);
+                showSuccess('Added to Midnight Wish', 'View and share your wish list');
+                router.push('/midnight-wish');
+              }}
+              className="h-10 px-3 rounded-lg border border-amber-400/50 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors flex items-center justify-center flex-shrink-0"
+              aria-label="Add to Midnight Wish"
+              title="Add to Midnight Wish"
+            >
+              <Star className="w-5 h-5" />
+            </button>
           </div>
         </div>
 
@@ -624,7 +715,7 @@ const ProductSummary = ({
       </div>
 
        {/* Price (left) and Quantity (right) - mobile: single row; laptop: horizontal */}
-       <div ref={priceSectionRef} className="flex items-center justify-between gap-3 pt-1 lg:pt-0 pb-2 border-b border-gray-200 dark:border-gray-700 w-full min-w-0 max-w-full overflow-x-hidden">
+       <div ref={priceSectionRef} className="flex items-center justify-between gap-3 pt-1 lg:pt-1 pb-2 border-b border-gray-200 dark:border-gray-700 w-full min-w-0 max-w-full overflow-x-hidden overflow-y-visible">
         {/* Pricing */}
         <div className="flex-1 min-w-0 max-w-full overflow-x-hidden">
           {/* Mobile: compact single-row pricing */}
@@ -655,7 +746,7 @@ const ProductSummary = ({
                     <>
                       <span className="text-xs line-through text-gray-500 dark:text-gray-400">{formatPrice(originalPrice)}</span>
                       <span className="px-2 py-0.5 text-[10px] font-semibold text-white bg-red-500 dark:bg-red-600 rounded-full">
-                        {discountPercent}% OFF
+                        {Math.round(discountPercent)}% off
                       </span>
                     </>
                   )}
@@ -694,7 +785,7 @@ const ProductSummary = ({
           {hasDiscount && (
                 <div className="flex items-center gap-2">
                   <span className="text-lg text-gray-500 dark:text-gray-400 line-through">{formatPrice(originalPrice)}</span>
-                  <span className="px-2 py-0.5 text-xs font-semibold text-white bg-red-500 dark:bg-red-600 rounded-full">{discountPercent}% OFF</span>
+                  <span className="px-2 py-0.5 text-xs font-semibold text-white bg-red-500 dark:bg-red-600 rounded-full">{Math.round(discountPercent)}% off</span>
                   <span className="text-xs text-green-600 dark:text-green-400 font-medium">You save {formatPrice(originalPrice - currentPrice)}</span>
                 </div>
               )}
@@ -710,8 +801,8 @@ const ProductSummary = ({
           </div>
       </div>
 
-        {/* Quantity - Compact */}
-        <div className="shrink-0 -mt-5">
+        {/* Quantity - Compact - pulled up on mobile to align with price; pt on laptop avoids clipping */}
+        <div className="shrink-0 -mt-4 lg:mt-0 pt-0.5 lg:pt-0.5">
           <div className="flex items-center gap-1.5 bg-rose-50 dark:bg-rose-900/20 rounded-full px-1.5 py-1 border border-rose-200 dark:border-rose-700">
           <button
             onClick={() => onQuantityChange(quantity - 1)}
@@ -752,7 +843,9 @@ const ProductSummary = ({
             })() ? (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Weight</span>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    {isCake ? 'Weight' : formProfile === 'flowers' ? FLOWERS_PDP_LABELS.stemTier : 'Option'}
+                  </span>
                 </div>
                 <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2 lg:overflow-x-visible">
                   {/* Base weight option (if not duplicated in variants) */}
@@ -786,11 +879,14 @@ const ProductSummary = ({
               </div>
             ) : null}
             {/* Inline Weight & Servings Display - Always show */}
-            <div className="flex items-center gap-6 text-sm">
+            <div className="flex items-center gap-6 text-sm flex-wrap">
                 <div>
-                <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Weight: </span>
+                <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                  {isCake ? 'Weight: ' : formProfile === 'flowers' ? `${FLOWERS_PDP_LABELS.stemTier}: ` : 'Option: '}
+                </span>
                 <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{selectedVariant?.weight || product.base_weight || '—'}</span>
                 </div>
+              {isCake ? (
               <div>
                 <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Servings: </span>
                 <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
@@ -801,9 +897,20 @@ const ProductSummary = ({
                 })()}
               </span>
               </div>
+              ) : (product.serving_size_description || product.serving_size) ? (
+                <div>
+                  <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                    {formProfile === 'flowers' ? `${FLOWERS_PDP_LABELS.presentationNote}: ` : 'Pack / size: '}
+                  </span>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    {product.serving_size_description || product.serving_size}
+                  </span>
+                </div>
+              ) : null}
             </div>
 
             {/* Cake Tiers - Inline Radio Style */}
+            {isCake && (
             <div className="text-sm flex items-center">
               <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Cake Tiers:</span>
               <div className="flex items-center gap-4 ml-3">
@@ -822,20 +929,10 @@ const ProductSummary = ({
                 ))}
               </div>
             </div>
+            )}
           </div>
         </div>
       </div>
-
-      {/* Divider */}
-      <div className="h-px bg-gray-200 dark:bg-gray-700 my-6" />
-
-      {/* Flavor Selection */}
-      <FlavorSelector
-        product={product}
-        selectedFlavor={selectedFlavor}
-        onFlavorChange={onFlavorChange}
-        onFlavorContentUpdate={handleFlavorContentUpdate}
-      />
 
       {/* Delivery Pincode Availability */}
       <div ref={pinCodeRef} className="mt-6">
@@ -849,7 +946,7 @@ const ProductSummary = ({
           </div>
 
           {/* Content */}
-          {isDeliveryAvailable && currentPinCode ? (
+          {isDeliveryAvailable() && currentPinCode ? (
             <div className="flex items-center justify-between px-3 py-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
               <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400">
                 <CheckCircle className="w-4 h-4" />
@@ -874,7 +971,7 @@ const ProductSummary = ({
               </button>
             </div>
           ) : (
-            <div className="w-full h-[52px] sm:h-[56px] rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm flex items-stretch overflow-hidden">
+            <div className="w-full min-w-0 h-[52px] sm:h-[56px] rounded-xl border-2 border-pink-200 dark:border-pink-700/60 bg-white dark:bg-gray-800 shadow-sm flex items-stretch overflow-hidden focus-within:border-pink-500 dark:focus-within:border-pink-400 focus-within:ring-2 focus-within:ring-pink-500/20 dark:focus-within:ring-pink-400/20 transition-all duration-200">
               <input
                 type="text"
                 value={localPin}
@@ -883,8 +980,8 @@ const ProductSummary = ({
                   setLocalPin(v);
                   validatePinCodeDebounced && validatePinCodeDebounced(v);
                 }}
-                placeholder="Enter pincode"
-                className={`flex-1 bg-transparent outline-none border-none px-3 h-full text-base sm:text-lg font-medium tracking-[0.12em] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                placeholder="Enter delivery pincode"
+                className={`flex-1 min-w-0 bg-transparent outline-none border-none px-3 sm:px-4 h-full text-base sm:text-lg font-poppins font-medium tracking-[0.08em] sm:tracking-[0.12em] text-gray-900 dark:text-gray-100 placeholder:font-poppins placeholder:font-medium placeholder:tracking-wide placeholder:text-pink-300 dark:placeholder:text-pink-600/50 ${
                   tempValidationStatus === 'valid'
                     ? 'text-green-700 dark:text-green-400'
                     : tempValidationStatus === 'invalid'
@@ -898,8 +995,9 @@ const ProductSummary = ({
                   if (localPin.length === 6) await (checkPinCode && checkPinCode(localPin));
                 }}
                 disabled={localPin.length !== 6}
-                className="px-7 sm:px-8 h-full min-w-[112px] sm:min-w-[128px] rounded-none rounded-r-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm sm:text-[15px] font-semibold tracking-wide disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors shadow-[0_2px_6px_rgba(15,23,42,0.25)] flex items-center justify-center"
+                className="flex-shrink-0 px-4 sm:px-8 h-full min-w-[80px] sm:min-w-[128px] rounded-none rounded-r-[10px] border-l-2 border-pink-300 dark:border-pink-600 bg-pink-600 dark:bg-pink-700 text-white text-sm sm:text-[15px] font-poppins font-semibold tracking-wide disabled:opacity-60 disabled:cursor-not-allowed hover:bg-pink-700 dark:hover:bg-pink-600 active:bg-pink-800 dark:active:bg-pink-800 transition-colors shadow-sm flex items-center justify-center"
                 type="button"
+                aria-label="Check delivery for pincode"
               >
                 Check
               </button>
@@ -908,7 +1006,8 @@ const ProductSummary = ({
         </div>
       </div>
 
-      {/* Message on Cake */}
+      {/* Message on Cake (cakes only) */}
+      {isCake && (
       <div className="mt-6">
         <div className="bg-gradient-to-br from-rose-50 to-pink-50 dark:from-rose-900/20 dark:to-pink-900/20 rounded-xl border border-rose-200 dark:border-rose-800 shadow-lg dark:shadow-xl dark:shadow-black/30 p-3 sm:p-4 lg:p-5 transition-all duration-300 hover:shadow-xl dark:hover:shadow-2xl dark:hover:shadow-black/40">
           {/* Header with Icon */}
@@ -944,49 +1043,25 @@ const ProductSummary = ({
           </div>
         </div>
       </div>
+      )}
 
-      {/* Delivery Slot Selection - Always show for better UX */}
-      <div ref={deliverySlotRef} className="mt-6">
-      <DeliverySlotSelector
-          onSlotSelect={(slot) => {
-            setSelectedDeliverySlot(slot);
-            setShowTimeSlotNotification(false);
-            
-            // If pincode is missing, show notification and scroll but do not execute pending action yet
-            if (!currentPinCode) {
-              setShowTimeSlotNotification(true);
-              scrollToMissingDeliveryDetail();
-              return;
-            }
-            
-            // Execute pending action after slot selection when delivery details are complete
-            if (pendingAction === 'combo') {
-              setPendingAction(null);
-              setShowComboModal(true);
-            } else if (pendingAction === 'cart') {
-              setPendingAction(null);
-              // Trigger add to cart after a brief delay to ensure state is updated
-              setTimeout(async () => {
-                if (comboSelections.length > 0) {
-                  setShowAddToCartConfirm(true);
-                } else {
-                  try {
-                    await handleAddToCart({
-                      deliverySlot: slot,
-                      cakeMessage: cakeMessage
-                    });
-                  } catch (error) {
-                    console.error('Error adding to cart:', error);
-                  }
-                }
-              }, 100);
-            }
-          }}
-        selectedSlot={selectedDeliverySlot}
-        pinCode={currentPinCode}
-        className="mb-6"
-      />
+      {/* Delivery Slot Preview - Select at checkout */}
+      <div className="mt-6">
+        <DeliverySlotPreview className="mb-6" />
       </div>
+
+      {/* Divider */}
+      <div className="h-px bg-gray-200 dark:bg-gray-700 my-6" />
+
+      {/* Flavor selection: cakes + Small Treats Desserts (optional product_flavors) */}
+      {showStorefrontFlavorPicker && (
+      <FlavorSelector
+        product={product}
+        selectedFlavor={selectedFlavor}
+        onFlavorChange={onFlavorChange}
+        onFlavorContentUpdate={handleFlavorContentUpdate}
+      />
+      )}
 
 
 
@@ -995,15 +1070,11 @@ const ProductSummary = ({
       {/* Sticky Action Buttons - Desktop Only */}
       <div className="hidden lg:block sticky-buttons w-full">
         {/* Delivery Details Notification - Desktop */}
-        {showTimeSlotNotification && (
+        {showDeliveryNotification && (
           <div className="px-4 pt-2 pb-1">
             <div className="bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-800 rounded-sm px-3 py-1.5">
               <p className="text-xs font-medium text-red-800 dark:text-red-200">
-                {!currentPinCode && !selectedDeliverySlot
-                  ? 'Please enter pincode and select a time slot to proceed.'
-                  : !currentPinCode
-                    ? 'Please enter pincode to proceed.'
-                    : 'Please select a time slot to proceed.'}
+                Please enter pincode to proceed.
               </p>
             </div>
           </div>
@@ -1020,8 +1091,7 @@ const ProductSummary = ({
             <button
               onClick={() => {
                 if (!areDeliveryDetailsComplete()) {
-                  setPendingAction('combo');
-                  setShowTimeSlotNotification(true);
+                  setShowDeliveryNotification(true);
                   scrollToMissingDeliveryDetail();
                 } else {
                   setShowComboModal(true);
@@ -1046,8 +1116,7 @@ const ProductSummary = ({
             <button
               onClick={async () => {
                 if (!areDeliveryDetailsComplete()) {
-                  setPendingAction('cart');
-                  setShowTimeSlotNotification(true);
+                  setShowDeliveryNotification(true);
                   scrollToMissingDeliveryDetail();
                   return;
                 }
@@ -1059,7 +1128,6 @@ const ProductSummary = ({
                   // No combos, add directly to cart
                   try {
                     await handleAddToCart({
-                      deliverySlot: selectedDeliverySlot,
                       cakeMessage: cakeMessage
                     });
                   } catch (error) {
@@ -1080,35 +1148,39 @@ const ProductSummary = ({
         </div>
       </div>
 
-       {/* Mobile Sticky Footer - Always visible at bottom */}
-       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-xl dark:shadow-black/30 z-50" style={{ willChange: 'transform', transform: 'translateZ(0)', backfaceVisibility: 'hidden', maxWidth: '100vw' }}>
+       {/* Mobile Sticky Footer - Above category menu (z-[60]); safe-area so buttons stay above iPhone home indicator */}
+       <div
+         className={`lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-xl dark:shadow-black/30 z-[60] ${hideMobileStickyCTA ? 'hidden' : ''}`}
+         style={{
+           willChange: 'transform',
+           transform: 'translateZ(0)',
+           backfaceVisibility: 'hidden',
+           maxWidth: '100vw',
+           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+         }}
+       >
         {/* Delivery Details Notification - Mobile - Always render to reserve space and prevent layout shift */}
-         <div className={`px-3 transition-all duration-200 ease-in-out ${showTimeSlotNotification ? 'pt-2 pb-1 opacity-100 max-h-20' : 'pt-0 pb-0 opacity-0 max-h-0 overflow-hidden'}`}>
+         <div className={`px-3 transition-all duration-200 ease-in-out ${showDeliveryNotification ? 'pt-2 pb-1 opacity-100 max-h-20' : 'pt-0 pb-0 opacity-0 max-h-0 overflow-hidden'}`}>
            <div className="bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-800 rounded-sm px-3 py-1.5">
              <p className="text-xs font-medium text-red-800 dark:text-red-200">
-              {!currentPinCode && !selectedDeliverySlot
-                ? 'Please enter pincode and select a time slot to proceed.'
-                : !currentPinCode
-                  ? 'Please enter pincode to proceed.'
-                  : 'Please select a time slot to proceed.'}
+              Please enter pincode to proceed.
              </p>
            </div>
          </div>
-        <div className="px-2 py-2.5 min-h-[72px]">
+        <div className="px-2 py-2 min-h-[64px]">
           {/* Unified Button Layout - Compact and refined */}
           <div className="w-full flex items-stretch gap-2 h-full">
              {/* Add Combo Button - Fixed height to prevent layout shift */}
              <button
                onClick={() => {
                  if (!areDeliveryDetailsComplete()) {
-                   setPendingAction('combo');
-                   setShowTimeSlotNotification(true);
+                   setShowDeliveryNotification(true);
                    scrollToMissingDeliveryDetail();
                  } else {
                    setShowComboModal(true);
                  }
                }}
-              className="flex-1 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300 py-2.5 px-3 font-semibold border-2 border-rose-200 dark:border-rose-700 hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-all duration-200 flex items-center justify-center gap-2 text-base shadow-sm hover:shadow-md active:scale-[0.98] min-h-[56px]"
+              className="flex-1 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300 py-2.5 px-3 font-semibold border-2 border-rose-200 dark:border-rose-700 hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-all duration-200 flex items-center justify-center gap-2 text-base shadow-sm hover:shadow-md active:scale-[0.98] min-h-[52px]"
              >
                {comboSelections.length > 0 ? (
                  <>
@@ -1131,8 +1203,7 @@ const ProductSummary = ({
              <button
                onClick={async () => {
                if (!areDeliveryDetailsComplete()) {
-                  setPendingAction('cart');
-                  setShowTimeSlotNotification(true);
+                  setShowDeliveryNotification(true);
                   scrollToMissingDeliveryDetail();
                   return;
                 }
@@ -1144,7 +1215,6 @@ const ProductSummary = ({
                   // No combos, add directly to cart
                    try {
                      await handleAddToCart({
-                       deliverySlot: selectedDeliverySlot,
                        cakeMessage: cakeMessage
                      });
                    } catch (error) {
@@ -1152,7 +1222,7 @@ const ProductSummary = ({
                    }
                  }
                }}
-              className={`flex-1 py-2.5 px-3 font-medium transition-all duration-200 flex flex-col items-center justify-center gap-0.5 text-sm min-h-[56px] text-center cursor-pointer ${
+              className={`flex-1 py-2.5 px-3 font-medium transition-all duration-200 flex flex-col items-center justify-center gap-0.5 text-sm min-h-[52px] text-center cursor-pointer ${
                 isAddToCartEnabled
                   ? 'bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 active:from-pink-700 active:to-rose-700 dark:active:from-pink-800 dark:active:to-rose-800'
                   : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
@@ -1202,11 +1272,10 @@ const ProductSummary = ({
         baseProductPrice={currentPrice}
         quantity={quantity}
         initialComboSelections={comboSelections}
-        selectedDeliverySlot={selectedDeliverySlot}
         onAddToCart={handleAddToCart}
         cakeMessage={cakeMessage}
         currentPinCode={currentPinCode}
-        isDeliveryAvailable={isDeliveryAvailable}
+        isDeliveryAvailable={isDeliveryAvailable()}
       />
 
       {/* Add to Cart Confirmation Popup */}
@@ -1233,7 +1302,6 @@ const ProductSummary = ({
                   setShowAddToCartConfirm(false);
                   try {
                     await handleAddToCart({
-                      deliverySlot: selectedDeliverySlot,
                       cakeMessage: cakeMessage
                     });
                   } catch (error) {
@@ -1265,7 +1333,6 @@ const ProductSummary = ({
                     setComboSelections([]);
                     setSelectedCombos([]);
                     await handleAddToCart({
-                      deliverySlot: selectedDeliverySlot,
                       cakeMessage: cakeMessage
                     });
                   } catch (error) {
@@ -1288,11 +1355,7 @@ const ProductSummary = ({
           <div>
             <p className="font-medium">Delivery Details Required</p>
             <p className="text-sm opacity-90">
-              {!currentPinCode && !selectedDeliverySlot
-                ? 'Please enter pincode and select a delivery time slot to continue.'
-                : !currentPinCode
-                  ? 'Please enter pincode to continue.'
-                  : 'Please select a delivery time slot to continue.'}
+              Please enter pincode to continue.
             </p>
           </div>
           <button

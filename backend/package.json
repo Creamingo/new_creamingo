@@ -8,7 +8,9 @@
     "dev": "nodemon src/server.js",
     "test": "jest",
     "build": "echo \"Skipping backend build (no compilation needed)\"",
-    "rebuild-native": "pnpm rebuild sharp"
+    "rebuild-native": "pnpm rebuild sharp",
+    "check:banner-mobile": "node scripts/check-banner-mobile-column.js",
+    "migrate:banner-mobile": "node run_migration_065.js"
   },
   "keywords": [
     "cake",

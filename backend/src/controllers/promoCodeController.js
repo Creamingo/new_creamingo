@@ -250,7 +250,8 @@ const validatePromoCode = async (req, res) => {
 
     // Check minimum order amount
     if (order_amount && order_amount < promo.min_order_amount) {
-      const shortfall = promo.min_order_amount - order_amount;
+      const minOrder = Math.round(Number(promo.min_order_amount) * 100) / 100;
+      const shortfall = Math.max(0, Math.round((minOrder - Number(order_amount)) * 100) / 100);
       validationResult = 'failed';
       failureReason = `Minimum order amount not met (need ₹${shortfall} more)`;
       await trackPromoCodeEvent(promo.id, 'validate', {
@@ -264,7 +265,7 @@ const validatePromoCode = async (req, res) => {
       });
       return res.status(400).json({
         success: false,
-        message: `Minimum order amount of ₹${promo.min_order_amount} required for this promo code. This applies to product subtotal only (excluding delivery charges). Add ₹${shortfall} more to your cart to use this code.`
+        message: `Minimum order is ₹${minOrder} (product subtotal only). Add ₹${shortfall} more to use this code.`
       });
     }
 
@@ -884,7 +885,7 @@ const getPromoCodeAnalytics = async (req, res) => {
 // Track promo code event from frontend (public endpoint for tracking)
 const trackPromoCodeEventFromFrontend = async (req, res) => {
   try {
-    const { code, event_type, cart_value } = req.body;
+    const { code, event_type, cart_value, validation_result = null, failure_reason = null } = req.body;
     const customer_id = req.customer?.id || null;
     const ip_address = req.ip || req.connection?.remoteAddress || null;
     const user_agent = req.get('user-agent') || null;
@@ -923,6 +924,8 @@ const trackPromoCodeEventFromFrontend = async (req, res) => {
     await trackPromoCodeEvent(promo.id, event_type, {
       customer_id,
       cart_value: cart_value || null,
+      validation_result,
+      failure_reason,
       ip_address,
       user_agent,
       referrer_url

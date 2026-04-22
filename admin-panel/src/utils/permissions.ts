@@ -114,7 +114,11 @@ export const ROUTE_PERMISSIONS = {
   '/customers': ['customers.view'],
   '/payments': ['payments.view'],
   '/settings': ['settings.view'],
-  '/users': ['users.view']
+  '/users': ['users.view'],
+  '/chatbot-answers': ['settings.view'],
+  '/chat-analytics': ['settings.view'],
+  '/tickets': ['settings.view'],
+  '/vendor-applications': ['settings.view']
 };
 
 // Define sidebar menu permissions
@@ -132,7 +136,13 @@ export const MENU_PERMISSIONS = {
   customers: ['customers.view'],
   payments: ['payments.view'],
   settings: ['settings.view'],
-  users: ['users.view']
+  users: ['users.view'],
+  'chatbot-answers': ['settings.view'],
+  'chat-analytics': ['settings.view'],
+  tickets: ['settings.view'],
+  vendorapplications: ['settings.view'],
+  chatbotanswers: ['settings.view'],
+  chatanalytics: ['settings.view']
 };
 
 /**

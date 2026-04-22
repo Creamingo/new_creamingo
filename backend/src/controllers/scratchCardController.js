@@ -17,46 +17,34 @@ const getScratchCards = async (req, res) => {
 
     const result = await query(
       `SELECT 
-        id,
-        customer_id,
-        order_id,
-        amount,
-        status,
-        revealed_at,
-        credited_at,
-        created_at
-      FROM scratch_cards 
-      ${whereClause}
-      ORDER BY created_at DESC`,
+        sc.id,
+        sc.customer_id,
+        sc.order_id,
+        sc.amount,
+        sc.status,
+        sc.revealed_at,
+        sc.credited_at,
+        sc.created_at,
+        o.order_number,
+        o.created_at as order_created_at
+      FROM scratch_cards sc
+      LEFT JOIN orders o ON o.id = sc.order_id
+      ${whereClause.replace('customer_id', 'sc.customer_id')}
+      ORDER BY sc.created_at DESC`,
       params
     );
 
-    // Get order numbers for each scratch card
-    const scratchCards = await Promise.all(
-      result.rows.map(async (card) => {
-        let orderNumber = null;
-        if (card.order_id) {
-          const orderResult = await query(
-            'SELECT order_number FROM orders WHERE id = ?',
-            [card.order_id]
-          );
-          if (orderResult.rows.length > 0) {
-            orderNumber = orderResult.rows[0].order_number;
-          }
-        }
-
-        return {
-          id: card.id,
-          orderId: card.order_id,
-          orderNumber: orderNumber,
-          amount: Math.round(parseFloat(card.amount)), // Round to nearest whole number
-          status: card.status,
-          revealedAt: card.revealed_at ? convertToIST(card.revealed_at) : null,
-          creditedAt: card.credited_at ? convertToIST(card.credited_at) : null,
-          createdAt: convertToIST(card.created_at)
-        };
-      })
-    );
+    const scratchCards = result.rows.map((card) => ({
+      id: card.id,
+      orderId: card.order_id,
+      orderNumber: card.order_number || null,
+      amount: Math.round(parseFloat(card.amount)), // Round to nearest whole number
+      status: card.status,
+      revealedAt: card.revealed_at ? convertToIST(card.revealed_at) : null,
+      creditedAt: card.credited_at ? convertToIST(card.credited_at) : null,
+      createdAt: convertToIST(card.created_at),
+      orderPlacedAt: card.order_created_at ? convertToIST(card.order_created_at) : null
+    }));
 
     res.json({
       success: true,

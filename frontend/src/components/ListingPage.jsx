@@ -13,9 +13,15 @@ import LocationBar from './LocationBar';
 import categoryApi from '../api/categoryApi';
 import productApi from '../api/productApi';
 import { useCategoryMenu } from '../contexts/CategoryMenuContext';
-import { useWishlist } from '../contexts/WishlistContext';
 import { formatPrice } from '../utils/priceFormatter';
-import { resolveImageUrl } from '../utils/imageUrl';
+import { toListingProductCardShape } from '../utils/listingProductTransform';
+
+const LISTING_PAGE_SIZE = 40;
+const NUDGE_STORAGE_PREFIX = 'creamingo-listing-sub-nudge';
+/** Hide the subcategory nudge when the user returns near the top (sticky header + location). */
+const NUDGE_AUTO_HIDE_SCROLL_TOP_PX = 140;
+const NUDGE_COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes
+const NUDGE_MAX_SHOWS_PER_DAY = 2;
 
 const ListingPage = () => {
   const params = useParams();
@@ -26,7 +32,11 @@ const ListingPage = () => {
   const [subcategoryData, setSubcategoryData] = useState(null);
   const [allSubcategories, setAllSubcategories] = useState([]);
   const [products, setProducts] = useState([]);
-  const { isInWishlist, toggleWishlist } = useWishlist();
+  const [productPage, setProductPage] = useState(1);
+  const [totalProductCount, setTotalProductCount] = useState(0);
+  const [hasMoreProducts, setHasMoreProducts] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [showSubcategoryNudge, setShowSubcategoryNudge] = useState(false);
   const [sortBy, setSortBy] = useState('popularity');
   const [showFilters, setShowFilters] = useState(false);
   const [showSortDropdown, setShowSortDropdown] = useState(false);
@@ -44,6 +54,8 @@ const ListingPage = () => {
   const subcategoryScrollRef = useRef(null);
   const leftScrollIndicatorRef = useRef(null);
   const rightScrollIndicatorRef = useRef(null);
+  const nudgeSentinelRef = useRef(null);
+  const nudgeVisibleRef = useRef(false);
   
   // Calculate max price from products and round up to ensure slider can reach it
   const rawMaxPrice = products.length > 0 
@@ -69,6 +81,7 @@ const ListingPage = () => {
     const slugToNameMap = {
       'cakes-by-flavor': 'Pick a Cake by Flavor',
       'cakes-for-occasion': 'Cakes for Any Occasion',
+      'cakes-for-any-occasion': 'Cakes for Any Occasion',
       'kids-cake-collection': 'Kid\'s Cake Collection',
       'crowd-favorite-cakes': 'Crowd-Favorite Cakes',
       'love-relationship-cakes': 'Love and Relationship Cakes',
@@ -103,10 +116,15 @@ const ListingPage = () => {
       
       if (response.success && response.data && response.data.subcategory) {
         const subcategory = response.data.subcategory;
+        const slugFromName = subcategory.name
+          .toLowerCase()
+          .replace(/\s+/g, '-')
+          .replace(/\//g, '-') // handle "1/2 Year" style names
+          .replace(/&/g, 'and');
         return {
           id: subcategory.id,
           name: subcategory.name,
-          slug: subcategory.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and'),
+          slug: slugFromName,
           description: subcategory.description,
           metaTitle: `${subcategory.name} | Creamingo`,
           metaDescription: subcategory.description,
@@ -145,13 +163,24 @@ const ListingPage = () => {
         return [];
       }
 
-      const transformedData = rawSubcategories.map(subcategory => ({
-        id: subcategory.id,
-        name: subcategory.name,
-        slug: subcategory.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and'),
-        image: subcategory.image_url,
-        productCount: subcategory.product_count || subcategory.products_count || subcategory.productCount || 0 // Use API count if available
-      }));
+      const transformedData = rawSubcategories.map(subcategory => {
+        const slugFromName = subcategory.name
+          .toLowerCase()
+          .replace(/\s+/g, '-')
+          .replace(/\//g, '-') // handle "1/2 Year" style names
+          .replace(/&/g, 'and');
+        return {
+          id: subcategory.id,
+          name: subcategory.name,
+          slug: slugFromName,
+          image: subcategory.image_url,
+          productCount:
+            subcategory.product_count ??
+            subcategory.products_count ??
+            subcategory.productCount ??
+            0
+        };
+      });
       console.log('Transformed subcategories data:', transformedData);
       return transformedData;
     } catch (error) {
@@ -160,54 +189,44 @@ const ListingPage = () => {
     }
   };
 
-  const fetchProducts = async (categorySlug, subCategorySlug = null) => {
-    try {
-      // Use the new productApi for fetching products
-      const response = await productApi.getProductsByCategory(categorySlug, subCategorySlug, {
-        sortBy,
-        limit: 50
-      });
-      
-      // Handle the API response structure: { success: true, data: { products: [...], pagination: {...} } }
-      let products = [];
-      if (response.success && response.data && response.data.products) {
-        products = response.data.products;
-      } else if (response.products) {
-        products = response.products;
-      } else {
-        products = response;
-      }
-      
-      // Transform API response to match frontend expected format
-      return products.map(product => ({
-        id: product.id,
-        name: product.name,
-        slug: product.slug, // Include the slug field
-        image: resolveImageUrl(product.image_url || product.image),
-        originalPrice: product.base_price || product.originalPrice,
-        discountedPrice: product.discounted_price || product.discountedPrice,
-        rating: product.rating || 4.5, // Default rating if not provided
-        reviews: product.reviews || Math.floor(Math.random() * 100) + 10,
-        category: product.category_name || product.category,
-        subcategory: product.subcategory_name || product.subcategory,
-        subcategory_id: product.subcategory_id || product.subcategoryId, // Preserve subcategory ID for matching
-        isTopProduct: product.is_top_product === 1 || product.isTopProduct,
-        discount: product.discount || Math.round(((product.base_price - product.discounted_price) / product.base_price) * 100)
-      }));
-    } catch (error) {
-      console.error('Failed to fetch products data:', error);
-      throw error; // Don't fall back to mock data, let the error propagate
-    }
-  };
+  const fetchProductsPage = useCallback(async (catSlug, subSlug = null, page = 1, sort = sortBy) => {
+    const response = await productApi.getProductsByCategory(catSlug, subSlug, {
+      sortBy: sort,
+      limit: LISTING_PAGE_SIZE,
+      page,
+    });
 
-  // Load data on component mount
+    let rawProducts = [];
+    let pagination = {
+      current_page: page,
+      per_page: LISTING_PAGE_SIZE,
+      total: 0,
+      total_pages: 1,
+    };
+
+    if (response.success && response.data && response.data.products) {
+      rawProducts = response.data.products;
+      if (response.data.pagination) {
+        pagination = { ...pagination, ...response.data.pagination };
+      }
+    } else if (response.products) {
+      rawProducts = response.products;
+    } else if (Array.isArray(response)) {
+      rawProducts = response;
+    }
+
+    const mapped = rawProducts.map((product) => toListingProductCardShape(product));
+    return { products: mapped, pagination };
+  }, [sortBy]);
+
+  // Load category metadata, subcategories (with server-side product_count), and first page of products
   useEffect(() => {
     const loadData = async () => {
       try {
         setLoading(true);
         setError(null);
+        setShowSubcategoryNudge(false);
 
-        // Fetch category data
         const category = await fetchCategoryData(categorySlug);
         if (!category) {
           setError('Category not found');
@@ -215,7 +234,6 @@ const ListingPage = () => {
         }
         setCategoryData(category);
 
-        // Fetch subcategory data if applicable
         if (isSubcategory) {
           const subcategory = await fetchSubcategoryData(categorySlug, subCategorySlug);
           if (!subcategory) {
@@ -223,52 +241,28 @@ const ListingPage = () => {
             return;
           }
           setSubcategoryData(subcategory);
+        } else {
+          setSubcategoryData(null);
         }
 
-        // Fetch all subcategories for the category (for navigation)
-        const subcategoriesList = await fetchAllSubcategories(categorySlug);
-        
-        // Fetch ALL products for the category (without subcategory filter) to calculate accurate counts
-        const allProductsForCategory = await fetchProducts(categorySlug, null);
-        
-        // Calculate product counts for each subcategory from all products
-        const subcategoriesWithCounts = subcategoriesList.map(subcategory => {
-          // Count products that belong to this subcategory
-          // Match by ID first (most reliable), then by name/slug
-          const count = allProductsForCategory.filter(product => {
-            // Match by subcategory ID if available
-            if (product.subcategory_id && subcategory.id && product.subcategory_id === subcategory.id) {
-              return true;
-            }
-            
-            // Match by subcategory name/slug
-            const productSubcategory = (product.subcategory || product.subcategory_name || '').toString().trim();
-            if (!productSubcategory) return false;
-            
-            // Normalize both for comparison
-            const productSubcategoryNormalized = productSubcategory.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and');
-            const subcategoryNameNormalized = subcategory.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and');
-            
-            // Match by normalized name or slug
-            return productSubcategoryNormalized === subcategory.slug || 
-                   productSubcategoryNormalized === subcategoryNameNormalized ||
-                   productSubcategory.toLowerCase() === subcategory.name.toLowerCase();
-          }).length;
-          
-          // Always use calculated count
-          return {
-            ...subcategory,
-            productCount: count
-          };
-        });
-        
+        const subcategoriesWithCounts = await fetchAllSubcategories(categorySlug);
         setAllSubcategories(subcategoriesWithCounts);
 
-        // Fetch products for current view (with subcategory filter if applicable)
-        const productList = await fetchProducts(categorySlug, subCategorySlug);
+        const subForProducts = isSubcategory ? subCategorySlug : null;
+        const { products: productList, pagination } = await fetchProductsPage(
+          categorySlug,
+          subForProducts,
+          1,
+          sortBy
+        );
         setProducts(productList);
-
-
+        setProductPage(1);
+        const totalPages = Number(pagination.total_pages) || 1;
+        const curPage = Number(pagination.current_page) || 1;
+        setHasMoreProducts(curPage < totalPages);
+        setTotalProductCount(
+          pagination.total != null ? Number(pagination.total) : productList.length
+        );
       } catch (err) {
         setError('Failed to load data');
         console.error('Error loading listing data:', err);
@@ -280,7 +274,7 @@ const ListingPage = () => {
     if (categorySlug) {
       loadData();
     }
-  }, [categorySlug, subCategorySlug, isSubcategory]);
+  }, [categorySlug, subCategorySlug, isSubcategory, sortBy, fetchProductsPage]);
 
   // Utility functions - use global formatter
   // formatPrice is imported from utils
@@ -306,6 +300,144 @@ const ListingPage = () => {
     console.log('Current window width:', window.innerWidth);
     router.push(url);
   }, [categorySlug, router]);
+
+  const loadMoreProducts = useCallback(async () => {
+    if (!categorySlug || loadingMore || !hasMoreProducts) return;
+    try {
+      setLoadingMore(true);
+      const nextPage = productPage + 1;
+      const subForProducts = isSubcategory ? subCategorySlug : null;
+      const { products: nextBatch, pagination } = await fetchProductsPage(
+        categorySlug,
+        subForProducts,
+        nextPage,
+        sortBy
+      );
+      setProducts((prev) => {
+        const seen = new Set(prev.map((p) => p.id));
+        const merged = [...prev];
+        for (const p of nextBatch) {
+          if (!seen.has(p.id)) {
+            seen.add(p.id);
+            merged.push(p);
+          }
+        }
+        return merged;
+      });
+      setProductPage(nextPage);
+      const totalPages = Number(pagination.total_pages) || 1;
+      const curPage = Number(pagination.current_page) || nextPage;
+      setHasMoreProducts(curPage < totalPages);
+    } catch (e) {
+      console.error('Load more failed:', e);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [
+    categorySlug,
+    subCategorySlug,
+    isSubcategory,
+    hasMoreProducts,
+    loadingMore,
+    productPage,
+    fetchProductsPage,
+  ]);
+
+  const getNudgeStorageKey = useCallback(() => {
+    if (!categorySlug) return null;
+    return `${NUDGE_STORAGE_PREFIX}:${categorySlug}`;
+  }, [categorySlug]);
+
+  const getLocalDayKey = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = `${now.getMonth() + 1}`.padStart(2, '0');
+    const day = `${now.getDate()}`.padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const readNudgeMeta = useCallback(() => {
+    const key = getNudgeStorageKey();
+    const todayKey = getLocalDayKey();
+    const fallback = { dayKey: todayKey, showCount: 0, dismissedAt: 0 };
+    if (!key) return fallback;
+
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return fallback;
+      const parsed = JSON.parse(raw);
+      const meta = {
+        dayKey: typeof parsed?.dayKey === 'string' ? parsed.dayKey : todayKey,
+        showCount: Number.isFinite(parsed?.showCount) ? parsed.showCount : 0,
+        dismissedAt: Number.isFinite(parsed?.dismissedAt) ? parsed.dismissedAt : 0,
+      };
+      // Reset daily show counter when local calendar day changes.
+      if (meta.dayKey !== todayKey) {
+        meta.dayKey = todayKey;
+        meta.showCount = 0;
+      }
+      return meta;
+    } catch (_) {
+      return fallback;
+    }
+  }, [getNudgeStorageKey]);
+
+  const writeNudgeMeta = useCallback((meta) => {
+    const key = getNudgeStorageKey();
+    if (!key) return;
+    try {
+      localStorage.setItem(key, JSON.stringify(meta));
+    } catch (_) {
+      /* ignore */
+    }
+  }, [getNudgeStorageKey]);
+
+  const canShowSubcategoryNudge = useCallback(() => {
+    const meta = readNudgeMeta();
+    const now = Date.now();
+    const inCooldown =
+      Number(meta.dismissedAt) > 0 &&
+      now - Number(meta.dismissedAt) < NUDGE_COOLDOWN_MS;
+    const hitDailyCap = Number(meta.showCount) >= NUDGE_MAX_SHOWS_PER_DAY;
+    return !inCooldown && !hitDailyCap;
+  }, [readNudgeMeta]);
+
+  const markSubcategoryNudgeShown = useCallback(() => {
+    const meta = readNudgeMeta();
+    const nextShowCount = Math.min(
+      Number(meta.showCount) + 1,
+      NUDGE_MAX_SHOWS_PER_DAY
+    );
+    writeNudgeMeta({
+      ...meta,
+      showCount: nextShowCount,
+    });
+  }, [readNudgeMeta, writeNudgeMeta]);
+
+  const hideSubcategoryNudge = useCallback(() => {
+    nudgeVisibleRef.current = false;
+    setShowSubcategoryNudge(false);
+  }, []);
+
+  const maybeShowSubcategoryNudge = useCallback(() => {
+    if (nudgeVisibleRef.current) return;
+    if (!canShowSubcategoryNudge()) {
+      hideSubcategoryNudge();
+      return;
+    }
+    markSubcategoryNudgeShown();
+    nudgeVisibleRef.current = true;
+    setShowSubcategoryNudge(true);
+  }, [canShowSubcategoryNudge, hideSubcategoryNudge, markSubcategoryNudgeShown]);
+
+  const dismissSubcategoryNudge = useCallback(() => {
+    const meta = readNudgeMeta();
+    writeNudgeMeta({
+      ...meta,
+      dismissedAt: Date.now(),
+    });
+    hideSubcategoryNudge();
+  }, [hideSubcategoryNudge, readNudgeMeta, writeNudgeMeta]);
 
   const handleSortChange = (newSortBy) => {
     setSortBy(newSortBy);
@@ -464,10 +596,13 @@ const ListingPage = () => {
     setFocusedSubcategoryIndex(selectedIndex);
 
     requestAnimationFrame(() => {
+      // 'center' clips the first/last chip borders against the scroll container edges; 'nearest' keeps full border visible
+      const inline =
+        selectedIndex <= 0 ? 'start' : selectedIndex >= allSubcategories.length - 1 ? 'end' : 'nearest';
       targetButton.scrollIntoView({
         behavior: 'auto',
-        inline: 'center',
-        block: 'nearest'
+        inline,
+        block: 'nearest',
       });
 
       const container = subcategoryScrollRef.current;
@@ -535,9 +670,98 @@ const ListingPage = () => {
         <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-2/3 relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent dark:via-white/10 animate-shimmer"></div>
         </div>
-        </div>
       </div>
-    );
+    </div>
+  );
+
+  const filteredProducts = products.filter((product) => {
+    const price = product.discountedPrice || product.originalPrice;
+    const rating = product.rating || 0;
+    return price >= priceRange[0] && price <= priceRange[1] && rating >= minRating;
+  });
+
+  const sortedProducts = sortProducts(filteredProducts, sortBy);
+
+  const listingFiltersActive =
+    minRating > 0 || priceRange[0] > 0 || priceRange[1] < maxPrice;
+
+  const headerProductCountLabel = listingFiltersActive
+    ? `${filteredProducts.length} matching`
+    : `${totalProductCount} Products`;
+
+  useEffect(() => {
+    nudgeVisibleRef.current = showSubcategoryNudge;
+  }, [showSubcategoryNudge]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || loading || error) return;
+    if (isSubcategory || !categorySlug || allSubcategories.length === 0) {
+      hideSubcategoryNudge();
+      return;
+    }
+    if (!canShowSubcategoryNudge()) {
+      hideSubcategoryNudge();
+      return;
+    }
+
+    const hideNudgeNearTop = () => {
+      if (window.scrollY <= NUDGE_AUTO_HIDE_SCROLL_TOP_PX) {
+        hideSubcategoryNudge();
+      }
+    };
+
+    let ticking = false;
+    const onScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          hideNudgeNearTop();
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    hideNudgeNearTop();
+
+    const el = nudgeSentinelRef.current;
+    let obs = null;
+    if (el && sortedProducts.length > 0) {
+      obs = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) {
+            maybeShowSubcategoryNudge();
+            return;
+          }
+          if (window.scrollY <= NUDGE_AUTO_HIDE_SCROLL_TOP_PX) {
+            hideSubcategoryNudge();
+            return;
+          }
+          // Sentinel is fully below the viewport — user scrolled back up past the nudge zone
+          if (entry.boundingClientRect.top > window.innerHeight) {
+            hideSubcategoryNudge();
+          }
+        },
+        { root: null, rootMargin: '80px 0px', threshold: 0 }
+      );
+      obs.observe(el);
+    }
+
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (obs) obs.disconnect();
+    };
+  }, [
+    loading,
+    error,
+    isSubcategory,
+    categorySlug,
+    allSubcategories.length,
+    sortedProducts.length,
+    canShowSubcategoryNudge,
+    hideSubcategoryNudge,
+    maybeShowSubcategoryNudge,
+  ]);
 
   if (error) {
     return (
@@ -570,15 +794,6 @@ const ListingPage = () => {
       </div>
     );
   }
-
-  // Filter products by price range and rating
-  const filteredProducts = products.filter(product => {
-    const price = product.discountedPrice || product.originalPrice;
-    const rating = product.rating || 0;
-    return price >= priceRange[0] && price <= priceRange[1] && rating >= minRating;
-  });
-
-  const sortedProducts = sortProducts(filteredProducts, sortBy);
 
   // Quick filter options
   const quickFilters = [
@@ -637,7 +852,7 @@ const ListingPage = () => {
               {/* Subcategory Horizontal Scroll - Mobile Only */}
                 <div 
                   ref={subcategoryScrollRef}
-                  className="flex space-x-2 overflow-x-auto pb-1 scrollbar-hide relative"
+                  className="flex gap-2 overflow-x-auto overflow-y-visible py-1.5 px-2 -mx-2 scrollbar-hide relative"
                   style={{
                     scrollSnapType: 'x mandatory',
                     WebkitOverflowScrolling: 'touch',
@@ -681,10 +896,10 @@ const ListingPage = () => {
                       aria-label={`View ${subcategory.name} subcategory`}
                       aria-pressed={subCategorySlug === subcategory.slug}
                       tabIndex={0}
-                      className={`group flex flex-col items-center p-1.5 rounded-xl border-2 transition-all duration-300 hover:shadow-md active:scale-95 active:shadow-sm flex-shrink-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 ${
+                      className={`group flex flex-col items-center p-1.5 rounded-xl border-2 transition-all duration-300 flex-shrink-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-800 ${
                       subCategorySlug === subcategory.slug
-                          ? 'border-pink-500 dark:border-pink-400 bg-purple-50 dark:bg-purple-900/30'
-                          : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-500'
+                          ? 'border-pink-500 dark:border-pink-400/90 bg-purple-50 dark:bg-purple-900/30 shadow-md shadow-pink-200/35 dark:shadow-pink-900/30'
+                          : 'border-pink-200 dark:border-pink-500/45 bg-white dark:bg-gray-700 shadow-sm shadow-pink-100/45 dark:shadow-black/20 hover:border-pink-300 dark:hover:border-pink-400/60 hover:shadow-md hover:shadow-pink-100/40 dark:hover:shadow-pink-900/30'
                     }`}
                       style={{ scrollSnapAlign: 'start' }}
                   >
@@ -855,7 +1070,7 @@ const ListingPage = () => {
                     </h1>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-sm text-gray-500 dark:text-gray-400 font-inter font-medium">
-                        {products.length} Products
+                        {headerProductCountLabel}
                       </span>
                       <span className="text-gray-400">•</span>
                       <p className="text-xs text-gray-600 dark:text-gray-300 font-inter line-clamp-1">
@@ -1035,7 +1250,7 @@ const ListingPage = () => {
                 </h1>
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <span className="text-xs text-gray-500 dark:text-gray-400 font-inter font-medium">
-                    {filteredProducts.length} Products
+                    {headerProductCountLabel}
                   </span>
                   <span className="text-gray-400 text-xs">•</span>
                   <p className="text-[10px] text-gray-600 dark:text-gray-300 font-inter line-clamp-1 flex-1">
@@ -1047,10 +1262,10 @@ const ListingPage = () => {
 
             {/* Subcategory Navigation */}
             {allSubcategories.length > 0 && (
-              <div className="hidden lg:block pt-4 pb-1.5">
+              <div className="hidden lg:block pt-4 pb-2 overflow-visible">
                 {allSubcategories.length >= 10 ? (
                   // Original circular layout for 10+ subcategories (like "Pick a Cake by Flavor")
-                  <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center justify-between w-full gap-1 px-1 py-1.5 overflow-visible">
                     {allSubcategories.map((subcategory, index) => {
                       // Define border colors based on category names
                       const getBorderColor = (categoryName) => {
@@ -1102,12 +1317,12 @@ const ListingPage = () => {
                           }}
                           aria-label={`View ${subcategory.name} subcategory`}
                           aria-pressed={subCategorySlug === subcategory.slug}
-                          className="flex flex-col items-center space-y-2 flex-1 group cursor-pointer relative active:scale-95 transition-transform duration-150"
+                          className="flex flex-col items-center space-y-2 flex-1 min-w-0 group cursor-pointer relative"
                         >
-                          <div className="w-24 h-24 relative">
+                          <div className="w-24 h-24 relative shrink-0">
                             <div className={`w-full h-full rounded-full overflow-hidden border-2 transition-all duration-200 ${
                             subCategorySlug === subcategory.slug
-                                ? 'border-pink-500 shadow-lg'
+                                ? 'border-pink-500 shadow-lg shadow-pink-500/20 dark:shadow-pink-500/15'
                                 : 'border-gray-300 hover:border-gray-400'
                           }`}>
                             <img
@@ -1136,12 +1351,11 @@ const ListingPage = () => {
                   </div>
                 ) : (
                   // New rectangular layout for fewer than 10 subcategories - in a row
-                  <div className="flex gap-4 w-full">
+                  <div className="flex gap-4 w-full px-1 py-1 overflow-visible">
                     {allSubcategories.map((subcategory, index) => {
                       return (
                         <button
                           key={subcategory.id}
-                            ref={(el) => (subcategoryButtonsRef.current[index] = el)}
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -1159,7 +1373,7 @@ const ListingPage = () => {
                             aria-label={`View ${subcategory.name} subcategory`}
                             aria-pressed={subCategorySlug === subcategory.slug}
                             tabIndex={0}
-                            className={`flex items-center space-x-4 p-4 rounded-xl border-2 transition-all duration-200 group cursor-pointer flex-1 relative active:scale-[0.98] active:shadow-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 ${
+                            className={`flex items-center space-x-4 p-4 rounded-xl border-2 transition-all duration-200 group cursor-pointer flex-1 min-w-0 relative focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 focus:ring-offset-gray-50 dark:focus:ring-offset-gray-900 ${
                             subCategorySlug === subcategory.slug
                                 ? 'border-pink-500 bg-purple-50 shadow-lg'
                                 : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
@@ -1209,22 +1423,60 @@ const ListingPage = () => {
                 <p className="text-sm text-gray-600 dark:text-gray-400 font-inter">Loading products...</p>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-2.5 lg:gap-4">
-              {[...Array(10)].map((_, i) => (
+              {[...Array(8)].map((_, i) => (
                 <ProductCardSkeleton key={i} />
               ))}
               </div>
             </div>
           ) : sortedProducts.length > 0 ? (
+            <>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-2.5 lg:gap-4">
-              {sortedProducts.map((product) => (
-                <ListingProductCard
-                  key={product.id}
-                  product={product}
-                  formatPrice={formatPrice}
-                  currentSubcategoryName={isSubcategory ? currentData?.name : null}
-                />
-              ))}
+              {sortedProducts.flatMap((product, index) => {
+                const cells = [
+                  <ListingProductCard
+                    key={product.id}
+                    product={product}
+                    formatPrice={formatPrice}
+                    currentSubcategoryName={isSubcategory ? currentData?.name : null}
+                    categorySlug={categorySlug}
+                  />,
+                ];
+                const nudgeIndex =
+                  sortedProducts.length > 8 ? 7 : Math.max(0, sortedProducts.length - 1);
+                if (!isSubcategory && index === nudgeIndex) {
+                  cells.push(
+                    <div
+                      key="subcategory-nudge-sentinel"
+                      ref={nudgeSentinelRef}
+                      className="col-span-2 sm:col-span-3 md:col-span-4 lg:col-span-5 h-px w-full pointer-events-none"
+                      aria-hidden
+                    />
+                  );
+                }
+                return cells;
+              })}
             </div>
+
+            {hasMoreProducts && (
+              <div className="flex justify-center mt-6 mb-4">
+                <button
+                  type="button"
+                  onClick={loadMoreProducts}
+                  disabled={loadingMore}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-pink-500 hover:bg-pink-600 disabled:opacity-60 disabled:pointer-events-none text-white text-sm font-semibold font-inter shadow-md transition-colors"
+                >
+                  {loadingMore ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Loading…
+                    </>
+                  ) : (
+                    <>Load more</>
+                  )}
+                </button>
+              </div>
+            )}
+            </>
           ) : (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -1273,35 +1525,39 @@ const ListingPage = () => {
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.2 }}
                 onClick={() => setShowBottomSheet(false)}
-                className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40 bottom-sheet-backdrop lg:hidden"
+                className="fixed inset-0 z-[50] bg-black/30 backdrop-blur-sm bottom-sheet-backdrop lg:hidden"
               />
               
-              {/* Bottom Sheet */}
+              {/* Bottom Sheet — full width, flush to viewport bottom (footer hidden while open) */}
               <motion.div
                 ref={bottomSheetRef}
                 initial={{ y: '100%' }}
                 animate={{ y: 0 }}
                 exit={{ y: '100%' }}
-                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="fixed bottom-16 left-0 right-0 bg-white dark:bg-gray-800 rounded-t-2xl shadow-2xl z-[45] max-h-[calc(85vh-4rem)] overflow-y-auto lg:hidden"
+                transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+                className="fixed inset-x-0 bottom-0 z-[55] flex max-h-[100dvh] min-h-0 flex-col lg:hidden pointer-events-none"
               >
+                <div className="pointer-events-auto flex max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden rounded-t-2xl border-x border-t border-gray-200/90 bg-white shadow-[0_-12px_40px_rgba(0,0,0,0.12)] dark:border-gray-700 dark:bg-gray-800 dark:shadow-black/50">
                 {/* Header */}
-                <div className="sticky top-0 bg-white/95 dark:bg-gray-800/95 border-b border-gray-200/70 dark:border-gray-700 px-4 py-3 flex items-center justify-between z-10 backdrop-blur">
-                  <div className="flex items-center gap-2">
-                    <SlidersHorizontal className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                    <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 font-poppins">
-                      Filters
-                    </h2>
+                <div className="flex-shrink-0 border-b border-gray-200/70 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <SlidersHorizontal className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                      <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 font-poppins">
+                        Filters
+                      </h2>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowBottomSheet(false)}
+                      className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors active:scale-95"
+                    >
+                      <X className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setShowBottomSheet(false)}
-                    className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors active:scale-95"
-                  >
-                    <X className="w-4 h-4 text-gray-600 dark:text-gray-300" />
-                  </button>
                 </div>
                 
-                <div className="px-4 py-3 space-y-4 pb-4 bg-white dark:bg-gray-800">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 space-y-4 bg-white dark:bg-gray-800">
                   {/* Sort Options - Soft Design */}
                   <div className="pt-1">
                     <h3 className="text-[11px] font-semibold text-gray-700 dark:text-gray-300 mb-2 font-poppins uppercase tracking-wide">
@@ -1454,17 +1710,19 @@ const ListingPage = () => {
                       ))}
                     </div>
                   </div>
+                </div>
 
-                  {/* Apply Button - Soft Gradient */}
-                  <div className="sticky bottom-0 -mx-4 px-4 pt-3 pb-3 bg-white/95 dark:bg-gray-800/95 border-t border-gray-200/70 dark:border-gray-700 backdrop-blur">
-                    <button
-                      onClick={() => setShowBottomSheet(false)}
-                      className="w-full py-3 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white rounded-xl font-inter text-sm font-semibold transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-md"
-                    >
-                      <Sparkles className="w-4 h-4" />
-                      Apply Filters
-                    </button>
-                  </div>
+                {/* Apply — pinned to bottom of sheet (not inside scroll) */}
+                <div className="flex-shrink-0 border-t border-gray-200/70 bg-white px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] dark:border-gray-700 dark:bg-gray-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowBottomSheet(false)}
+                    className="w-full py-3 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white rounded-lg font-inter text-sm font-semibold transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-md"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    Apply Filters
+                  </button>
+                </div>
                 </div>
               </motion.div>
             </>
@@ -1493,8 +1751,69 @@ const ListingPage = () => {
         {/* Website Footer */}
         <Footer />
         
+        <AnimatePresence>
+          {showSubcategoryNudge && !showBottomSheet && !isSubcategory && allSubcategories.length > 0 && (
+            <motion.div
+              initial={{ y: 48, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 48, opacity: 0 }}
+              transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+              className="lg:hidden fixed left-3 right-3 z-[44] bottom-[4.5rem] max-w-lg mx-auto"
+              role="dialog"
+              aria-label="Narrow by subcategory"
+            >
+              <div className="rounded-2xl border border-pink-200/80 dark:border-pink-800/80 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md shadow-xl px-3 py-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 font-poppins">
+                      Narrow your picks?
+                    </p>
+                    <p className="text-[11px] text-gray-600 dark:text-gray-400 font-inter mt-0.5">
+                      Tap a category to see a focused list.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={dismissSubcategoryNudge}
+                    className="shrink-0 w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                    aria-label="Dismiss"
+                  >
+                    <X className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+                  </button>
+                </div>
+                <div
+                  className="flex gap-2 overflow-x-auto scrollbar-hide mt-2 pb-0.5 -mx-0.5 px-0.5"
+                  style={{ WebkitOverflowScrolling: 'touch' }}
+                >
+                  {allSubcategories.slice(0, 10).map((sub) => (
+                    <button
+                      key={sub.id}
+                      type="button"
+                      onClick={() => {
+                        dismissSubcategoryNudge();
+                        handleSubcategoryNavigation(sub.slug);
+                      }}
+                      className="shrink-0 flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full bg-pink-50 dark:bg-pink-900/25 border border-pink-200 dark:border-pink-800 text-[11px] font-medium text-pink-700 dark:text-pink-300"
+                    >
+                      <span className="w-7 h-7 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800">
+                        <img
+                          src={sub.image}
+                          alt=""
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                      </span>
+                      {sub.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Mobile Footer */}
-        <MobileFooter cartItemCount={3} walletAmount={1250} wishlistCount={5} />
+        <MobileFooter cartItemCount={3} walletAmount={1250} wishlistCount={5} hidden={showBottomSheet} />
       </div>
     </>
   );

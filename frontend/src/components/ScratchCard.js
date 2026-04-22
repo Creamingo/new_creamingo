@@ -27,6 +27,25 @@ const ScratchCard = ({ scratchCard, onRevealed, onCredited, showAutoCreditMessag
   const shineAnimationRef = useRef(null);
   const textureCanvasRef = useRef(null);
   const isRevealingRef = useRef(false); // Track if reveal is in progress to prevent multiple calls
+  const isRevealedOrCredited = isRevealed || scratchCard.status === 'revealed' || scratchCard.status === 'credited';
+  const orderContextId = scratchCard.orderNumber || (scratchCard.orderId ? `#${scratchCard.orderId}` : null);
+
+  const formatCompactDate = (dateString) => {
+    if (!dateString) return null;
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return null;
+      return date.toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  const orderContextDate = formatCompactDate(scratchCard.orderPlacedAt || scratchCard.createdAt);
 
   // Helper function to get point from event - fixed for proper coordinate calculation
   const getPointFromEvent = (e) => {
@@ -1164,15 +1183,17 @@ const ScratchCard = ({ scratchCard, onRevealed, onCredited, showAutoCreditMessag
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 sm:p-5 border border-gray-200 dark:border-gray-700 shadow-lg h-full flex flex-col overflow-hidden">
+    <div className="group bg-white/95 dark:bg-gray-800/95 rounded-3xl p-2.5 sm:p-3 border border-gray-200/80 dark:border-gray-700 shadow-[0_8px_20px_rgba(0,0,0,0.08)] dark:shadow-[0_10px_22px_rgba(0,0,0,0.35)] h-full flex flex-col overflow-hidden transition-all duration-300 hover:shadow-[0_10px_24px_rgba(236,72,153,0.16)] dark:hover:shadow-[0_12px_24px_rgba(236,72,153,0.18)]">
 
       {/* Scratch Card Area - Trendy Modern Design */}
-      <div className="relative mb-3 flex-1">
+      <div className="relative mb-2.5 flex-1">
         <div 
           ref={containerRef}
-          className="relative rounded-2xl overflow-hidden h-full flex items-center justify-center min-h-[140px] sm:min-h-[180px] trendy-gradient-bg"
+          className="relative rounded-2xl overflow-hidden h-full flex items-center justify-center min-h-[138px] sm:min-h-[160px] trendy-gradient-bg border border-white/30 dark:border-white/10"
           style={{
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #4facfe 75%, #00f2fe 100%)',
+            background: isRevealedOrCredited
+              ? 'linear-gradient(135deg, #f8ecff 0%, #fdeaf4 40%, #ffeef1 100%)'
+              : 'linear-gradient(135deg, #7c3aed 0%, #a855f7 30%, #ec4899 68%, #fb7185 100%)',
             backgroundSize: '400% 400%',
             position: 'relative',
             width: '100%',
@@ -1190,7 +1211,7 @@ const ScratchCard = ({ scratchCard, onRevealed, onCredited, showAutoCreditMessag
           `}} />
           
           {/* Trendy pattern overlay */}
-          <div className="absolute inset-0 opacity-10" style={{
+          <div className={`absolute inset-0 ${isRevealedOrCredited ? 'opacity-[0.07]' : 'opacity-10'}`} style={{
             backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)',
             backgroundSize: '24px 24px'
           }} />
@@ -1221,22 +1242,33 @@ const ScratchCard = ({ scratchCard, onRevealed, onCredited, showAutoCreditMessag
                 </div>
                 {/* Trendy amount display with glow effect */}
                 <div className="relative">
-                  <div className="text-4xl sm:text-5xl font-black mb-2" style={{
-                    background: 'linear-gradient(135deg, #fff 0%, #f0f0f0 50%, #fff 100%)',
+                  <div className="text-4xl sm:text-5xl font-black mb-1.5" style={{
+                    background: isRevealedOrCredited
+                      ? 'linear-gradient(135deg, #db2777 0%, #9333ea 100%)'
+                      : 'linear-gradient(135deg, #fff 0%, #f0f0f0 50%, #fff 100%)',
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
                     backgroundClip: 'text',
-                    textShadow: '0 0 30px rgba(255,255,255,0.5)',
-                    filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))'
+                    textShadow: isRevealedOrCredited ? 'none' : '0 0 30px rgba(255,255,255,0.5)',
+                    filter: isRevealedOrCredited ? 'none' : 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))'
                   }}>
                     ₹{Math.round(revealedAmount || scratchCard.amount)}
                   </div>
-                  <p className="text-sm sm:text-base font-bold text-white/90 drop-shadow-lg">Cashback Unlocked! 🎉</p>
+                  <p className={`text-sm sm:text-base font-bold ${isRevealedOrCredited ? 'text-pink-600' : 'text-white/90 drop-shadow-lg'}`}>
+                    Cashback Unlocked! 🎉
+                  </p>
+                  {(orderContextId || orderContextDate) && (
+                    <div className="mt-2 inline-flex flex-col items-start gap-0.5 rounded-lg border border-pink-200/80 bg-white/75 px-2.5 py-1.5 text-[10px] sm:text-[11px] text-gray-700">
+                      {orderContextId && <span className="font-semibold">Order: {orderContextId}</span>}
+                      {orderContextDate && <span>Placed: {orderContextDate}</span>}
+                    </div>
+                  )}
                 </div>
               </motion.div>
             ) : (
-              <div className="text-4xl sm:text-5xl font-black text-white/20 drop-shadow-lg">
-                ₹?
+              <div className="text-center">
+                <div className="text-3xl sm:text-4xl font-black text-white/25 drop-shadow-lg">₹?</div>
+                <p className="text-[11px] sm:text-xs text-white/70 font-semibold tracking-wide mt-0.5">Tap & Scratch</p>
               </div>
             )}
           </div>
@@ -1352,15 +1384,15 @@ const ScratchCard = ({ scratchCard, onRevealed, onCredited, showAutoCreditMessag
       </div>
 
       {/* Trendy Action Buttons */}
-      <div className="space-y-2 mt-auto">
+      <div className="space-y-1.5 mt-auto">
         {scratchCard.status === 'pending' && (
-          <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 dark:from-blue-900/30 dark:to-purple-900/30 border border-blue-300/50 dark:border-blue-700/50 rounded-xl p-3 backdrop-blur-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                <Gift className="w-4 h-4 text-white" />
+          <div className="bg-gradient-to-r from-indigo-500/10 to-pink-500/10 dark:from-indigo-900/30 dark:to-pink-900/25 border border-indigo-200/70 dark:border-indigo-700/50 rounded-xl p-2.5 backdrop-blur-sm">
+            <div className="flex items-center gap-1.5">
+              <div className="w-7 h-7 bg-gradient-to-br from-indigo-500 to-pink-500 rounded-md flex items-center justify-center flex-shrink-0 shadow-sm">
+                <Gift className="w-3.5 h-3.5 text-white" />
               </div>
-              <p className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-200 leading-tight">
-                Scratch to reveal! Auto-credited after delivery.
+              <p className="text-[11px] sm:text-xs font-semibold text-gray-700 dark:text-gray-200 leading-tight">
+                Scratch to reveal cashback. Auto-credited after delivery.
               </p>
             </div>
           </div>
@@ -1376,7 +1408,7 @@ const ScratchCard = ({ scratchCard, onRevealed, onCredited, showAutoCreditMessag
           ) : (
             <button
               onClick={handleCredit}
-              className="w-full bg-gradient-to-r from-pink-600 via-rose-500 to-pink-600 text-white py-2.5 sm:py-3 px-4 sm:px-5 rounded-xl text-sm sm:text-base font-bold hover:from-pink-700 hover:via-rose-600 hover:to-pink-700 transition-all shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
+              className="w-full bg-gradient-to-r from-pink-600 via-rose-500 to-pink-600 text-white py-2 sm:py-2.5 px-3 sm:px-4 rounded-xl text-sm font-bold hover:from-pink-700 hover:via-rose-600 hover:to-pink-700 transition-all shadow-md hover:shadow-lg transform hover:scale-[1.01] active:scale-[0.98]"
               style={{
                 backgroundSize: '200% 200%',
                 animation: 'gradientShift 3s ease infinite'
@@ -1389,9 +1421,9 @@ const ScratchCard = ({ scratchCard, onRevealed, onCredited, showAutoCreditMessag
 
         {scratchCard.status === 'credited' && (
           <div className="text-center">
-            <div className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 dark:from-emerald-900/30 dark:to-teal-900/30 border border-emerald-300/50 dark:border-emerald-700/50 rounded-xl px-4 py-2.5 backdrop-blur-sm">
-              <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <span className="text-sm sm:text-base font-bold text-emerald-700 dark:text-emerald-300">
+            <div className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 dark:from-emerald-900/30 dark:to-teal-900/30 border border-emerald-300/50 dark:border-emerald-700/50 rounded-xl px-3 py-2 backdrop-blur-sm">
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
                 ₹{Math.round(scratchCard.amount)} credited
               </span>
             </div>

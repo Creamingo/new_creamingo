@@ -3,14 +3,16 @@
 import React, { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { Heart, Star } from 'lucide-react'
-import { generateDynamicTitle } from '../utils/dynamicTitle'
+import { generateDynamicTitle, shouldUseDynamicListingTitle } from '../utils/dynamicTitle'
 import { useWishlist } from '../contexts/WishlistContext'
 import DeliveryBadge from './DeliveryBadge'
+import { formatListingSizeForListingCard } from '../utils/listingProductSizeLabel'
 
 const ListingProductCard = ({ 
   product, 
   formatPrice, 
-  currentSubcategoryName // New prop for dynamic title generation
+  currentSubcategoryName,
+  categorySlug
 }) => {
   const { isInWishlist, toggleWishlist } = useWishlist();
   const isProductInWishlist = isInWishlist(product.id);
@@ -18,12 +20,20 @@ const ListingProductCard = ({
   const [imageLoaded, setImageLoaded] = useState(false);
   const cardRef = useRef(null);
   
-  // Generate dynamic title based on current subcategory
-  const displayTitle = currentSubcategoryName 
+  const useFlavorStyleTitle =
+    Boolean(currentSubcategoryName) && shouldUseDynamicListingTitle(categorySlug);
+
+  const displayTitle = useFlavorStyleTitle
     ? generateDynamicTitle(product.name, currentSubcategoryName)
     : product.name;
     
-  const discountPercent = Math.round(((product.originalPrice - product.discountedPrice) / product.originalPrice) * 100);
+  const discountPercent =
+    product.originalPrice > 0
+      ? Math.round(
+          ((product.originalPrice - product.discountedPrice) / product.originalPrice) * 100
+        )
+      : 0;
+  const listingSizeLine = formatListingSizeForListingCard(product, { categorySlug });
 
   // Intersection Observer for lazy loading
   useEffect(() => {
@@ -173,14 +183,22 @@ const ListingProductCard = ({
             </div>
           </div>
 
-          {/* Price Section - Dynamic Pricing */}
-          <div className="flex items-baseline space-x-1.5 lg:space-x-2">
+          {/* Price Section - Dynamic Pricing + size/pack aligned to this price */}
+          <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 lg:gap-x-2">
             <span className="font-poppins font-bold text-sm lg:text-base text-gray-800 dark:text-gray-100">
               {formatPrice(product.discountedPrice)}
             </span>
             <span className="font-inter text-[9px] lg:text-[10px] text-gray-400 dark:text-gray-500 line-through">
               {formatPrice(product.originalPrice)}
             </span>
+            {listingSizeLine ? (
+              <span
+                className="font-inter text-[9px] lg:text-[10px] text-gray-500 dark:text-gray-400 font-medium max-w-[10rem] sm:max-w-[11rem] lg:max-w-none truncate"
+                title={listingSizeLine}
+              >
+                · {listingSizeLine}
+              </span>
+            ) : null}
           </div>
         </div>
       </div>

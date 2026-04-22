@@ -4,7 +4,8 @@ import React, { useState } from 'react';
 import { X, Plus, Minus, Trash2, ShoppingBag, Package, Sparkles } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { formatPrice } from '../utils/priceFormatter';
-import { resolveImageUrl } from '../utils/imageUrl';
+import { resolveEntityImageUrl } from '../utils/imageUrl';
+import ConfirmModal from './ConfirmModal';
 
 const CartDisplay = ({ isOpen, onClose }) => {
   const { 
@@ -17,16 +18,43 @@ const CartDisplay = ({ isOpen, onClose }) => {
   } = useCart();
 
   const [isClearing, setIsClearing] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Delete',
+    cancelLabel: 'Cancel',
+    variant: 'danger',
+    onConfirm: null
+  });
+
+  const openConfirmModal = (options) => {
+    setConfirmModal(prev => ({ ...prev, open: true, ...options }));
+  };
+  const closeConfirmModal = () => {
+    setConfirmModal(prev => ({ ...prev, open: false, onConfirm: null }));
+  };
+  const handleConfirmModalConfirm = () => {
+    confirmModal.onConfirm?.();
+    closeConfirmModal();
+  };
 
   const handleClearCart = async () => {
-    if (window.confirm('Are you sure you want to clear your cart?')) {
-      setIsClearing(true);
-      try {
-        clearCart();
-      } finally {
-        setIsClearing(false);
+    openConfirmModal({
+      title: 'Clear cart?',
+      message: 'Are you sure you want to clear your cart? All items will be removed.',
+      confirmLabel: 'Clear cart',
+      cancelLabel: 'Cancel',
+      variant: 'danger',
+      onConfirm: () => {
+        setIsClearing(true);
+        try {
+          clearCart();
+        } finally {
+          setIsClearing(false);
+        }
       }
-    }
+    });
   };
 
   const handleQuantityChange = (itemId, newQuantity) => {
@@ -34,9 +62,14 @@ const CartDisplay = ({ isOpen, onClose }) => {
   };
 
   const handleRemoveItem = (itemId) => {
-    if (window.confirm('Remove this item from cart?')) {
-      removeFromCart(itemId);
-    }
+    openConfirmModal({
+      title: 'Remove item?',
+      message: 'Remove this item from cart?',
+      confirmLabel: 'Remove',
+      cancelLabel: 'Cancel',
+      variant: 'danger',
+      onConfirm: () => removeFromCart(itemId)
+    });
   };
 
   const cartSummary = getCartSummary();
@@ -91,7 +124,7 @@ const CartDisplay = ({ isOpen, onClose }) => {
                     <div className="flex items-start gap-4">
                       <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
                         <img
-                          src={resolveImageUrl(item.product.image_url)}
+                          src={resolveEntityImageUrl(item.product)}
                           alt={item.product.name}
                           className="w-full h-full object-cover"
                         />
@@ -265,6 +298,17 @@ const CartDisplay = ({ isOpen, onClose }) => {
           </div>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmModal.open}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmLabel={confirmModal.confirmLabel}
+        cancelLabel={confirmModal.cancelLabel}
+        variant={confirmModal.variant}
+        onConfirm={handleConfirmModalConfirm}
+        onCancel={closeConfirmModal}
+      />
     </div>
   );
 };

@@ -39,45 +39,45 @@ const Toast = ({ id, type, title, message, duration = 3000, onClose, actionButto
   const getIcon = () => {
     switch (type) {
       case 'success':
-        return <CheckCircle className="w-5 h-5 text-green-500" />;
+        return <CheckCircle className="w-5 h-5 text-green-500 dark:text-green-400" />;
       case 'error':
-        return <XCircle className="w-5 h-5 text-red-500" />;
+        return <XCircle className="w-5 h-5 text-red-500 dark:text-red-400" />;
       case 'warning':
-        return <AlertCircle className="w-5 h-5 text-yellow-500" />;
+        return <AlertCircle className="w-5 h-5 text-yellow-500 dark:text-yellow-400" />;
       case 'info':
-        return <Info className="w-5 h-5 text-blue-500" />;
+        return <Info className="w-5 h-5 text-pink-500 dark:text-pink-400" />;
       default:
-        return <Info className="w-5 h-5 text-blue-500" />;
+        return <Info className="w-5 h-5 text-pink-500 dark:text-pink-400" />;
     }
   };
 
   const getBackgroundColor = () => {
     switch (type) {
       case 'success':
-        return 'bg-green-50 border-green-200';
+        return 'bg-green-50 dark:bg-emerald-950/95 border-green-200 dark:border-emerald-700/80';
       case 'error':
-        return 'bg-red-50 border-red-200';
+        return 'bg-red-50 dark:bg-red-950/95 border-red-200 dark:border-red-700/80';
       case 'warning':
-        return 'bg-yellow-50 border-yellow-200';
+        return 'bg-yellow-50 dark:bg-amber-950/95 border-yellow-200 dark:border-amber-700/80';
       case 'info':
-        return 'bg-blue-50 border-blue-200';
+        return 'bg-pink-50 dark:bg-fuchsia-950/95 border-pink-200 dark:border-fuchsia-700/80';
       default:
-        return 'bg-gray-50 border-gray-200';
+        return 'bg-gray-50 dark:bg-gray-900/95 border-gray-200 dark:border-gray-700/80';
     }
   };
 
   const getTextColor = () => {
     switch (type) {
       case 'success':
-        return 'text-green-800';
+        return 'text-green-800 dark:text-emerald-100';
       case 'error':
-        return 'text-red-800';
+        return 'text-red-800 dark:text-red-100';
       case 'warning':
-        return 'text-yellow-800';
+        return 'text-yellow-800 dark:text-amber-100';
       case 'info':
-        return 'text-blue-800';
+        return 'text-pink-800 dark:text-fuchsia-100';
       default:
-        return 'text-gray-800';
+        return 'text-gray-800 dark:text-gray-200';
     }
   };
 
@@ -88,7 +88,9 @@ const Toast = ({ id, type, title, message, duration = 3000, onClose, actionButto
         border 
         rounded-lg 
         p-4 
-        shadow-lg 
+        shadow-lg dark:shadow-xl dark:shadow-black/30 
+        ring-1 ring-black/5 dark:ring-white/10
+        backdrop-blur-md
         mb-4 
         min-w-[300px] 
         max-w-[400px]
@@ -108,7 +110,7 @@ const Toast = ({ id, type, title, message, duration = 3000, onClose, actionButto
             {title}
           </p>
           {message && (
-            <p className={`text-sm mt-1 ${getTextColor()} opacity-90`}>
+            <p className={`text-sm mt-1 ${getTextColor()} opacity-90 dark:opacity-95`}>
               {message}
             </p>
           )}
@@ -120,7 +122,8 @@ const Toast = ({ id, type, title, message, duration = 3000, onClose, actionButto
         </div>
         <button
           onClick={handleClose}
-          className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+          className="flex-shrink-0 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors"
+          aria-label="Dismiss"
         >
           <X className="w-4 h-4" />
         </button>

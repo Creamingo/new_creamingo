@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { Star, ThumbsUp, MessageCircle, Camera, Send, Filter, SortAsc, ChevronDown, ChevronUp, X } from 'lucide-react';
 import Image from 'next/image';
 import productApi from '../../../../api/productApi';
@@ -194,7 +195,7 @@ const CategorySelector = ({ selectedCategories, onCategoryToggle, categories, ca
   );
 };
 
-const CustomerReviews = ({ productId }) => {
+const CustomerReviews = ({ productId, onPdpReviewOverlayChange }) => {
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showReviewsList, setShowReviewsList] = useState(false);
@@ -334,8 +335,17 @@ const CustomerReviews = ({ productId }) => {
         const data = await productApi.getProductReviews(productId, 1, 10);
         const list = data?.data?.reviews || [];
         setReviews(list.length ? list : []);
+        const apiAvg = Number(data?.data?.avg_rating);
+        const avgFromPage =
+          list.length > 0
+            ? Math.round(
+                (list.reduce((sum, r) => sum + Number(r.rating || 0), 0) / list.length) * 10
+              ) / 10
+            : 0;
+        const averageRating =
+          Number.isFinite(apiAvg) && apiAvg > 0 ? apiAvg : avgFromPage;
         setOverallStats({
-          averageRating: data?.data?.avg_rating || 0,
+          averageRating,
           totalReviews: data?.data?.pagination?.total || list.length || 0,
           ratingBreakdown: data?.data?.ratingBreakdown || {
             taste: 0,
@@ -371,6 +381,23 @@ const CustomerReviews = ({ productId }) => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showSortDropdown, showSortDropdownModal]);
+
+  useEffect(() => {
+    if (!showReviewsModal && !showReviewFormModal) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [showReviewsModal, showReviewFormModal]);
+
+  useEffect(() => {
+    const open = Boolean(showReviewsModal || showReviewFormModal);
+    onPdpReviewOverlayChange?.(open);
+    return () => {
+      onPdpReviewOverlayChange?.(false);
+    };
+  }, [showReviewsModal, showReviewFormModal, onPdpReviewOverlayChange]);
 
   const handleSortChange = (value) => {
     setSortBy(value);
@@ -460,6 +487,35 @@ const CustomerReviews = ({ productId }) => {
       </div>
     </div>
   );
+
+  /** Compact single-row breakdown for the All Reviews sheet / modal */
+  const renderRatingBarSheet = (label, rating, emoji, barGradient) => {
+    const r = Math.min(5, Math.max(0, Number(rating) || 0));
+    const pct = (r / 5) * 100;
+    return (
+      <div className="flex items-center gap-2 border-b border-rose-100/40 py-2 last:border-0 dark:border-gray-600/35">
+        <div
+          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-white text-sm shadow-sm ring-1 ring-rose-100/60 dark:bg-gray-700/50 dark:ring-gray-600/50"
+          aria-hidden
+        >
+          {emoji}
+        </div>
+        <span className="max-w-[34%] flex-shrink-0 truncate text-[11px] font-semibold leading-tight text-gray-800 dark:text-gray-100 sm:max-w-[9rem]">
+          {label}
+        </span>
+        <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-gray-100 ring-1 ring-black/[0.04] dark:bg-gray-600/70 dark:ring-white/[0.05]">
+          <div
+            className={`h-full rounded-full bg-gradient-to-r ${barGradient} shadow-[0_0_10px_-2px_rgba(244,63,94,0.4)] transition-all duration-700 ease-out`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <span className="w-9 flex-shrink-0 text-right text-[11px] font-bold tabular-nums text-rose-600 dark:text-rose-400">
+          {r.toFixed(1)}
+          <span className="font-medium text-gray-400 dark:text-gray-500">/5</span>
+        </span>
+      </div>
+    );
+  };
 
   const handleOverallRatingChange = (rating) => {
     // Reset submitted state when user starts rating again
@@ -1199,109 +1255,185 @@ const CustomerReviews = ({ productId }) => {
         </div>
       </div>
 
-      {/* Mobile Reviews Modal */}
+      {/* Reviews modal: max-lg = bottom sheet (aligns with JS open below 1024px); lg+ = centered */}
       {showReviewsModal && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 dark:bg-black/80 backdrop-blur-sm" onClick={() => setShowReviewsModal(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-t-3xl sm:rounded-2xl shadow-2xl dark:shadow-black/50 w-full max-w-4xl h-[80vh] sm:max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">All Reviews ({overallStats.totalReviews})</h3>
+        <div className="fixed inset-0 z-[65] lg:z-50 pointer-events-none">
+          <div
+            role="presentation"
+            className="pointer-events-auto absolute inset-0 bg-black/50 backdrop-blur-[2px] lg:hidden"
+            onClick={() => setShowReviewsModal(false)}
+          />
+          <div
+            role="presentation"
+            className="pointer-events-auto absolute inset-0 hidden bg-black/60 backdrop-blur-sm lg:block dark:bg-black/80"
+            onClick={() => setShowReviewsModal(false)}
+          />
+          <motion.div
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+            className="pointer-events-auto absolute bottom-0 left-0 right-0 flex max-h-[min(88dvh,calc(100dvh-env(safe-area-inset-bottom,0px)))] flex-col overflow-hidden rounded-t-[1.25rem] bg-white pb-[env(safe-area-inset-bottom,0px)] shadow-[0_-12px_48px_-8px_rgba(0,0,0,0.14)] ring-1 ring-black/[0.06] max-lg:bg-gradient-to-b max-lg:from-rose-50/95 max-lg:via-white max-lg:to-white dark:bg-gray-800 dark:shadow-[0_-12px_48px_-8px_rgba(0,0,0,0.55)] dark:ring-white/10 dark:max-lg:from-gray-800 dark:max-lg:via-gray-800 dark:max-lg:to-gray-900 lg:bottom-auto lg:left-1/2 lg:top-1/2 lg:h-[80vh] lg:max-h-[90vh] lg:w-[calc(100%-2rem)] lg:max-w-4xl lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-2xl lg:pb-0 lg:shadow-2xl lg:ring-0 lg:border lg:border-gray-200 lg:dark:border-gray-700"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Bottom-sheet affordance (mobile / tablet) */}
+            <div className="flex justify-center pt-1.5 pb-0.5 lg:hidden" aria-hidden>
+              <div className="h-1 w-10 rounded-full bg-gray-300/90 dark:bg-gray-500/80" />
+            </div>
+
+            {/* Header */}
+            <div className="flex items-start justify-between gap-2 px-4 pb-1.5 pt-0 lg:px-6 lg:pb-2 lg:pt-3">
+              <div className="min-w-0 pr-1">
+                <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-rose-500 dark:text-rose-400">
+                  Customer voices
+                </p>
+                <h3 className="text-lg font-bold leading-tight tracking-tight text-gray-900 dark:text-gray-100 lg:text-xl">
+                  All reviews
+                </h3>
+                <p className="mt-0.5 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
+                  {overallStats.totalReviews}{' '}
+                  {overallStats.totalReviews === 1 ? 'rating' : 'ratings'}
+                  <span className="text-gray-300 dark:text-gray-600"> · </span>
+                  Avg{' '}
+                  <span className="font-semibold text-gray-700 dark:text-gray-200">
+                    {overallStats.averageRating ? overallStats.averageRating.toFixed(1) : '—'}
+                  </span>
+                  {overallStats.averageRating ? (
+                    <span className="text-gray-400 dark:text-gray-500">/5</span>
+                  ) : null}
+                </p>
+              </div>
               <button
+                type="button"
                 onClick={() => setShowReviewsModal(false)}
-                className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-all duration-200 hover:scale-110 shadow-sm"
+                className="-mr-1 flex-shrink-0 rounded-full p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100"
                 aria-label="Close reviews modal"
               >
-                <X className="w-5 h-5" />
+                <X className="h-5 w-5" strokeWidth={2} />
               </button>
             </div>
 
             {/* Modal Content - Scrollable */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+            <div className="flex min-h-0 flex-1 flex-col space-y-3 overflow-y-auto overscroll-contain px-4 pb-4 pt-1 lg:space-y-4 lg:px-6 lg:pb-5 lg:pt-2">
               {/* Rating Breakdown */}
-              <div className="bg-gray-50/50 dark:bg-gray-700/30 rounded-xl border border-gray-200/60 dark:border-gray-600/60 p-4">
-                <h4 className="text-base font-bold text-gray-900 dark:text-gray-100 mb-4">Rating Breakdown</h4>
-            <div className="space-y-1">
-              {renderRatingBar('Taste', overallStats.ratingBreakdown.taste, '🍰')}
-              {renderRatingBar('Presentation', overallStats.ratingBreakdown.presentation, '🎂')}
-              {renderRatingBar('Freshness', overallStats.ratingBreakdown.freshness, '🧁')}
-              {renderRatingBar('Value for Money', overallStats.ratingBreakdown.valueForMoney, '💰')}
-              {renderRatingBar('Delivery Experience', overallStats.ratingBreakdown.deliveryExperience, '🚚')}
-            </div>
-          </div>
+              <div className="rounded-xl bg-white/80 p-2.5 shadow-[0_2px_20px_-4px_rgba(244,63,94,0.1)] ring-1 ring-rose-100/70 backdrop-blur-sm dark:bg-gray-800/40 dark:shadow-none dark:ring-rose-900/25 lg:p-3">
+                <div className="mb-0.5 flex items-baseline justify-between gap-2 px-0.5">
+                  <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100 lg:text-sm">Rating breakdown</h4>
+                  <span className="text-[9px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                    By category
+                  </span>
+                </div>
+                <div className="mt-1">
+                  {renderRatingBarSheet(
+                    'Taste',
+                    overallStats.ratingBreakdown.taste,
+                    '🍰',
+                    'from-amber-400 via-orange-400 to-rose-500'
+                  )}
+                  {renderRatingBarSheet(
+                    'Presentation',
+                    overallStats.ratingBreakdown.presentation,
+                    '🎂',
+                    'from-pink-400 via-rose-500 to-fuchsia-600'
+                  )}
+                  {renderRatingBarSheet(
+                    'Freshness',
+                    overallStats.ratingBreakdown.freshness,
+                    '🧁',
+                    'from-teal-400 via-emerald-400 to-cyan-500'
+                  )}
+                  {renderRatingBarSheet(
+                    'Value for Money',
+                    overallStats.ratingBreakdown.valueForMoney,
+                    '💰',
+                    'from-violet-400 via-purple-500 to-fuchsia-500'
+                  )}
+                  {renderRatingBarSheet(
+                    'Delivery Experience',
+                    overallStats.ratingBreakdown.deliveryExperience,
+                    '🚚',
+                    'from-sky-400 via-blue-500 to-indigo-600'
+                  )}
+                </div>
+              </div>
 
               {/* Sort Options */}
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Sort by:</span>
-                
-                {/* Custom Sort Dropdown */}
-                <div className="relative sort-dropdown-modal-container">
+              <div className="flex flex-row items-center gap-2">
+                <span className="flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  Sort
+                </span>
+                <div className="relative min-w-0 flex-1 sort-dropdown-modal-container sm:ml-auto sm:max-w-[220px]">
                   <button
+                    type="button"
                     onClick={() => setShowSortDropdownModal(!showSortDropdownModal)}
-                    className="flex items-center justify-between h-10 min-w-[160px] bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl px-3 hover:bg-gray-50 dark:hover:bg-gray-600 hover:border-gray-400 dark:hover:border-gray-500 transition-all duration-200 cursor-pointer shadow-sm hover:shadow"
+                    className="flex h-9 w-full items-center justify-between gap-2 rounded-full border border-rose-200/70 bg-white/90 px-3 text-xs font-semibold text-gray-800 shadow-sm backdrop-blur-sm transition-all hover:border-rose-300 hover:shadow dark:border-rose-500/25 dark:bg-gray-700/90 dark:text-gray-100 dark:hover:border-rose-400/40"
                   >
-                    <div className="flex items-center space-x-2">
-                      <Filter className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-                      <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                        {getSortLabel(sortBy)}
-                      </span>
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <Filter className="h-3.5 w-3.5 flex-shrink-0 text-rose-500 dark:text-rose-400" />
+                      <span className="truncate">{getSortLabel(sortBy)}</span>
                     </div>
-                    <ChevronDown className={`w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform duration-300 flex-shrink-0 ${showSortDropdownModal ? 'rotate-180' : ''}`} />
+                    <ChevronDown
+                      className={`h-3.5 w-3.5 flex-shrink-0 text-gray-500 transition-transform duration-300 dark:text-gray-400 ${showSortDropdownModal ? 'rotate-180' : ''}`}
+                    />
                   </button>
                   
                   {/* Dropdown Menu */}
                   {showSortDropdownModal && (
-                    <div className="absolute top-full right-0 mt-2 min-w-[160px] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg dark:shadow-black/30 z-20 overflow-hidden">
-                      <div className="py-1">
-                        <button
-                          onClick={() => handleSortChange('recent')}
-                          className={`w-full text-left px-4 py-2.5 text-sm transition-all duration-200 flex items-center justify-between ${
-                            sortBy === 'recent' 
-                              ? 'bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 font-semibold border-l-2 border-rose-500 dark:border-rose-400' 
-                              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
-                          }`}
-                        >
-                          <span>Most Recent</span>
-                          {sortBy === 'recent' && (
-                            <div className="w-2 h-2 rounded-full bg-rose-500 dark:bg-rose-400"></div>
-                          )}
-                        </button>
-                        <button
-                          onClick={() => handleSortChange('top-rated')}
-                          className={`w-full text-left px-4 py-2.5 text-sm transition-all duration-200 flex items-center justify-between ${
-                            sortBy === 'top-rated' 
-                              ? 'bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 font-semibold border-l-2 border-rose-500 dark:border-rose-400' 
-                              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
-                          }`}
-                        >
-                          <span>Top Rated</span>
-                          {sortBy === 'top-rated' && (
-                            <div className="w-2 h-2 rounded-full bg-rose-500 dark:bg-rose-400"></div>
-                          )}
-                        </button>
-                        <button
-                          onClick={() => handleSortChange('with-photos')}
-                          className={`w-full text-left px-4 py-2.5 text-sm transition-all duration-200 flex items-center justify-between ${
-                            sortBy === 'with-photos' 
-                              ? 'bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 font-semibold border-l-2 border-rose-500 dark:border-rose-400' 
-                              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
-                          }`}
-                        >
-                          <span>With Photos</span>
-                          {sortBy === 'with-photos' && (
-                            <div className="w-2 h-2 rounded-full bg-rose-500 dark:bg-rose-400"></div>
-                          )}
-                        </button>
-                      </div>
+                    <div className="absolute right-0 top-full z-20 mt-1.5 min-w-[168px] overflow-hidden rounded-xl border border-rose-100/80 bg-white/95 py-1 shadow-lg shadow-rose-200/15 ring-1 ring-black/5 backdrop-blur-md dark:border-gray-600 dark:bg-gray-800/95 dark:shadow-black/40">
+                      <button
+                        type="button"
+                        onClick={() => handleSortChange('recent')}
+                        className={`flex w-full items-center justify-between px-3 py-2 text-left text-xs transition-colors ${
+                          sortBy === 'recent'
+                            ? 'bg-rose-50 font-semibold text-rose-600 dark:bg-rose-950/40 dark:text-rose-300'
+                            : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700/50'
+                        }`}
+                      >
+                        <span>Most recent</span>
+                        {sortBy === 'recent' && (
+                          <span className="h-1.5 w-1.5 rounded-full bg-rose-500 dark:bg-rose-400" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSortChange('top-rated')}
+                        className={`flex w-full items-center justify-between px-3 py-2 text-left text-xs transition-colors ${
+                          sortBy === 'top-rated'
+                            ? 'bg-rose-50 font-semibold text-rose-600 dark:bg-rose-950/40 dark:text-rose-300'
+                            : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700/50'
+                        }`}
+                      >
+                        <span>Top rated</span>
+                        {sortBy === 'top-rated' && (
+                          <span className="h-1.5 w-1.5 rounded-full bg-rose-500 dark:bg-rose-400" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSortChange('with-photos')}
+                        className={`flex w-full items-center justify-between px-3 py-2 text-left text-xs transition-colors ${
+                          sortBy === 'with-photos'
+                            ? 'bg-rose-50 font-semibold text-rose-600 dark:bg-rose-950/40 dark:text-rose-300'
+                            : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700/50'
+                        }`}
+                      >
+                        <span>With photos</span>
+                        {sortBy === 'with-photos' && (
+                          <span className="h-1.5 w-1.5 rounded-full bg-rose-500 dark:bg-rose-400" />
+                        )}
+                      </button>
                     </div>
                   )}
                 </div>
               </div>
 
               {/* Reviews List */}
-              <div className="space-y-3">
+              <div className="space-y-2 lg:space-y-3">
           {reviews && reviews.length > 0 ? reviews.map((review) => (
-                  <div key={review.id} className="bg-gray-50/50 dark:bg-gray-700/30 border border-gray-200/60 dark:border-gray-600/60 rounded-xl p-4 hover:border-gray-300 dark:hover:border-gray-500 transition-colors">
-                    <div className="flex items-start justify-between mb-3">
+                  <div
+                    key={review.id}
+                    className="rounded-xl border border-gray-100/90 bg-white/90 p-3 shadow-sm ring-1 ring-black/[0.03] transition-all hover:border-rose-100 hover:shadow-md dark:border-gray-600/50 dark:bg-gray-800/50 dark:ring-white/[0.04] dark:hover:border-rose-900/40 lg:rounded-2xl lg:p-4"
+                  >
+                    <div className="mb-2 flex items-start justify-between lg:mb-3">
                       <div className="flex items-center space-x-2">
                         <div className="w-8 h-8 bg-gradient-to-br from-pink-400 to-rose-500 dark:from-pink-500 dark:to-rose-600 rounded-full flex items-center justify-center text-white font-semibold text-xs">
                     {(review.customerName || review.customer_name || 'G').charAt(0).toUpperCase()}
@@ -1369,20 +1501,42 @@ const CustomerReviews = ({ productId }) => {
               </div>
             </div>
           )) : (
-                  <div className="text-center py-8">
-                    <p className="text-sm text-gray-500 dark:text-gray-400">No reviews available yet.</p>
-            </div>
+                  <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-rose-200/70 bg-gradient-to-b from-rose-50/40 to-white px-4 py-7 text-center dark:border-rose-500/20 dark:from-rose-950/15 dark:to-gray-800/25 lg:rounded-2xl lg:py-10">
+                    <div className="mb-2.5 flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-rose-100 dark:bg-gray-800 dark:ring-gray-600 lg:mb-3 lg:h-12 lg:w-12">
+                      <MessageCircle className="h-5 w-5 text-rose-400 dark:text-rose-500 lg:h-6 lg:w-6" strokeWidth={1.75} />
+                    </div>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 lg:text-base">No reviews yet</p>
+                    <p className="mt-0.5 max-w-[240px] text-[11px] leading-snug text-gray-500 dark:text-gray-400 lg:text-xs">
+                      Be the first to leave a review and help others choose.
+                    </p>
+                  </div>
           )}
               </div>
         </div>
-          </div>
+          </motion.div>
         </div>
       )}
 
-      {/* Mobile Review Form Modal */}
+      {/* Write review: max-lg = bottom sheet; lg+ = centered */}
       {showReviewFormModal && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 dark:bg-black/80 backdrop-blur-sm" onClick={() => setShowReviewFormModal(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-t-3xl sm:rounded-2xl shadow-2xl dark:shadow-black/50 w-full max-w-4xl h-[90vh] sm:max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[65] lg:z-50 pointer-events-none">
+          <div
+            role="presentation"
+            className="pointer-events-auto absolute inset-0 bg-black/50 backdrop-blur-[2px] lg:hidden"
+            onClick={() => setShowReviewFormModal(false)}
+          />
+          <div
+            role="presentation"
+            className="pointer-events-auto absolute inset-0 hidden bg-black/60 backdrop-blur-sm lg:block dark:bg-black/80"
+            onClick={() => setShowReviewFormModal(false)}
+          />
+          <motion.div
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+            className="pointer-events-auto absolute bottom-0 left-0 right-0 flex max-h-[min(92dvh,calc(100dvh-env(safe-area-inset-bottom,0px)))] flex-col overflow-hidden rounded-t-2xl border-x border-t border-gray-200/90 bg-white shadow-[0_-12px_40px_rgba(0,0,0,0.12)] dark:border-gray-700 dark:bg-gray-800 dark:shadow-black/45 lg:bottom-auto lg:left-1/2 lg:top-1/2 lg:h-[90vh] lg:max-h-[90vh] lg:w-[calc(100%-2rem)] lg:max-w-4xl lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-2xl lg:border lg:border-gray-200 lg:shadow-2xl dark:lg:border-gray-700 dark:lg:shadow-black/50"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 sm:p-5 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
               <div>
@@ -1399,7 +1553,7 @@ const CustomerReviews = ({ productId }) => {
                 </div>
 
             {/* Modal Content - Scrollable */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 sm:p-5">
               <div className="bg-gradient-to-br from-rose-50/50 via-pink-50/30 to-rose-50/50 dark:from-rose-900/10 dark:via-pink-900/5 dark:to-rose-900/10 rounded-xl border-2 border-gray-400 dark:border-gray-500 p-4 sm:p-5 shadow-md">
                 <div className="space-y-3 sm:space-y-4">
                   {/* Overall Rating */}
@@ -1530,9 +1684,10 @@ const CustomerReviews = ({ productId }) => {
               </div>
             </div>
 
-            {/* Sticky Footer with Submit Button */}
-            <div className="border-t border-gray-200 dark:border-gray-700 p-3 sm:p-4 bg-white dark:bg-gray-800 flex-shrink-0">
+            {/* Submit — pinned to bottom of sheet */}
+            <div className="flex-shrink-0 border-t border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800 sm:p-4 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] lg:pb-4">
               <button
+                type="button"
                 onClick={handleSubmitReview}
                 disabled={calculateOverallRating() === 0 || isSubmitting || reviewSubmitted}
                 className={`w-full py-3.5 sm:py-3 rounded-lg transition-all duration-200 flex items-center justify-center space-x-2 text-xs sm:text-sm font-semibold ${
@@ -1558,7 +1713,7 @@ const CustomerReviews = ({ productId }) => {
                 </span>
               </button>
             </div>
-          </div>
+          </motion.div>
         </div>
       )}
     </div>

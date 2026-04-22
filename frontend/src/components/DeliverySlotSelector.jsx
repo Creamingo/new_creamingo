@@ -7,8 +7,7 @@ import {
   CheckCircle, 
   AlertCircle,
   ChevronLeft,
-  ChevronRight,
-  Truck
+  ChevronRight
 } from 'lucide-react';
 import deliverySlotApi from '../api/deliverySlotApi';
 
@@ -246,7 +245,6 @@ const DeliverySlotSelector = ({
         hover: 'hover:border-gray-400 dark:hover:border-gray-500 hover:from-gray-100 hover:to-gray-150 dark:hover:from-gray-600 dark:hover:to-gray-700',
         selected: 'border-gray-500 dark:border-gray-500 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-600 dark:to-gray-700',
         status: 'Slot Closed',
-        emoji: '⚪',
         dot: 'bg-gray-400 dark:bg-gray-500'
       };
     }
@@ -262,7 +260,6 @@ const DeliverySlotSelector = ({
         hover: 'hover:border-gray-400 dark:hover:border-gray-500 hover:from-gray-100 hover:to-gray-150 dark:hover:from-gray-600 dark:hover:to-gray-700',
         selected: 'border-gray-500 dark:border-gray-500 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-600 dark:to-gray-700',
         status: 'Fully Booked',
-        emoji: '⚪',
         dot: 'bg-gray-400 dark:bg-gray-500'
       };
     }
@@ -275,7 +272,6 @@ const DeliverySlotSelector = ({
         hover: 'hover:border-gray-400 dark:hover:border-gray-500 hover:from-gray-100 hover:to-gray-150 dark:hover:from-gray-600 dark:hover:to-gray-700',
         selected: 'border-gray-500 dark:border-gray-500 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-600 dark:to-gray-700',
         status: 'Fully Booked',
-        emoji: '⚪',
         dot: 'bg-gray-400 dark:bg-gray-500'
       };
     }
@@ -293,7 +289,6 @@ const DeliverySlotSelector = ({
         hover: 'hover:border-gray-400 dark:hover:border-gray-500 hover:from-gray-100 hover:to-gray-150 dark:hover:from-gray-600 dark:hover:to-gray-700',
         selected: 'border-gray-500 dark:border-gray-500 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-600 dark:to-gray-700',
         status: 'Fully Booked',
-        emoji: '⚪',
         dot: 'bg-gray-400 dark:bg-gray-500'
       };
     } 
@@ -305,7 +300,6 @@ const DeliverySlotSelector = ({
         hover: 'hover:border-green-300 dark:hover:border-green-700 hover:from-green-100 hover:to-green-150 dark:hover:from-green-900/40 dark:hover:to-green-900/30',
         selected: 'border-green-500 dark:border-green-500 bg-gradient-to-br from-green-100 to-green-200 dark:from-green-900/40 dark:to-green-900/30',
         status: `Wide Open • ${availableOrders} Slots Available`,
-        emoji: '🟢',
         dot: 'bg-green-500 dark:bg-green-400'
       };
     } 
@@ -317,7 +311,6 @@ const DeliverySlotSelector = ({
         hover: 'hover:border-yellow-300 dark:hover:border-yellow-700 hover:from-yellow-100 hover:to-yellow-150 dark:hover:from-yellow-900/40 dark:hover:to-yellow-900/30',
         selected: 'border-yellow-500 dark:border-yellow-500 bg-gradient-to-br from-yellow-100 to-yellow-200 dark:from-yellow-900/40 dark:to-yellow-900/30',
         status: `Limited Spots • ${availableOrders} Available`,
-        emoji: '🟡',
         dot: 'bg-yellow-500 dark:bg-yellow-400'
       };
     } 
@@ -329,7 +322,6 @@ const DeliverySlotSelector = ({
         hover: 'hover:border-orange-300 dark:hover:border-orange-700 hover:from-orange-100 hover:to-orange-150 dark:hover:from-orange-900/40 dark:hover:to-orange-900/30',
         selected: 'border-orange-500 dark:border-orange-500 bg-gradient-to-br from-orange-100 to-orange-200 dark:from-orange-900/40 dark:to-orange-900/30',
         status: availableOrders <= 3 ? `Hurry • Only ${availableOrders} Left` : `Filling Fast • ${availableOrders} Remaining`,
-        emoji: '🟠',
         dot: 'bg-orange-500 dark:bg-orange-400'
       };
     } 
@@ -341,7 +333,6 @@ const DeliverySlotSelector = ({
         hover: 'hover:border-red-300 dark:hover:border-red-700 hover:from-red-100 hover:to-red-150 dark:hover:from-red-900/40 dark:hover:to-red-900/30',
         selected: 'border-red-500 dark:border-red-500 bg-gradient-to-br from-red-100 to-red-200 dark:from-red-900/40 dark:to-red-900/30',
         status: availableOrders === 1 ? 'Last Chance • Final Slot!' : `Last Few • Only ${availableOrders} Left`,
-        emoji: '🔴',
         dot: 'bg-red-500 dark:bg-red-400'
       };
     } 
@@ -353,7 +344,6 @@ const DeliverySlotSelector = ({
         hover: 'hover:border-red-300 dark:hover:border-red-700 hover:from-red-100 hover:to-red-150 dark:hover:from-red-900/40 dark:hover:to-red-900/30',
         selected: 'border-red-500 dark:border-red-500 bg-gradient-to-br from-red-100 to-red-200 dark:from-red-900/40 dark:to-red-900/30',
         status: availableOrders === 1 ? 'Last Chance • Final Slot!' : `Final Slots • ${availableOrders} Remaining`,
-        emoji: '🔴',
         dot: 'bg-red-500 dark:bg-red-400'
       };
     }
@@ -465,12 +455,12 @@ const DeliverySlotSelector = ({
 
   if (loading && slots.length === 0) {
     return (
-      <div className={`bg-white dark:bg-gray-800 rounded-xl border-l-4 border-green-500 dark:border-green-400 border border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-xl dark:shadow-black/30 p-3 sm:p-4 lg:p-5 ${className}`}>
-        <div className="flex items-center gap-2 pb-3 border-b border-gray-200 dark:border-gray-700 mb-4">
-          <div className="p-1.5 rounded-lg bg-green-100 dark:bg-green-900/30">
-            <Calendar className="w-4 h-4 text-green-600 dark:text-green-400" />
+      <div className={`rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-600 dark:bg-gray-800 dark:shadow-black/20 sm:p-4 lg:p-5 ${className}`}>
+        <div className="mb-4 flex items-center gap-2 border-b border-gray-200 pb-3 dark:border-gray-600">
+          <div className="rounded-lg bg-gray-100 p-1.5 dark:bg-gray-700/80">
+            <Calendar className="h-4 w-4 text-gray-600 dark:text-gray-300" aria-hidden />
           </div>
-          <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">Select Delivery Time</h3>
+          <h3 className="heading-subsection text-gray-900 dark:text-gray-100">Select delivery time</h3>
         </div>
         <div className="flex items-center justify-center py-8">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 dark:border-green-400"></div>
@@ -482,12 +472,12 @@ const DeliverySlotSelector = ({
 
   if (error) {
     return (
-      <div className={`bg-white dark:bg-gray-800 rounded-xl border-l-4 border-green-500 dark:border-green-400 border border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-xl dark:shadow-black/30 p-3 sm:p-4 lg:p-5 ${className}`}>
-        <div className="flex items-center gap-2 pb-3 border-b border-gray-200 dark:border-gray-700 mb-4">
-          <div className="p-1.5 rounded-lg bg-green-100 dark:bg-green-900/30">
-            <Calendar className="w-4 h-4 text-green-600 dark:text-green-400" />
+      <div className={`rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-600 dark:bg-gray-800 dark:shadow-black/20 sm:p-4 lg:p-5 ${className}`}>
+        <div className="mb-4 flex items-center gap-2 border-b border-gray-200 pb-3 dark:border-gray-600">
+          <div className="rounded-lg bg-gray-100 p-1.5 dark:bg-gray-700/80">
+            <Calendar className="h-4 w-4 text-gray-600 dark:text-gray-300" aria-hidden />
           </div>
-          <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">Select Delivery Time</h3>
+          <h3 className="heading-subsection text-gray-900 dark:text-gray-100">Select delivery time</h3>
         </div>
         <div className="flex items-center text-red-600 dark:text-red-400">
           <AlertCircle className="w-5 h-5 mr-2" />
@@ -498,34 +488,38 @@ const DeliverySlotSelector = ({
   }
 
   return (
-    <div className={`bg-white dark:bg-gray-800 rounded-xl border-l-4 border-green-500 dark:border-green-400 border border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-xl dark:shadow-black/30 p-3 sm:p-4 lg:p-5 transition-all duration-300 hover:shadow-xl dark:hover:shadow-2xl dark:hover:shadow-black/40 hover:border-green-300 dark:hover:border-green-600 ${className}`}>
+    <div className={`rounded-xl border border-gray-200 bg-white p-3 shadow-sm transition-all duration-300 hover:border-gray-300 hover:shadow-md dark:border-gray-600 dark:bg-gray-800 dark:shadow-black/20 dark:hover:border-gray-500 dark:hover:shadow-lg sm:p-4 lg:p-5 ${className}`}>
       {/* Header with Icon */}
-      <div className="flex items-center gap-2 pb-3 border-b border-gray-200 dark:border-gray-700 mb-4">
-        <div className="p-1.5 rounded-lg bg-green-100 dark:bg-green-900/30">
-          <Calendar className="w-4 h-4 text-green-600 dark:text-green-400" />
+      <div className="mb-4 flex items-center gap-2 border-b border-gray-200 pb-3 dark:border-gray-600">
+        <div className="rounded-lg bg-gray-100 p-1.5 dark:bg-gray-700/80">
+          <Calendar className="h-4 w-4 text-gray-600 dark:text-gray-300" aria-hidden />
         </div>
-        <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">Select Delivery Time</h3>
+        <h3 className="heading-subsection text-gray-900 dark:text-gray-100">Select delivery time</h3>
       </div>
 
       {/* Date Picker */}
       <div className="mb-4">
         <div className="flex items-center justify-between mb-3">
-          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
-            <Calendar className="w-4 h-4" />
-            Select Date
+          <h4 className="text-cart-label flex items-center gap-2">
+            <Calendar className="h-4 w-4 shrink-0 text-gray-600 dark:text-gray-400" aria-hidden />
+            Select date
           </h4>
           <div className="flex gap-1">
             <button
+              type="button"
               onClick={() => scrollDates('prev')}
-              className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+              className="ui-focus-visible flex h-10 w-10 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+              aria-label="Scroll dates left"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="h-4 w-4" aria-hidden />
             </button>
             <button
+              type="button"
               onClick={() => scrollDates('next')}
-              className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+              className="ui-focus-visible flex h-10 w-10 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+              aria-label="Scroll dates right"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="h-4 w-4" aria-hidden />
             </button>
           </div>
         </div>
@@ -543,27 +537,29 @@ const DeliverySlotSelector = ({
             
             return (
               <button
+                type="button"
                 key={index}
                 onClick={() => handleDateSelect(date)}
                 disabled={isDatePast}
                   className={`
-                    flex-shrink-0 w-20 px-2 py-1.5 rounded-lg border transition-all duration-200 text-center
+                    ui-focus-visible flex h-11 min-h-[44px] min-w-[5.25rem] max-w-[6.25rem] flex-shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border px-2 py-1.5 text-center transition-all duration-200
                     ${isSelected 
                       ? 'border-orange-500 dark:border-orange-400 bg-orange-50 dark:bg-orange-900/30 shadow-md dark:shadow-lg dark:shadow-black/20' 
                       : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
                     }
-                    ${isDatePast ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                    ${isDatePast ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
                   `}
               >
-                <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-0">
+                <span className="text-[11px] font-medium leading-tight text-gray-500 dark:text-gray-400">
                   {getDateLabel(date)}
-                </div>
-                <div className={`text-sm font-semibold ${isSelected ? 'text-orange-700 dark:text-orange-300' : 'text-gray-900 dark:text-gray-100'}`}>
-                  {date.getDate()}
-                </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">
-                  {date.toLocaleDateString('en-US', { month: 'short' })}
-                </div>
+                </span>
+                <span
+                  className={`text-sm font-semibold leading-tight tabular-nums ${
+                    isSelected ? 'text-orange-700 dark:text-orange-300' : 'text-gray-900 dark:text-gray-100'
+                  }`}
+                >
+                  {date.getDate()} {date.toLocaleDateString('en-US', { month: 'short' })}
+                </span>
               </button>
             );
           })}
@@ -573,9 +569,9 @@ const DeliverySlotSelector = ({
       {/* Time Slots - Compact Design */}
       {selectedDate && (
         <div>
-          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2 mb-3">
-            <Clock className="w-4 h-4" />
-            Choose Time Slot
+          <h4 className="text-cart-label mb-3 flex items-center gap-2">
+            <Clock className="h-4 w-4 shrink-0 text-gray-600 dark:text-gray-400" aria-hidden />
+            Choose time slot
           </h4>
           
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-3 gap-3">
@@ -590,16 +586,18 @@ const DeliverySlotSelector = ({
               
               return (
                 <button
+                  type="button"
                   key={slot.id}
                   onClick={() => !isDisabled && handleTimeSlotSelect(slot)}
                   disabled={isDisabled}
                   className={`
-                    relative p-2 md:p-4 lg:p-4 rounded-lg border text-center group
+                    group relative rounded-lg border p-2 text-center md:p-4 lg:p-4
+                    ${!isDisabled ? 'ui-focus-visible min-h-[44px] md:min-h-[48px]' : ''}
                     ${isSelected 
                       ? colorScheme.selected + ' border-2 shadow-sm dark:shadow-md dark:shadow-black/20' 
                       : isDisabled
-                        ? 'border border-gray-300 dark:border-gray-600 md:border-gray-200 bg-gray-50 dark:bg-gray-700/50 opacity-50 cursor-not-allowed'
-                        : colorScheme.background + ' border border-gray-300 dark:border-gray-600 md:border-gray-200 ' + colorScheme.hover + ' cursor-pointer hover:border-gray-400 dark:hover:border-gray-500 md:hover:border-gray-300'
+                        ? 'cursor-not-allowed border border-gray-300 bg-gray-50 opacity-50 dark:border-gray-600 dark:bg-gray-700/50 md:border-gray-200'
+                        : `${colorScheme.background} cursor-pointer border border-gray-300 md:border-gray-200 dark:border-gray-600 ${colorScheme.hover} hover:border-gray-400 dark:hover:border-gray-500 md:hover:border-gray-300`
                     }
                   `}
                 >
@@ -624,9 +622,9 @@ const DeliverySlotSelector = ({
                   </div>
                   
                   {/* Hover Tooltip - Only visible on desktop - Enhanced with detailed status */}
-                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-800 dark:bg-gray-900 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10 hidden md:block shadow-lg">
+                  <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden -translate-x-1/2 transform whitespace-nowrap rounded-md bg-gray-800 px-3 py-1.5 text-xs text-white opacity-0 shadow-lg transition-opacity duration-200 group-hover:opacity-100 dark:bg-gray-900 md:block">
                     <div className="flex items-center gap-1.5">
-                      <span>{colorScheme.emoji}</span>
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${colorScheme.dot}`} aria-hidden />
                       <span className="font-medium">{colorScheme.status}</span>
                     </div>
                   </div>

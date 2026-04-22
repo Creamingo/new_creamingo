@@ -8,7 +8,7 @@ const mapSubcategory = (req, subcategory) => (
 const mapCategory = (req, category) => {
   if (!category) return category;
 
-  const mapped = mapUploadFields(req, category, ['image_url', 'icon_image_url']);
+  const mapped = mapUploadFields(req, category, ['image_url']);
 
   if (mapped.subcategories) {
     let subcategories = mapped.subcategories;
@@ -44,6 +44,77 @@ const categorySlugToIdMap = {
   'sweets-dry-fruits': 28
 };
 
+const subcategorySlugFromName = (name) => (
+  name
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/\//g, '-')
+    .replace(/&/g, 'and')
+    .replace(/'/g, '')
+);
+
+/**
+ * Active products in this category tied to each subcategory (legacy subcategory_id or product_subcategories).
+ * Matches storefront product list filtering (category membership + subcategory link).
+ */
+const fetchSubcategoriesWithProductCounts = async (req, categoryId) => {
+  const subcategoriesResult = await query(
+    `SELECT * FROM subcategories WHERE category_id = ? AND is_active = 1 ORDER BY order_index ASC, name ASC`,
+    [categoryId]
+  );
+  const rows = subcategoriesResult.rows || [];
+  if (rows.length === 0) return [];
+
+  const countResult = await query(
+    `SELECT sc.id AS subcategory_id,
+      COUNT(DISTINCT p.id) AS product_count
+    FROM subcategories sc
+    LEFT JOIN products p ON p.is_active = 1
+      AND (
+        EXISTS (
+          SELECT 1 FROM product_categories pc
+          WHERE pc.product_id = p.id AND pc.category_id = ?
+        ) OR p.category_id = ?
+      )
+      AND (
+        p.subcategory_id = sc.id
+        OR EXISTS (
+          SELECT 1 FROM product_subcategories ps
+          WHERE ps.product_id = p.id AND ps.subcategory_id = sc.id
+        )
+      )
+    WHERE sc.category_id = ? AND sc.is_active = 1
+    GROUP BY sc.id`,
+    [categoryId, categoryId, categoryId]
+  );
+
+  const countById = new Map();
+  for (const row of countResult.rows || []) {
+    countById.set(Number(row.subcategory_id), parseInt(row.product_count, 10) || 0);
+  }
+
+  return rows.map((sub) => {
+    const mapped = mapSubcategory(req, sub);
+    return {
+      ...mapped,
+      product_count: countById.get(Number(sub.id)) ?? 0,
+    };
+  });
+};
+
+/** URL slug matches DB slug or name-derived slug, including …-and-… vs …-… variants */
+const subcategoryMatchesSlug = (sub, requestedSlug) => {
+  if (!requestedSlug || typeof requestedSlug !== 'string') return false;
+  const req = requestedSlug.trim().toLowerCase();
+  const reqAlt = req.replace(/-and-/g, '-');
+  if (sub.slug && String(sub.slug).trim() !== '') {
+    const s = sub.slug.trim().toLowerCase();
+    if (s === req || s === reqAlt) return true;
+  }
+  const fromName = subcategorySlugFromName(sub.name);
+  return fromName === req || fromName === reqAlt;
+};
+
 // Get all categories
 const getCategories = async (req, res) => {
   try {
@@ -64,8 +135,6 @@ const getCategories = async (req, res) => {
         c.name,
         c.description,
         c.image_url,
-        c.icon,
-        c.icon_image_url,
         c.display_name,
         c.is_active,
         c.order_index,
@@ -161,15 +230,14 @@ const getCategory = async (req, res) => {
 // Create category
 const createCategory = async (req, res) => {
   try {
-    const { name, description, image_url, icon, icon_image_url, display_name, is_active = true, order_index = 0 } = req.body;
+    const { name, description, image_url, display_name, is_active = true, order_index = 0 } = req.body;
     const normalizedImageUrl = normalizeUploadUrl(image_url);
-    const normalizedIconImageUrl = normalizeUploadUrl(icon_image_url);
     
 
     const result = await query(`
-      INSERT INTO categories (name, description, image_url, icon, icon_image_url, display_name, is_active, order_index, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-    `, [name, description, normalizedImageUrl, icon, normalizedIconImageUrl, display_name, is_active, order_index]);
+      INSERT INTO categories (name, description, image_url, display_name, is_active, order_index, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
+    `, [name, description, normalizedImageUrl, display_name, is_active, order_index]);
 
     const categoryId = result.lastID;
 
@@ -202,9 +270,8 @@ const updateCategory = async (req, res) => {
     if (updateData.image_url) {
       updateData.image_url = normalizeUploadUrl(updateData.image_url);
     }
-    if (updateData.icon_image_url) {
-      updateData.icon_image_url = normalizeUploadUrl(updateData.icon_image_url);
-    }
+    delete updateData.icon;
+    delete updateData.icon_image_url;
     
 
     // Check if category exists
@@ -355,13 +422,7 @@ const getCakeFlavorCategory = async (req, res) => {
 
     const category = mapCategory(req, categoryResult.rows[0]);
 
-    // Get all subcategories for this category
-    const subcategoriesResult = await query(
-      'SELECT * FROM subcategories WHERE category_id = ? AND is_active = 1 ORDER BY order_index ASC, name ASC',
-      [category.id]
-    );
-
-    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
+    const subcategories = await fetchSubcategoriesWithProductCounts(req, category.id);
 
     res.json({
       success: true,
@@ -406,13 +467,7 @@ const getOccasionCategories = async (req, res) => {
 
     const occasionCategory = mapCategory(req, occasionCategoryResult.rows[0]);
 
-    // Get all subcategories for this category - similar to milestone-year-cakes
-    const subcategoriesResult = await query(
-      'SELECT * FROM subcategories WHERE category_id = ? AND is_active = 1 ORDER BY order_index DESC, name ASC',
-      [occasionCategory.id]
-    );
-
-    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
+    const subcategories = await fetchSubcategoriesWithProductCounts(req, occasionCategory.id);
 
     res.json({
       success: true,
@@ -457,13 +512,7 @@ const getKidsCakeCollection = async (req, res) => {
 
     const kidsCategory = mapCategory(req, kidsCategoryResult.rows[0]);
 
-    // Get all subcategories for this category
-    const subcategoriesResult = await query(
-      'SELECT * FROM subcategories WHERE category_id = ? AND is_active = 1 ORDER BY order_index ASC, name ASC',
-      [kidsCategory.id]
-    );
-
-    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
+    const subcategories = await fetchSubcategoriesWithProductCounts(req, kidsCategory.id);
 
     res.json({
       success: true,
@@ -508,13 +557,7 @@ const getCrowdFavoriteCakes = async (req, res) => {
 
     const crowdFavoriteCategory = mapCategory(req, crowdFavoriteResult.rows[0]);
 
-    // Get all subcategories for this category
-    const subcategoriesResult = await query(
-      'SELECT * FROM subcategories WHERE category_id = ? AND is_active = 1 ORDER BY order_index ASC, name ASC',
-      [crowdFavoriteCategory.id]
-    );
-
-    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
+    const subcategories = await fetchSubcategoriesWithProductCounts(req, crowdFavoriteCategory.id);
 
     res.json({
       success: true,
@@ -559,13 +602,7 @@ const getLoveAndRelationshipCakes = async (req, res) => {
 
     const loveRelationshipCategory = mapCategory(req, loveRelationshipResult.rows[0]);
 
-    // Get all subcategories for this category
-    const subcategoriesResult = await query(
-      'SELECT * FROM subcategories WHERE category_id = ? AND is_active = 1 ORDER BY order_index ASC, name ASC',
-      [loveRelationshipCategory.id]
-    );
-
-    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
+    const subcategories = await fetchSubcategoriesWithProductCounts(req, loveRelationshipCategory.id);
 
     res.json({
       success: true,
@@ -610,13 +647,7 @@ const getCakesForEveryMilestoneYear = async (req, res) => {
 
     const milestoneCategory = mapCategory(req, milestoneResult.rows[0]);
 
-    // Get all subcategories for this category
-    const subcategoriesResult = await query(
-      'SELECT * FROM subcategories WHERE category_id = ? AND is_active = 1 ORDER BY order_index ASC, name ASC',
-      [milestoneCategory.id]
-    );
-
-    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
+    const subcategories = await fetchSubcategoriesWithProductCounts(req, milestoneCategory.id);
 
     res.json({
       success: true,
@@ -661,13 +692,7 @@ const getFlowers = async (req, res) => {
 
     const flowersCategory = mapCategory(req, flowersResult.rows[0]);
 
-    // Get all subcategories for this category
-    const subcategoriesResult = await query(
-      'SELECT * FROM subcategories WHERE category_id = ? AND is_active = 1 ORDER BY order_index ASC, name ASC',
-      [flowersCategory.id]
-    );
-
-    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
+    const subcategories = await fetchSubcategoriesWithProductCounts(req, flowersCategory.id);
 
     res.json({
       success: true,
@@ -712,13 +737,7 @@ const getSweetsAndDryFruits = async (req, res) => {
 
     const sweetsCategory = mapCategory(req, sweetsResult.rows[0]);
 
-    // Get all subcategories for this category
-    const subcategoriesResult = await query(
-      'SELECT * FROM subcategories WHERE category_id = ? AND is_active = 1 ORDER BY order_index ASC, name ASC',
-      [sweetsCategory.id]
-    );
-
-    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
+    const subcategories = await fetchSubcategoriesWithProductCounts(req, sweetsCategory.id);
 
     res.json({
       success: true,
@@ -768,13 +787,7 @@ const getSubcategoriesByCategorySlug = async (req, res) => {
 
     const category = mapCategory(req, categoryResult.rows[0]);
 
-    // Get all subcategories for this category
-    const subcategoriesResult = await query(
-      'SELECT * FROM subcategories WHERE category_id = ? AND is_active = 1 ORDER BY order_index ASC, name ASC',
-      [categoryId]
-    );
-
-    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
+    const subcategories = await fetchSubcategoriesWithProductCounts(req, categoryId);
 
     res.json({
       success: true,
@@ -834,26 +847,13 @@ const getSubcategoryBySlugs = async (req, res) => {
 
     const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
     
-    // Find the subcategory that matches the slug
-    // First try to match using the slug column if it exists, otherwise generate from name
-    const subcategory = subcategories.find(sub => {
-      // If slug column exists and is not null, use it
-      if (sub.slug && sub.slug.trim() !== '') {
-        return sub.slug.toLowerCase() === subCategorySlug.toLowerCase();
-      }
-      // Otherwise, generate slug from name
-      const subSlug = sub.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and').replace(/'/g, '');
-      return subSlug === subCategorySlug.toLowerCase();
-    });
+    const subcategory = subcategories.find((sub) => subcategoryMatchesSlug(sub, subCategorySlug));
 
     if (!subcategory) {
       // Return available subcategories for debugging
-      const availableSlugs = subcategories.map(sub => {
-        if (sub.slug && sub.slug.trim() !== '') {
-          return sub.slug;
-        }
-        return sub.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and').replace(/'/g, '');
-      });
+      const availableSlugs = subcategories.map((sub) => (
+        sub.slug && String(sub.slug).trim() !== '' ? sub.slug : subcategorySlugFromName(sub.name)
+      ));
       
       return res.status(404).json({
         success: false,
@@ -942,13 +942,7 @@ const getSmallTreatsDesserts = async (req, res) => {
 
     const treatsCategory = mapCategory(req, treatsResult.rows[0]);
 
-    // Get all subcategories for this category
-    const subcategoriesResult = await query(
-      'SELECT * FROM subcategories WHERE category_id = ? AND is_active = 1 ORDER BY order_index ASC, name ASC',
-      [treatsCategory.id]
-    );
-
-    const subcategories = (subcategoriesResult.rows || []).map((sub) => mapSubcategory(req, sub));
+    const subcategories = await fetchSubcategoriesWithProductCounts(req, treatsCategory.id);
 
     res.json({
       success: true,
@@ -976,8 +970,6 @@ const getAllMainCategories = async (req, res) => {
         name,
         description,
         image_url,
-        icon,
-        icon_image_url,
         display_name,
         is_active,
         order_index,

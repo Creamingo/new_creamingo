@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { 
   ShoppingBag, 
@@ -21,20 +22,25 @@ import {
   MoreVertical,
   AlertTriangle,
   Clock,
-  ShoppingCart
+  ShoppingCart,
+  Lock
 } from 'lucide-react';
 import { useCart } from '../../contexts/CartContext';
 import { usePinCode } from '../../contexts/PinCodeContext';
 import { useToast } from '../../contexts/ToastContext';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
+import MobileFooter from '../../components/MobileFooter';
 import CartDeals from '../../components/CartDeals';
+import ConfirmModal from '../../components/ConfirmModal';
 import promoCodeApi from '../../api/promoCodeApi';
 import promoCodeTrackingApi from '../../api/promoCodeTrackingApi';
 import productApi from '../../api/productApi';
+import addOnApi from '../../api/addOnApi';
 import settingsApi from '../../api/settingsApi';
 import { formatPrice } from '../../utils/priceFormatter';
-import { resolveImageUrl } from '../../utils/imageUrl';
+import { resolveEntityImageUrl } from '../../utils/imageUrl';
+import { getRecommendationConfig } from '../../utils/cartRecommendationRules';
 
 // Helper functions for formatting dates and times
 const formatDeliveryDate = (date) => {
@@ -134,6 +140,49 @@ const getDescriptiveLabel = (item, groupIndex, itemIndex) => {
   return `Item ${itemIndex + 1}`;
 };
 
+/** Maps to shared `@layer components` tokens in `src/app/globals.css` (heading-page, text-cart-meta, …). */
+const cartType = {
+  pageTitle: 'heading-page',
+  pageSubtitle: 'text-cart-subtitle',
+  pageMeta: 'text-cart-page-meta',
+  section: 'heading-section',
+  sectionMuted: 'text-cart-section-muted',
+  subsection: 'heading-subsection',
+  cardTitle: 'text-cart-card-title',
+  cardTitleLg: 'text-cart-card-title-lg',
+  body: 'text-cart-body',
+  bodyStrong: 'text-cart-body-strong',
+  label: 'text-cart-label',
+  meta: 'text-cart-meta',
+  metaStrong: 'text-cart-meta-strong',
+  pill: 'text-cart-pill',
+  upsellCardTitle: 'text-cart-upsell-title',
+  upsellBlurb: 'text-cart-upsell-blurb',
+  upsellSectionTitle: 'text-cart-upsell-section',
+  cornerPromoBadge: 'text-cart-corner-badge',
+  savingsRowTitle: 'text-cart-savings-title',
+  numeric: 'tabular-nums',
+  summaryRow: 'text-cart-summary-row',
+  summaryValue: 'text-cart-summary-value',
+  summaryTotalLabel: 'text-cart-total-label',
+  summaryTotalValue: 'text-cart-grand-total',
+  panelTitle: 'text-cart-panel-title',
+  modalTitle: 'text-cart-modal-title',
+  modalMeta: 'text-cart-modal-meta',
+};
+
+function CartItemTotalCaption({ hasCombos }) {
+  if (!hasCombos) {
+    return <>Item total</>;
+  }
+  return (
+    <>
+      <span className="sm:hidden">Total (incl. add-ons)</span>
+      <span className="hidden sm:inline">Item total (incl. add-ons)</span>
+    </>
+  );
+}
+
 export default function CartPage() {
   const router = useRouter();
   const { 
@@ -149,6 +198,7 @@ export default function CartPage() {
     removeSavedItem,
     updateComboItemQuantity,
     removeComboItem,
+    updateCartItemCombos,
     autoUpdateExpiredSlots,
     addToCart
   } = useCart();
@@ -217,7 +267,7 @@ export default function CartPage() {
         clearTimeout(autoUpdateTimerRef.current);
       }
     };
-  }, [isInitialized, cartItems.length, autoUpdateExpiredSlots]);
+  }, [isInitialized, cartItems, autoUpdateExpiredSlots]);
   
   const { 
     deliveryInfo, 
@@ -225,15 +275,17 @@ export default function CartPage() {
     currentPinCode 
   } = usePinCode();
   
-  const { showSuccess, showError } = useToast();
+  const { showSuccess, showError, showInfo } = useToast();
 
   const [promoCode, setPromoCode] = useState('');
   const [appliedPromo, setAppliedPromo] = useState(null);
+  const [appliedPromoSource, setAppliedPromoSource] = useState('');
   const [promoError, setPromoError] = useState('');
   const [suggestedPromos, setSuggestedPromos] = useState([]);
   const [promoValidationState, setPromoValidationState] = useState(null); // 'validating', 'valid', 'invalid', null
   const [previewDiscount, setPreviewDiscount] = useState(null); // Preview discount amount
-  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
+  const [showManualPromoInput, setShowManualPromoInput] = useState(false);
+  const [promoStatus, setPromoStatus] = useState(null);
   const [savingItemId, setSavingItemId] = useState(null);
   const [removingItemId, setRemovingItemId] = useState(null);
   const [movingItemId, setMovingItemId] = useState(null);
@@ -241,7 +293,6 @@ export default function CartPage() {
   const [isApplyingPromo, setIsApplyingPromo] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isSavedForLaterOpen, setIsSavedForLaterOpen] = useState(true);
-  const [isSuggestedPromosOpen, setIsSuggestedPromosOpen] = useState(false);
   const [isYouMayAlsoLikeOpen, setIsYouMayAlsoLikeOpen] = useState(true);
   const [expandedItems, setExpandedItems] = useState(new Set());
   const [swipeState, setSwipeState] = useState({});
@@ -249,46 +300,55 @@ export default function CartPage() {
   const [selectedItemForActions, setSelectedItemForActions] = useState(null);
   const [suggestedProducts, setSuggestedProducts] = useState([]);
   const [suggestedProductsLoading, setSuggestedProductsLoading] = useState(false);
+  const trackedOfferViewsRef = React.useRef(new Set());
+  const [offersExperimentVariant, setOffersExperimentVariant] = useState('high_discount');
+  const [showOffersModal, setShowOffersModal] = useState(false);
+  // Recommendation sections: addOns, gift (flowers/sweets), smallTreats (3 sections only)
+  const [suggestedSections, setSuggestedSections] = useState({
+    addOns: [],
+    gift: [],
+    smallTreats: []
+  });
+  const [suggestedSectionsLoading, setSuggestedSectionsLoading] = useState(false);
   const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState(1500); // Default value, will be fetched from API
+  const [confirmModal, setConfirmModal] = useState({
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Delete',
+    cancelLabel: 'Cancel',
+    variant: 'danger',
+    onConfirm: null
+  });
 
-  // Fetch suggested products from Small Treats Desserts and Sweets and Dry Fruits
+  const openConfirmModal = (options) => {
+    setConfirmModal(prev => ({ ...prev, open: true, ...options }));
+  };
+  const closeConfirmModal = () => {
+    setConfirmModal(prev => ({ ...prev, open: false, onConfirm: null }));
+  };
+  const handleConfirmModalConfirm = () => {
+    confirmModal.onConfirm?.();
+    closeConfirmModal();
+  };
+
+  // Fetch suggested products (legacy single list, kept for fallback)
   useEffect(() => {
     const fetchSuggestedProducts = async () => {
       if (!mounted || !isInitialized) return;
       
       setSuggestedProductsLoading(true);
       try {
-        // Fetch products from both categories
         const [treatsResponse, sweetsResponse] = await Promise.all([
-          productApi.getProductsByCategory('small-treats-desserts', null, { 
-            page: 1, 
-            limit: 8
-          }),
-          productApi.getProductsByCategory('sweets-dry-fruits', null, { 
-            page: 1, 
-            limit: 8
-          })
+          productApi.getProductsByCategory('small-treats-desserts', null, { page: 1, limit: 8 }),
+          productApi.getProductsByCategory('sweets-dry-fruits', null, { page: 1, limit: 8 })
         ]);
-
-        // Combine products from both categories
         const treatsProducts = treatsResponse?.products || treatsResponse?.data?.products || [];
         const sweetsProducts = sweetsResponse?.products || sweetsResponse?.data?.products || [];
-        
-        // Mix and randomize products
         const allProducts = [...treatsProducts, ...sweetsProducts];
-        
-        // Shuffle array to randomize
         const shuffled = allProducts.sort(() => Math.random() - 0.5);
-        
-        // Take 12-15 products (or all if less)
-        const selectedProducts = shuffled.slice(0, Math.min(15, shuffled.length));
-        
-        // Filter out products already in cart
         const cartProductIds = new Set(cartItems.map(item => item.product?.id));
-        const filteredProducts = selectedProducts.filter(product => 
-          !cartProductIds.has(product.id)
-        );
-        
+        const filteredProducts = shuffled.filter(p => !cartProductIds.has(p.id)).slice(0, 15);
         setSuggestedProducts(filteredProducts);
       } catch (error) {
         console.error('Error fetching suggested products:', error);
@@ -297,9 +357,69 @@ export default function CartPage() {
         setSuggestedProductsLoading(false);
       }
     };
-
     fetchSuggestedProducts();
-  }, [mounted, isInitialized, cartItems.length]);
+  }, [mounted, isInitialized, cartItems]);
+
+  // Fetch recommendation sections using rules (when to show flowers vs sweets vs small treats, limits)
+  useEffect(() => {
+    const extractProducts = (res) => res?.products || res?.data?.products || [];
+    const cartProductIds = new Set(cartItems.map(item => item.product?.id));
+    const config = getRecommendationConfig(cartItems);
+
+    const fetchSections = async () => {
+      if (!mounted || !isInitialized) return;
+      setSuggestedSectionsLoading(true);
+      try {
+        const promises = [];
+
+        if (config.fetchAddOns) {
+          promises.push(addOnApi.getAddOnProducts());
+        }
+        if (config.fetchGift) {
+          promises.push(productApi.getProductsByCategory('flowers', null, { page: 1, limit: config.flowersLimit }));
+          promises.push(productApi.getProductsByCategory('sweets-dry-fruits', null, { page: 1, limit: config.sweetsLimit }));
+        }
+        if (config.fetchSmallTreats) {
+          promises.push(productApi.getProductsByCategory('small-treats-desserts', null, { page: 1, limit: config.smallTreatsLimit }));
+        }
+
+        const results = await Promise.all(promises);
+        let idx = 0;
+
+        const addOns = config.fetchAddOns
+          ? (Array.isArray(results[idx]) ? results[idx] : []).slice(0, config.addOnsLimit)
+          : [];
+        if (config.fetchAddOns) idx += 1;
+
+        let gift = [];
+        if (config.fetchGift) {
+          const flowers = extractProducts(results[idx]);
+          const sweets = extractProducts(results[idx + 1]);
+          idx += 2;
+          gift = [...flowers, ...sweets]
+            .sort(() => Math.random() - 0.5)
+            .filter(p => !cartProductIds.has(p.id))
+            .slice(0, config.totalGiftLimit);
+        }
+
+        const smallTreats = config.fetchSmallTreats
+          ? extractProducts(results[idx]).filter(p => !cartProductIds.has(p.id)).slice(0, config.smallTreatsLimit)
+          : [];
+
+        setSuggestedSections({
+          addOns,
+          gift,
+          smallTreats
+        });
+      } catch (error) {
+        console.error('Error fetching recommendation sections:', error);
+        setSuggestedSections({ addOns: [], gift: [], smallTreats: [] });
+      } finally {
+        setSuggestedSectionsLoading(false);
+      }
+    };
+    fetchSections();
+  }, [mounted, isInitialized, cartItems]);
 
   // Expand all items by default when cart items change
   useEffect(() => {
@@ -368,7 +488,7 @@ export default function CartPage() {
 
   // Recalculate cart summary whenever cartItems changes
   // This ensures the Order Summary updates when quantity changes
-  const cartSummary = useMemo(() => getCartSummary(), [cartItems]);
+  const cartSummary = useMemo(() => getCartSummary(), [getCartSummary]);
   const deliveryCharge = deliveryInfo?.deliveryCharge || 0;
   
   // Separate regular items and deal items
@@ -383,7 +503,10 @@ export default function CartPage() {
       .filter(item => item.is_deal_item)
       .reduce((sum, item) => sum + (item.totalPrice || 0), 0);
   }, [cartItems]);
-  
+  const dealCartItems = useMemo(() => cartItems.filter((item) => item.is_deal_item), [cartItems]);
+  const regularCartItems = useMemo(() => cartItems.filter((item) => !item.is_deal_item), [cartItems]);
+  const multipleMainCartItems = regularCartItems.length > 1;
+
   // Subtotal excludes deal items
   const subtotal = regularItemsTotal;
   const promoDiscount = appliedPromo?.discount || 0;
@@ -393,6 +516,142 @@ export default function CartPage() {
   // Total includes subtotal (regular items) + deal items - promo discount + delivery
   const total = Math.max(0, subtotal + dealItemsTotal - promoDiscount + effectiveDeliveryCharge);
   const amountToFreeDelivery = Math.max(0, freeDeliveryThreshold - subtotal);
+
+  const getPromoPotentialDiscount = (promo, amount) => {
+    if (!promo) return 0;
+    const discountType = String(promo.discount_type || '').toLowerCase();
+    const discountValue = Number(promo.discount_value) || 0;
+    if (discountType === 'percentage') {
+      let discount = (amount * discountValue) / 100;
+      const maxDiscount = promo.max_discount_amount != null ? Number(promo.max_discount_amount) : null;
+      if (maxDiscount && maxDiscount > 0) {
+        discount = Math.min(discount, maxDiscount);
+      }
+      return Math.max(0, discount);
+    }
+    return Math.max(0, discountValue);
+  };
+
+  const formatRoundedAmount = (value) => {
+    const safe = Number(value) || 0;
+    return formatPrice(Math.max(0, Math.ceil(safe)));
+  };
+
+  const getFriendlyPromoError = (rawMessage) => {
+    const message = String(rawMessage || '').trim();
+    const lower = message.toLowerCase();
+    if (lower.includes('minimum order amount')) return message;
+    if (lower.includes('expired')) return 'This coupon has expired.';
+    if (lower.includes('usage limit')) return 'This coupon usage limit has been reached.';
+    if (lower.includes('no longer available')) return 'This coupon is no longer available.';
+    if (lower.includes('invalid promo code')) return 'Invalid promo code.';
+    if (lower.includes('connect') || lower.includes('network')) {
+      return 'Could not connect to server. Please try again.';
+    }
+    return message || 'Unable to apply this coupon right now.';
+  };
+
+  const availableOffers = useMemo(() => {
+    const mapped = (suggestedPromos || []).map((promo) => {
+      const minOrder = Number(promo.min_order_amount) || 0;
+      const shortBy = Math.max(0, minOrder - subtotal);
+      const eligible = shortBy <= 0;
+      const potentialDiscount = getPromoPotentialDiscount(promo, subtotal);
+      return {
+        ...promo,
+        minOrder,
+        shortBy,
+        eligible,
+        potentialDiscount,
+      };
+    });
+
+    if (offersExperimentVariant === 'closest_threshold') {
+      return mapped.sort((a, b) => {
+        if (a.eligible !== b.eligible) return a.eligible ? -1 : 1;
+        if (a.shortBy !== b.shortBy) return a.shortBy - b.shortBy;
+        if (b.potentialDiscount !== a.potentialDiscount) {
+          return b.potentialDiscount - a.potentialDiscount;
+        }
+        return (b.discount_value || 0) - (a.discount_value || 0);
+      });
+    }
+
+    return mapped.sort((a, b) => {
+      if (a.eligible !== b.eligible) return a.eligible ? -1 : 1;
+      if (b.potentialDiscount !== a.potentialDiscount) {
+        return b.potentialDiscount - a.potentialDiscount;
+      }
+      return (b.discount_value || 0) - (a.discount_value || 0);
+    });
+  }, [offersExperimentVariant, suggestedPromos, subtotal]);
+
+  const topAvailableOffers = useMemo(() => availableOffers.slice(0, 6), [availableOffers]);
+  const bestEligibleOffer = useMemo(
+    () => availableOffers.find((offer) => offer.eligible) || null,
+    [availableOffers]
+  );
+  const nextBestOffer = useMemo(() => {
+    const locked = availableOffers.filter((offer) => !offer.eligible);
+    if (locked.length === 0) return null;
+    return [...locked].sort((a, b) => {
+      if (a.shortBy !== b.shortBy) return a.shortBy - b.shortBy;
+      return b.potentialDiscount - a.potentialDiscount;
+    })[0];
+  }, [availableOffers]);
+  const visibleOfferCards = useMemo(() => {
+    // Keep the main cart view focused: show only one most relevant eligible offer.
+    // If a promo is already applied and still present, keep that visible as the single card.
+    if (appliedPromo?.code) {
+      const appliedOffer = topAvailableOffers.find((promo) => promo.code === appliedPromo.code);
+      if (appliedOffer) return [appliedOffer];
+    }
+
+    if (bestEligibleOffer) return [bestEligibleOffer];
+    return [];
+  }, [topAvailableOffers, appliedPromo, bestEligibleOffer]);
+  const nextBestUnlockProgress = useMemo(() => {
+    if (!nextBestOffer?.minOrder) return 0;
+    return Math.max(0, Math.min(100, (subtotal / nextBestOffer.minOrder) * 100));
+  }, [nextBestOffer, subtotal]);
+  const nextBestUnlockSavings = useMemo(() => {
+    if (!nextBestOffer) return 0;
+    const baselineAmount = Math.max(subtotal, nextBestOffer.minOrder || 0);
+    return getPromoPotentialDiscount(nextBestOffer, baselineAmount);
+  }, [nextBestOffer, subtotal]);
+  const modalOfferCards = useMemo(() => {
+    const eligibleOffers = availableOffers.filter((offer) => offer.eligible);
+    const lockedClosestOffers = [...availableOffers.filter((offer) => !offer.eligible)].sort((a, b) => {
+      if ((a.shortBy || 0) !== (b.shortBy || 0)) return (a.shortBy || 0) - (b.shortBy || 0);
+      return (b.potentialDiscount || 0) - (a.potentialDiscount || 0);
+    });
+    return [...eligibleOffers, ...lockedClosestOffers];
+  }, [availableOffers]);
+  const betterEligibleOffer = useMemo(() => {
+    if (!appliedPromo?.code) return null;
+
+    const currentlyAppliedOffer = availableOffers.find((offer) => offer.code === appliedPromo.code) || null;
+    const appliedDiscountAtCurrentSubtotal = currentlyAppliedOffer
+      ? getPromoPotentialDiscount(currentlyAppliedOffer, subtotal)
+      : Number(appliedPromo.discount) || 0;
+
+    const betterEligibleCandidates = availableOffers
+      .filter((offer) => offer.eligible && offer.code !== appliedPromo.code)
+      .sort((a, b) => {
+        if ((b.potentialDiscount || 0) !== (a.potentialDiscount || 0)) {
+          return (b.potentialDiscount || 0) - (a.potentialDiscount || 0);
+        }
+        return (b.discount_value || 0) - (a.discount_value || 0);
+      });
+
+    const bestCandidate = betterEligibleCandidates[0] || null;
+    if (!bestCandidate) return null;
+
+    const bestCandidateDiscount = getPromoPotentialDiscount(bestCandidate, subtotal);
+    if (bestCandidateDiscount <= appliedDiscountAtCurrentSubtotal) return null;
+
+    return bestCandidate;
+  }, [availableOffers, appliedPromo, subtotal]);
   
   // Count regular items for subtotal display
   const regularItemsCount = useMemo(() => {
@@ -462,15 +721,20 @@ export default function CartPage() {
   };
 
   const handleRemoveItem = async (itemId) => {
-    // Show confirmation dialog
-    if (!window.confirm('Do you want to delete this item?')) return;
-    
-    // User confirmed deletion
-    setRemovingItemId(itemId);
-    setTimeout(() => {
-      removeFromCart(itemId);
-      setRemovingItemId(null);
-    }, 300);
+    openConfirmModal({
+      title: 'Remove item?',
+      message: 'Do you want to delete this item from your cart?',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      variant: 'danger',
+      onConfirm: () => {
+        setRemovingItemId(itemId);
+        setTimeout(() => {
+          removeFromCart(itemId);
+          setRemovingItemId(null);
+        }, 300);
+      }
+    });
   };
 
   // Handle combo item quantity change
@@ -489,11 +753,18 @@ export default function CartPage() {
     const combo = item?.combos?.find(c => 
       c.id === comboId || (c.product_id && c.product_id.toString() === comboId.toString())
     );
-    
-    if (combo && window.confirm(`Remove ${combo.product_name} from combo?`)) {
-      removeComboItem(itemId, comboId);
-      showSuccess('Combo Item Removed', `${combo.product_name} has been removed from the combo.`);
-    }
+    if (!combo) return;
+    openConfirmModal({
+      title: 'Remove from combo?',
+      message: `Remove ${combo.product_name} from this combo?`,
+      confirmLabel: 'Remove',
+      cancelLabel: 'Cancel',
+      variant: 'danger',
+      onConfirm: () => {
+        removeComboItem(itemId, comboId);
+        showSuccess('Combo Item Removed', `${combo.product_name} has been removed from the combo.`);
+      }
+    });
   };
 
   // Load applied promo from localStorage on mount and sync with localStorage
@@ -505,6 +776,7 @@ export default function CartPage() {
         // No promo in localStorage - clear state if it exists
         if (appliedPromo) {
           setAppliedPromo(null);
+          setAppliedPromoSource('');
           setPromoCode('');
           setPromoError('');
           setPreviewDiscount(null);
@@ -522,6 +794,7 @@ export default function CartPage() {
           // Invalid promo, clear everything
           localStorage.removeItem('applied_promo');
           setAppliedPromo(null);
+          setAppliedPromoSource('');
           setPromoCode('');
           setPromoError('');
           setPreviewDiscount(null);
@@ -533,11 +806,13 @@ export default function CartPage() {
         if (!appliedPromo || appliedPromo.code !== promoData.code || appliedPromo.discount !== promoData.discount) {
           setAppliedPromo(promoData);
         }
+        setAppliedPromoSource(promoData?.source || '');
       } catch (err) {
         console.error('Error loading/validating saved promo:', err);
         // Clear corrupted promo data
         localStorage.removeItem('applied_promo');
         setAppliedPromo(null);
+        setAppliedPromoSource('');
         setPromoCode('');
         setPromoError('');
         setPreviewDiscount(null);
@@ -567,7 +842,7 @@ export default function CartPage() {
     const loadPromos = async () => {
       try {
         const promos = await promoCodeApi.getPromoCodes(true);
-        setSuggestedPromos(promos.slice(0, 3)); // Get first 3 active promos
+        setSuggestedPromos(Array.isArray(promos) ? promos : []);
       } catch (error) {
         console.error('Error loading promo codes:', error);
       }
@@ -575,16 +850,40 @@ export default function CartPage() {
     loadPromos();
   }, []);
 
-  // Track views when suggested promos are displayed
+  // Lightweight A/B variant for offer ordering/content.
   useEffect(() => {
-    if (isSuggestedPromosOpen && suggestedPromos.length > 0) {
-      suggestedPromos.slice(0, 3).forEach((promo) => {
-        if (promo.code) {
-          promoCodeTrackingApi.trackView(promo.code);
-        }
+    if (typeof window === 'undefined') return;
+    const key = 'cart_offers_variant_v1';
+    let variant = localStorage.getItem(key);
+    if (variant !== 'high_discount' && variant !== 'closest_threshold') {
+      variant = Math.random() < 0.5 ? 'high_discount' : 'closest_threshold';
+      localStorage.setItem(key, variant);
+    }
+    setOffersExperimentVariant(variant);
+  }, []);
+
+  // Track views for visible available offers once per session
+  useEffect(() => {
+    if (topAvailableOffers.length > 0) {
+      topAvailableOffers.forEach((promo) => {
+        if (!promo.code || trackedOfferViewsRef.current.has(promo.code)) return;
+        trackedOfferViewsRef.current.add(promo.code);
+        promoCodeTrackingApi.trackView(promo.code);
       });
     }
-  }, [isSuggestedPromosOpen, suggestedPromos]);
+  }, [topAvailableOffers]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (!showOffersModal) return;
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [showOffersModal]);
 
   const handleSaveForLater = (itemId) => {
     setSavingItemId(itemId);
@@ -617,12 +916,20 @@ export default function CartPage() {
   };
 
   const handleRemoveSavedItem = (savedItemId) => {
-    if (!window.confirm('Remove this item from saved items?')) return;
-    setRemovingSavedItemId(savedItemId);
-    setTimeout(() => {
-      removeSavedItem(savedItemId);
-      setRemovingSavedItemId(null);
-    }, 300);
+    openConfirmModal({
+      title: 'Remove from saved?',
+      message: 'Remove this item from saved items?',
+      confirmLabel: 'Remove',
+      cancelLabel: 'Cancel',
+      variant: 'danger',
+      onConfirm: () => {
+        setRemovingSavedItemId(savedItemId);
+        setTimeout(() => {
+          removeSavedItem(savedItemId);
+          setRemovingSavedItemId(null);
+        }, 300);
+      }
+    });
   };
 
   // Real-time validation with debouncing
@@ -667,7 +974,17 @@ export default function CartPage() {
 
   const handleApplyPromo = async () => {
     setPromoError('');
+    setPromoStatus(null);
     setIsApplyingPromo(true);
+    const attemptedCode = promoCode.trim().toUpperCase();
+
+    if (attemptedCode) {
+      promoCodeTrackingApi.trackApply(attemptedCode, subtotal, {
+        validation_result: 'clicked',
+        failure_reason: null,
+        source: 'manual_input',
+      });
+    }
 
     try {
       const result = await promoCodeApi.validatePromoCode(promoCode, subtotal);
@@ -676,45 +993,40 @@ export default function CartPage() {
         description: result.description,
         discount: result.discount_amount,
         discount_type: result.discount_type,
-        discount_value: result.discount_value
+        discount_value: result.discount_value,
+        source: 'manual_input',
       };
       setAppliedPromo(promoData);
+      setAppliedPromoSource('manual_input');
       // Save to localStorage for checkout
       localStorage.setItem('applied_promo', JSON.stringify(promoData));
       setPromoCode('');
       setPreviewDiscount(null);
       setPromoValidationState(null);
+      setShowManualPromoInput(false);
+      setPromoStatus({ type: 'success', message: `Applied ${promoData.code}. You saved ${formatPrice(promoData.discount)}.` });
+
+      promoCodeTrackingApi.trackApply(promoData.code, subtotal, {
+        validation_result: 'success',
+        failure_reason: null,
+        source: 'manual_input',
+      });
       
-      // Trigger success animation
-      setShowSuccessAnimation(true);
-      setTimeout(() => setShowSuccessAnimation(false), 3000);
-      
-      // Show success toast notification
-      const discountText = promoData.discount_type === 'percentage' 
-        ? `${promoData.discount_value}% off`
-        : `${formatPrice(promoData.discount)} off`;
-      showSuccess(
-        'Promo Code Applied! 🎉',
-        `You saved ${formatPrice(promoData.discount)} with ${promoData.code}!`
-      );
     } catch (error) {
       // Extract user-friendly error message
-      const errorMessage = error.message || 'Invalid promo code';
+      const errorMessage = getFriendlyPromoError(error.message);
       setPromoError(errorMessage);
+      setPromoStatus({ type: 'error', message: errorMessage });
       setPromoValidationState('invalid');
-      
-      // Only show error toast if it's not a network error (those are handled differently)
-      if (!errorMessage.includes('connect') && !errorMessage.includes('network')) {
-        showError(
-          'Promo Code Invalid',
-          errorMessage
-        );
-      } else {
-        showError(
-          'Connection Error',
-          errorMessage
-        );
+
+      if (attemptedCode) {
+        promoCodeTrackingApi.trackApply(attemptedCode, subtotal, {
+          validation_result: 'failed',
+          failure_reason: errorMessage,
+          source: 'manual_input',
+        });
       }
+      
     } finally {
       setIsApplyingPromo(false);
     }
@@ -724,33 +1036,80 @@ export default function CartPage() {
     const removedCode = appliedPromo?.code || '';
     const currentSubtotal = subtotal;
     setAppliedPromo(null);
+    setAppliedPromoSource('');
     localStorage.removeItem('applied_promo');
     setPromoCode('');
     setPromoError('');
     setPreviewDiscount(null);
     setPromoValidationState(null);
+    setPromoStatus(removedCode ? { type: 'success', message: `${removedCode} removed from your order.` } : null);
     
     // Track promo code abandon
     if (removedCode) {
-      promoCodeTrackingApi.trackAbandon(removedCode, currentSubtotal);
-      showSuccess(
-        'Promo Code Removed',
-        `${removedCode} has been removed from your order.`
-      );
+      promoCodeTrackingApi.trackAbandon(removedCode, currentSubtotal, {
+        failure_reason: 'removed_by_user',
+      });
     }
   };
 
-  const handleClearPromoCode = () => {
-    setPromoCode('');
-    setPromoError('');
-    setPreviewDiscount(null);
-    setPromoValidationState(null);
-  };
+  // Re-validate applied coupon when cart subtotal changes.
+  // If no longer valid, remove gracefully with a clear reason.
+  useEffect(() => {
+    if (!mounted || !isInitialized || !appliedPromo?.code) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        const result = await promoCodeApi.validatePromoCode(appliedPromo.code, subtotal);
+        const refreshedPromo = {
+          code: result.promo_code,
+          description: result.description,
+          discount: result.discount_amount,
+          discount_type: result.discount_type,
+          discount_value: result.discount_value,
+        source: appliedPromoSource || appliedPromo.source || '',
+        };
+
+        const changed =
+          refreshedPromo.discount !== appliedPromo.discount ||
+          refreshedPromo.discount_type !== appliedPromo.discount_type ||
+          refreshedPromo.discount_value !== appliedPromo.discount_value;
+        if (changed) {
+          setAppliedPromo(refreshedPromo);
+          localStorage.setItem('applied_promo', JSON.stringify(refreshedPromo));
+        }
+      } catch (error) {
+        const removedCode = appliedPromo.code;
+        setAppliedPromo(null);
+        setAppliedPromoSource('');
+        localStorage.removeItem('applied_promo');
+        setPromoCode('');
+        setPreviewDiscount(null);
+        setPromoValidationState(null);
+        setPromoError('');
+        setPromoStatus(null);
+
+        const raw = String(error?.message || '').toLowerCase();
+        const failureTag = raw.includes('minimum order') ? 'below_minimum' : 'validation_failed';
+        promoCodeTrackingApi.trackAbandon(removedCode, subtotal, {
+          failure_reason: `cart_change_invalidated:${failureTag}`,
+        });
+      }
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [mounted, isInitialized, subtotal, appliedPromo, appliedPromoSource]);
 
   const handleSuggestedPromo = async (promo) => {
     setPromoCode(promo.code);
     setPromoError('');
+    setPromoStatus(null);
     setIsApplyingPromo(true);
+
+    promoCodeTrackingApi.trackApply(promo.code, subtotal, {
+      validation_result: 'clicked',
+      failure_reason: null,
+      source: 'offers_block',
+    });
 
     try {
       const result = await promoCodeApi.validatePromoCode(promo.code, subtotal);
@@ -759,37 +1118,36 @@ export default function CartPage() {
         description: result.description,
         discount: result.discount_amount,
         discount_type: result.discount_type,
-        discount_value: result.discount_value
+        discount_value: result.discount_value,
+        source: 'offers_block',
       };
       setAppliedPromo(promoData);
+      setAppliedPromoSource('offers_block');
       // Save to localStorage for checkout
       localStorage.setItem('applied_promo', JSON.stringify(promoData));
       setPromoCode('');
       setPreviewDiscount(null);
       setPromoValidationState(null);
+      setShowManualPromoInput(false);
+      setPromoStatus({ type: 'success', message: `Applied ${promoData.code}. You saved ${formatPrice(promoData.discount)}.` });
       
       // Track promo code application
-      promoCodeTrackingApi.trackApply(promoData.code, subtotal);
+      promoCodeTrackingApi.trackApply(promoData.code, subtotal, {
+        validation_result: 'success',
+        failure_reason: null,
+        source: 'offers_block',
+      });
       
-      // Trigger success animation
-      setShowSuccessAnimation(true);
-      setTimeout(() => setShowSuccessAnimation(false), 3000);
-      
-      // Show success toast notification
-      const discountText = promoData.discount_type === 'percentage' 
-        ? `${promoData.discount_value}% off`
-        : `${formatPrice(promoData.discount)} off`;
-      showSuccess(
-        'Promo Code Applied! 🎉',
-        `You saved ${formatPrice(promoData.discount)} with ${promoData.code}!`
-      );
     } catch (error) {
-      setPromoError(error.message || 'Failed to apply promo code');
+      const errorMessage = getFriendlyPromoError(error.message);
+      setPromoError(errorMessage);
+      setPromoStatus({ type: 'error', message: errorMessage });
       setPromoValidationState('invalid');
-      showError(
-        'Promo Code Invalid',
-        error.message || 'The promo code could not be applied.'
-      );
+      promoCodeTrackingApi.trackApply(promo.code, subtotal, {
+        validation_result: 'failed',
+        failure_reason: errorMessage,
+        source: 'offers_block',
+      });
     } finally {
       setIsApplyingPromo(false);
     }
@@ -1117,25 +1475,30 @@ export default function CartPage() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header />
       
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 pb-20 lg:pb-8">
+      <div className={`max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 lg:pb-8 ${mounted && isInitialized && cartItems.length > 0 ? 'pb-40' : 'pb-20'}`}>
         {/* Page Header */}
         <div className="mb-3 sm:mb-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 dark:text-gray-100">Shopping Cart</h1>
-              <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mt-0.5" suppressHydrationWarning>
+              <h1 className={cartType.pageTitle}>Shopping Cart</h1>
+              <p className={`${cartType.pageSubtitle} mt-0.5`} suppressHydrationWarning>
                 {!mounted || !isInitialized ? (
                   <span>0 items</span>
                 ) : (
                   <>
-                    {totalItemCount} {totalItemCount === 1 ? 'item' : 'items'} in your cart
+                    <span className="block sm:inline">
+                      {totalItemCount} {totalItemCount === 1 ? 'item' : 'items'} in your cart
+                    </span>
                     {(itemCounts.mainProducts > 0 || itemCounts.comboItems > 0 || itemCounts.dealItems > 0) && (
-                      <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
-                        ({itemCounts.mainProducts > 0 && `${itemCounts.mainProducts} main product${itemCounts.mainProducts !== 1 ? 's' : ''}`}
+                      <span className={`mt-1 block sm:mt-0 sm:inline sm:ml-1 ${cartType.pageMeta}`}>
+                        <span className="sm:hidden">Includes </span>
+                        <span className="hidden sm:inline">(</span>
+                        {itemCounts.mainProducts > 0 && `${itemCounts.mainProducts} main product${itemCounts.mainProducts !== 1 ? 's' : ''}`}
                         {itemCounts.mainProducts > 0 && itemCounts.comboItems > 0 && ', '}
                         {itemCounts.comboItems > 0 && `${itemCounts.comboItems} combo item${itemCounts.comboItems !== 1 ? 's' : ''}`}
                         {(itemCounts.mainProducts > 0 || itemCounts.comboItems > 0) && itemCounts.dealItems > 0 && ', '}
-                        {itemCounts.dealItems > 0 && `${itemCounts.dealItems} deal item${itemCounts.dealItems !== 1 ? 's' : ''}`})
+                        {itemCounts.dealItems > 0 && `${itemCounts.dealItems} deal item${itemCounts.dealItems !== 1 ? 's' : ''}`}
+                        <span className="hidden sm:inline">)</span>
                       </span>
                     )}
                   </>
@@ -1145,7 +1508,7 @@ export default function CartPage() {
             {(mounted && isInitialized && cartItems.length > 0) && (
               <button
                 onClick={handleContinueShopping}
-                className="hidden md:flex items-center gap-2 px-4 py-2 text-pink-600 dark:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-900/30 rounded-lg transition-colors"
+                className="ui-focus-visible hidden min-h-[44px] items-center gap-2 rounded-lg px-4 py-2 text-pink-700 transition-colors hover:bg-pink-50 dark:text-pink-300 dark:hover:bg-pink-900/30 md:flex"
               >
                 <ShoppingBag className="w-5 h-5" />
                 Continue Shopping
@@ -1162,8 +1525,8 @@ export default function CartPage() {
               <div className="w-24 h-24 mx-auto mb-6 flex items-center justify-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500 dark:border-pink-400"></div>
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Loading your cart...</h2>
-              <p className="text-gray-600 dark:text-gray-300 mb-8">Please wait while we load your items</p>
+              <h2 className={`${cartType.section} mb-2 text-center`}>Loading your cart...</h2>
+              <p className={`${cartType.body} mb-8 text-center`}>Please wait while we load your items</p>
             </div>
           </div>
         ) : cartItems.length === 0 ? (
@@ -1171,11 +1534,11 @@ export default function CartPage() {
           <>
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm dark:shadow-xl dark:shadow-black/20 border border-gray-200 dark:border-gray-700 p-12 text-center">
               <ShoppingBag className="w-24 h-24 mx-auto mb-6 text-gray-300 dark:text-gray-600" />
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Your cart is empty</h2>
-              <p className="text-gray-600 dark:text-gray-300 mb-8">Add some delicious cakes to get started!</p>
+              <h2 className={`${cartType.section} mb-2 text-center`}>Your cart is empty</h2>
+              <p className={`${cartType.body} mb-8 text-center`}>Add some delicious cakes to get started!</p>
               <button
                 onClick={handleContinueShopping}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white rounded-lg hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all duration-200 font-semibold shadow-lg dark:shadow-xl dark:shadow-black/30 hover:shadow-xl"
+                className="ui-focus-visible inline-flex min-h-[48px] items-center gap-2 rounded-lg bg-gradient-to-r from-pink-600 to-rose-600 px-6 py-3 font-semibold text-white shadow-lg transition-all duration-200 hover:from-pink-700 hover:to-rose-700 hover:shadow-xl dark:from-pink-700 dark:to-rose-700 dark:shadow-xl dark:shadow-black/30 dark:hover:from-pink-600 dark:hover:to-rose-600"
               >
                 <ShoppingBag className="w-5 h-5" />
                 Start Shopping
@@ -1188,8 +1551,10 @@ export default function CartPage() {
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <Package className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-                    <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Saved for Later</h2>
-                    <span className="text-sm sm:text-base text-gray-500 dark:text-gray-300">({savedItems.length} {savedItems.length === 1 ? 'item' : 'items'})</span>
+                    <h2 className={cartType.section}>Saved for Later</h2>
+                    <span className={`${cartType.sectionMuted} shrink-0`}>
+                      ({savedItems.length} {savedItems.length === 1 ? 'item' : 'items'})
+                    </span>
                   </div>
                 </div>
 
@@ -1205,6 +1570,7 @@ export default function CartPage() {
                     const totalItemPrice = item.totalPrice || (itemTotal + comboTotal);
                     const isMoving = movingItemId === item.id;
                     const isRemovingSaved = removingSavedItemId === item.id;
+                    const savedLineThumbSrc = resolveEntityImageUrl(item.product);
 
                     return (
                       <div
@@ -1215,19 +1581,23 @@ export default function CartPage() {
                       >
                         <div className="flex flex-col sm:flex-row gap-4">
                           {/* Product Image */}
-                          <div className="w-full sm:w-24 h-24 bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 rounded-lg overflow-hidden flex-shrink-0">
-                            <img
-                              src={resolveImageUrl(item.product.image_url)}
-                              alt={item.product.name}
-                              className="w-full h-full object-cover"
-                            />
+                          <div className="relative w-full sm:w-24 h-24 flex-shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30">
+                            {savedLineThumbSrc ? (
+                              <Image
+                                src={savedLineThumbSrc}
+                                alt={item.product.name}
+                                fill
+                                className="object-cover"
+                                sizes="(max-width: 640px) 100vw, 96px"
+                              />
+                            ) : null}
                           </div>
 
                           {/* Product Info */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-4">
                               <div className="flex-1">
-                                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1.5">
+                                <h3 className={`${cartType.cardTitleLg} mb-1.5`}>
                                   {item.product.name}
                                 </h3>
                                 
@@ -1271,8 +1641,8 @@ export default function CartPage() {
                                 {/* Item Total */}
                                 <div className="mb-2 pt-2 border-t border-gray-100 dark:border-gray-700">
                                   <div className="flex items-center justify-between mb-1">
-                                    <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">
-                                      {item.combos && item.combos.length > 0 ? 'Item Total (Product + Combo)' : 'Total: '}
+                                    <span className={`${cartType.meta} font-medium text-gray-700 dark:text-gray-300 sm:text-sm`}>
+                                      <CartItemTotalCaption hasCombos={Boolean(item.combos && item.combos.length > 0)} />
                                     </span>
                                     <div className="flex items-center gap-1.5">
                                       {item.combos && item.combos.length > 0 ? (
@@ -1281,7 +1651,7 @@ export default function CartPage() {
                                             {formatPrice(itemPrice)}
                                           </span>
                                           <span className="text-xs text-gray-400 dark:text-gray-500">+</span>
-                                          <span className="text-base sm:text-lg font-semibold text-purple-600 dark:text-purple-400">
+                                          <span className="text-base sm:text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                                             {formatPrice(comboTotal)}
                                           </span>
                                         </>
@@ -1303,8 +1673,10 @@ export default function CartPage() {
                                 {item.combos && item.combos.length > 0 && (
                                   <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
                                     <div className="flex items-center gap-2 mb-1.5">
-                                      <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                                      <span className="text-sm sm:text-base font-medium text-purple-600 dark:text-purple-400">Combo Items</span>
+                                      <Sparkles className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                                      <span className={`${cartType.subsection} text-gray-600 dark:text-gray-300 sm:text-base`}>
+                                        Add-ons
+                                      </span>
                                     </div>
                                     <div className="space-y-1.5">
                                       {item.combos.map((combo, index) => {
@@ -1319,7 +1691,7 @@ export default function CartPage() {
                                           className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/60 rounded-lg p-2 border border-gray-200 dark:border-gray-700"
                                         >
                                           <div className="flex items-center gap-2">
-                                            <Package className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                                            <Package className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                                             <span className="text-sm sm:text-base font-medium text-gray-900 dark:text-gray-100">
                                               {combo.product_name}
                                             </span>
@@ -1331,7 +1703,7 @@ export default function CartPage() {
                                                   {formatPrice(originalTotal)}
                                                 </span>
                                               )}
-                                          <span className="text-sm sm:text-base font-semibold text-purple-600 dark:text-purple-400">
+                                          <span className="text-sm sm:text-base font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                                                 {formatPrice(comboTotal)}
                                           </span>
                                         </div>
@@ -1383,15 +1755,321 @@ export default function CartPage() {
           <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4 sm:gap-6 lg:gap-8">
             {/* LEFT SECTION: Cart Items (70% equivalent) */}
             <div className="space-y-5 sm:space-y-6">
+              {topAvailableOffers.length > 0 && (
+                <div className="rounded-lg border border-pink-200/80 bg-white p-2 shadow-sm dark:border-pink-800/70 dark:bg-gray-800">
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="rounded-md bg-pink-100 p-1 dark:bg-pink-900/30">
+                        <Tag className="h-4 w-4 text-pink-600 dark:text-pink-400" />
+                      </div>
+                      <p className={cartType.panelTitle}>Your Available Savings</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`rounded-full bg-pink-50 px-2 py-0.5 text-pink-600 dark:bg-pink-900/30 dark:text-pink-300 ${cartType.pill}`}
+                      >
+                        {availableOffers.length} offers
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowOffersModal(true)}
+                        className={`${cartType.bodyStrong} ui-focus-visible rounded px-0.5 text-blue-700 underline-offset-2 hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300`}
+                      >
+                        View all
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    {visibleOfferCards.map((promo) => {
+                      const isApplied = appliedPromo?.code === promo.code;
+                      const isDisabled = isApplyingPromo || (!promo.eligible && !isApplied);
+                      const discountLabel =
+                        String(promo.discount_type || '').toLowerCase() === 'percentage'
+                          ? `${promo.discount_value}% off`
+                          : `${formatPrice(promo.discount_value || 0)} off`;
+                      const statusText = isApplied
+                        ? `Applied ${appliedPromo?.code}. You saved ${formatRoundedAmount(promoDiscount)}.`
+                        : promo.eligible
+                          ? 'Ready to apply the best coupon'
+                          : `Add ${formatRoundedAmount(promo.shortBy)} more`;
+                      const statusClass = isApplied
+                        ? 'text-pink-700 dark:text-pink-300'
+                        : promo.eligible
+                          ? 'text-pink-700 dark:text-pink-300'
+                          : 'text-gray-500 dark:text-gray-400';
+
+                      return (
+                        <div
+                          key={promo.id || promo.code}
+                          className={`rounded-md border px-2 py-1 active:scale-[0.99] ${
+                            isApplied
+                              ? 'border-pink-200 bg-pink-50/90 dark:border-pink-800 dark:bg-pink-900/25'
+                              : 'border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-700/40'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className={`truncate leading-tight ${cartType.savingsRowTitle}`}>
+                                {discountLabel} on orders above {formatPrice(promo.minOrder)}
+                              </p>
+                              <p className={`mt-px leading-tight ${cartType.meta} font-medium ${statusClass}`}>
+                                {statusText}
+                              </p>
+                            </div>
+
+                            {isApplied ? (
+                              <button
+                                type="button"
+                                onClick={handleRemovePromo}
+                                className="ui-focus-visible flex h-7 w-[72px] shrink-0 items-center justify-center rounded-md border border-pink-200 bg-white px-2 text-xs font-semibold text-pink-700 hover:bg-pink-50 dark:border-pink-800 dark:bg-gray-800 dark:text-pink-300 dark:hover:bg-pink-900/20"
+                              >
+                                Remove
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleSuggestedPromo(promo)}
+                                disabled={isDisabled}
+                                className={`ui-focus-visible flex h-7 w-[72px] shrink-0 items-center justify-center rounded-md px-2 text-xs font-semibold transition-colors ${
+                                  promo.eligible
+                                    ? 'border border-pink-300 bg-white text-pink-700 hover:bg-pink-50 disabled:bg-pink-100 dark:border-pink-700 dark:bg-gray-800 dark:text-pink-300 dark:hover:bg-pink-900/20'
+                                    : 'cursor-not-allowed bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                                }`}
+                              >
+                                {isApplyingPromo ? '...' : promo.eligible ? 'Apply' : 'More'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {visibleOfferCards.length === 0 && (
+                      <div className="rounded-md border border-gray-200 bg-gray-50/80 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-700/40">
+                        <p className={`${cartType.metaStrong} text-gray-800 dark:text-gray-100`}>
+                          No coupons ready to apply yet.
+                        </p>
+                        <p className={`mt-0.5 ${cartType.meta}`}>Tap “View all” to see upcoming offers.</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-1.5 space-y-1.5">
+                    {appliedPromo && appliedPromoSource === 'manual_input' && (
+                      <div
+                        className={`inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-blue-700 dark:border-blue-800 dark:bg-blue-900/25 dark:text-blue-300 ${cartType.metaStrong}`}
+                      >
+                        Manual code applied
+                      </div>
+                    )}
+
+                    {appliedPromo && betterEligibleOffer && (
+                      <div className="flex items-center justify-between gap-2 rounded-md border border-pink-200 bg-pink-50/70 px-2 py-1 dark:border-pink-800 dark:bg-pink-900/20">
+                        <p className={`${cartType.meta} font-medium text-pink-700 dark:text-pink-300`}>
+                          Better offer available:{' '}
+                          {String(betterEligibleOffer.discount_type || '').toLowerCase() === 'percentage'
+                            ? `${betterEligibleOffer.discount_value}% OFF`
+                            : `${formatPrice(betterEligibleOffer.discount_value || 0)} OFF`}
+                          . Switch now?
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => handleSuggestedPromo(betterEligibleOffer)}
+                          disabled={isApplyingPromo}
+                          className="h-7 shrink-0 rounded-md bg-pink-600 px-2.5 text-xs font-semibold text-white hover:bg-pink-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-pink-700 dark:hover:bg-pink-600"
+                        >
+                          {isApplyingPromo ? '...' : 'Switch now'}
+                        </button>
+                      </div>
+                    )}
+
+                    {!appliedPromo && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowManualPromoInput((prev) => !prev);
+                          setPromoStatus(null);
+                        }}
+                        className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
+                      >
+                        {showManualPromoInput ? 'Hide manual code' : 'Have a code? Apply manually'}
+                      </button>
+                    )}
+
+                    {!appliedPromo && showManualPromoInput && (
+                      <div className="rounded-lg border border-gray-200 bg-gray-50/70 p-2 dark:border-gray-700 dark:bg-gray-700/40">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={promoCode}
+                            onChange={(e) => {
+                              setPromoCode(e.target.value.toUpperCase());
+                              setPromoError('');
+                              setPromoStatus(null);
+                            }}
+                            placeholder="Enter promo code"
+                            className="h-8 w-full rounded-md border border-gray-300 bg-white px-2.5 text-xs font-medium uppercase tracking-[0.02em] text-gray-900 placeholder:text-gray-400 focus:border-pink-400 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleApplyPromo}
+                            disabled={!promoCode.trim() || isApplyingPromo || promoValidationState === 'invalid'}
+                            className="h-8 min-w-[72px] rounded-md bg-gradient-to-r from-pink-600 to-rose-600 px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {isApplyingPromo ? '...' : 'Apply'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {(promoStatus?.type === 'error' || promoError) && (
+                      <div
+                        className={`rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5 font-medium text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300 ${cartType.meta}`}
+                      >
+                        {promoStatus?.message || promoError}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              {showOffersModal && (
+                <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4">
+                  <div
+                    className="absolute inset-0"
+                    onClick={() => setShowOffersModal(false)}
+                    aria-hidden="true"
+                  />
+                  <div className="relative z-[91] max-h-[88dvh] w-full overflow-hidden rounded-t-2xl bg-white shadow-2xl dark:bg-gray-900 sm:max-w-lg sm:rounded-2xl">
+                    <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-gray-700">
+                      <div>
+                        <p className={cartType.modalTitle}>Available offers</p>
+                        <p className={cartType.modalMeta}>Apply now or unlock next savings</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowOffersModal(false)}
+                        className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                        aria-label="Close offers popup"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <div className="max-h-[calc(88dvh-70px)] space-y-1 overflow-y-auto p-3">
+                      {nextBestOffer && (
+                        <div className="rounded-md border border-pink-200 bg-pink-50/70 px-2.5 py-2 dark:border-pink-700 dark:bg-pink-900/20">
+                          <p className={`${cartType.metaStrong} text-pink-700 dark:text-pink-300`}>
+                            🎯 Add {formatRoundedAmount(nextBestOffer.shortBy)} more to unlock{' '}
+                            {formatRoundedAmount(nextBestUnlockSavings)} OFF
+                          </p>
+                          <div className="mt-1.5">
+                            <div
+                              className={`mb-1 flex items-center justify-between font-medium text-pink-700/80 dark:text-pink-300/80 ${cartType.meta}`}
+                            >
+                              <span>
+                                {formatRoundedAmount(subtotal)} / {formatRoundedAmount(nextBestOffer.minOrder)}
+                              </span>
+                            </div>
+                            <div className="h-1 w-full overflow-hidden rounded-full bg-pink-200/80 dark:bg-pink-900/45">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-pink-500 to-rose-500 transition-all duration-500"
+                                style={{ width: `${nextBestUnlockProgress}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {modalOfferCards.map((promo) => {
+                        const isApplied = appliedPromo?.code === promo.code;
+                        const isBestEligible =
+                          Boolean(bestEligibleOffer?.code) &&
+                          bestEligibleOffer.code === promo.code &&
+                          promo.eligible &&
+                          !isApplied;
+                        const isDisabled = isApplyingPromo || (!promo.eligible && !isApplied);
+                        const discountLabel =
+                          String(promo.discount_type || '').toLowerCase() === 'percentage'
+                            ? `${promo.discount_value}% off`
+                            : `${formatPrice(promo.discount_value || 0)} off`;
+
+                        return (
+                          <div
+                            key={`modal-${promo.id || promo.code}`}
+                            className={`rounded-md border px-2 py-1.5 ${
+                              isApplied
+                                ? 'border-pink-200 bg-pink-50/90 dark:border-pink-800 dark:bg-pink-900/25'
+                                : isBestEligible
+                                ? 'border-pink-500 bg-pink-50 dark:border-pink-500 dark:bg-pink-900/20'
+                                : 'border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-700/40'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <p className={`truncate leading-tight ${cartType.savingsRowTitle}`}>
+                                    {discountLabel} on orders above {formatPrice(promo.minOrder)}
+                                  </p>
+                                </div>
+                                <div className="mt-px flex items-center justify-between gap-2">
+                                  <p
+                                    className={`leading-tight ${cartType.meta} font-medium ${promo.eligible ? 'text-pink-700 dark:text-pink-300' : 'text-gray-500 dark:text-gray-400'}`}
+                                  >
+                                    {promo.eligible ? 'Ready to apply the best coupon' : `Add ${formatRoundedAmount(promo.shortBy)} more`}
+                                  </p>
+                                  {isBestEligible && (
+                                    <span className={`shrink-0 leading-tight ${cartType.metaStrong} text-pink-600 dark:text-pink-300`}>
+                                      Best deal
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {isApplied ? (
+                                <button
+                                  type="button"
+                                  onClick={handleRemovePromo}
+                                  className="ui-focus-visible flex h-8 w-[76px] shrink-0 items-center justify-center rounded-md border border-pink-200 bg-white px-2 text-xs font-semibold text-pink-700 hover:bg-pink-50 dark:border-pink-800 dark:bg-gray-800 dark:text-pink-300 dark:hover:bg-pink-900/20"
+                                >
+                                  Remove
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSuggestedPromo(promo)}
+                                  disabled={isDisabled}
+                                  className={`ui-focus-visible flex h-8 w-[76px] shrink-0 items-center justify-center rounded-md px-2 text-xs font-semibold transition-colors ${
+                                    isBestEligible
+                                      ? 'bg-gradient-to-r from-pink-600 to-rose-600 text-white hover:from-pink-700 hover:to-rose-700 disabled:from-pink-300 disabled:to-rose-300 dark:from-pink-700 dark:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600'
+                                      : promo.eligible
+                                      ? 'border border-pink-300 bg-white text-pink-700 hover:bg-pink-50 disabled:bg-pink-100 dark:border-pink-700 dark:bg-gray-800 dark:text-pink-300 dark:hover:bg-pink-900/20'
+                                      : 'cursor-not-allowed bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                                  }`}
+                                >
+                                  {isApplyingPromo ? '...' : promo.eligible ? 'Apply' : 'More'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {topAvailableOffers.length > 0 && cartItems.length > 0 && (
+                <div className="border-t border-gray-200/90 dark:border-gray-700/90 pt-4 sm:pt-5" />
+              )}
+
               {/* Deal Items - Grid Layout for Mobile */}
-              {cartItems.filter(item => item.is_deal_item).length > 0 && (
+              {dealCartItems.length > 0 && (
                 <div className="mb-4 sm:mb-6">
-                  <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 mb-2 sm:mb-3 flex items-center gap-2">
+                  <h2 className={`${cartType.section} mb-2 flex items-center gap-2 sm:mb-3`}>
                     <Gift className="w-4 h-4 sm:w-5 sm:h-5 text-pink-600 dark:text-pink-400" />
-                    Deal Items
+                    Deal items
                   </h2>
-                  <div className="grid grid-cols-1 gap-4 sm:gap-5">
-                    {cartItems.filter(item => item.is_deal_item).map((item, index) => {
+                  <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 sm:grid sm:grid-cols-1 sm:gap-5 sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent sm:dark:bg-transparent">
+                    {dealCartItems.map((item, index) => {
                       // Number sequentially across all main products (deal items start from 1)
                       const productNumber = index + 1;
                       const itemPrice = item.is_deal_item && item.deal_price 
@@ -1408,11 +2086,16 @@ export default function CartPage() {
                         ? swipeState[item.id].currentX - swipeState[item.id].startX
                         : 0;
                       const dealSwipeOffset = Math.max(-150, Math.min(0, rawDealSwipeOffset)); // Clamp between -150px and 0
+                      const dealThumbSrc = resolveEntityImageUrl(item.product);
 
                       return (
                         <div
                           key={item.id}
-                          className="relative overflow-hidden mb-4 sm:mb-5"
+                          className={`relative overflow-hidden sm:mb-5 ${
+                            index !== dealCartItems.length - 1
+                              ? 'border-b border-gray-200/90 dark:border-gray-700/90 sm:border-0'
+                              : ''
+                          }`}
                           onTouchStart={(e) => handleTouchStart(e, item.id)}
                           onTouchMove={(e) => handleTouchMove(e, item.id)}
                           onTouchEnd={(e) => handleTouchEnd(e, item.id)}
@@ -1426,8 +2109,8 @@ export default function CartPage() {
                           )}
                           
                           <div
-                          className={`bg-white dark:bg-gray-800 rounded-xl border-l-4 border-pink-500 dark:border-pink-400 border border-gray-200 dark:border-gray-700 p-3 sm:p-4 transition-all duration-300 ${
-                            isRemoving ? 'opacity-50 scale-95' : 'hover:shadow-lg dark:hover:shadow-xl dark:hover:shadow-black/30 hover:border-pink-300 dark:hover:border-pink-600'
+                          className={`bg-transparent sm:bg-white sm:dark:bg-gray-800 rounded-none sm:rounded-xl border-0 sm:border sm:border-gray-200 sm:dark:border-gray-700 sm:border-l-4 sm:border-l-pink-500 sm:dark:border-l-pink-400 p-3 sm:p-4 transition-all duration-300 ${
+                            isRemoving ? 'opacity-50 scale-95' : 'sm:hover:shadow-lg sm:dark:hover:shadow-xl sm:dark:hover:shadow-black/30 sm:hover:border-pink-300 sm:dark:hover:border-pink-600'
                           }`}
                             style={{
                               transform: `translateX(${dealSwipeOffset}px)`,
@@ -1436,15 +2119,19 @@ export default function CartPage() {
                         >
                             <div className="flex gap-3 sm:gap-4">
                           {/* Product Image with Deal Badge */}
-                          <div className="relative w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 rounded-lg overflow-hidden flex-shrink-0">
-                            <img
-                              src={resolveImageUrl(item.product.image_url)}
-                              alt={item.product.name}
-                              className="w-full h-full object-cover"
-                            />
-                            {/* Product Number Label */}
-                            <div className="absolute top-0 left-0 bg-gradient-to-r from-blue-600 to-blue-500 dark:from-blue-500 dark:to-blue-600 text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded-br-md shadow-sm z-10 leading-tight">
-                              Product {productNumber}
+                          <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 sm:h-24 sm:w-24">
+                            {dealThumbSrc ? (
+                              <Image
+                                src={dealThumbSrc}
+                                alt={item.product.name}
+                                fill
+                                className="object-cover"
+                                sizes="96px"
+                              />
+                            ) : null}
+                            {/* Item index — subtle so the photo stays hero */}
+                            <div className="absolute left-0 top-0 z-10 rounded-br-md bg-black/45 px-1 py-px text-[9px] font-medium tracking-tight text-white/95 backdrop-blur-[1px] sm:px-1.5 sm:py-0.5 sm:text-[10px]">
+                              Item {productNumber}
                             </div>
                             {/* Deal Badge */}
                             <div className="absolute bottom-1 right-1 sm:bottom-2 sm:right-2 bg-gradient-to-r from-pink-600 to-rose-600 text-white text-xs sm:text-sm font-bold px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md shadow-lg flex items-center gap-0.5 sm:gap-1 z-10">
@@ -1460,7 +2147,7 @@ export default function CartPage() {
                                 <div className="p-1.5 rounded-lg bg-pink-100 dark:bg-pink-900/30 flex-shrink-0">
                                   <Gift className="w-4 h-4 text-pink-600 dark:text-pink-400" />
                                 </div>
-                                <h3 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100 line-clamp-2 flex-1">
+                                <h3 className={`${cartType.cardTitle} line-clamp-2 flex-1`}>
                                   {item.product.name}
                                 </h3>
                               </div>
@@ -1476,7 +2163,9 @@ export default function CartPage() {
                             
                             {/* Price & Details */}
                             <div className="flex items-center gap-2 mb-2 flex-wrap">
-                              <span className="text-base sm:text-lg font-bold text-green-600 dark:text-green-400">
+                              <span
+                                className={`text-base font-bold tabular-nums text-gray-900 dark:text-gray-100 sm:text-lg`}
+                              >
                                 {formatPrice(itemPrice)}
                               </span>
                               {itemPrice < (item.product.base_price || item.variant?.price) && (
@@ -1499,9 +2188,11 @@ export default function CartPage() {
                                 </span>
                               </div>
                               <div className="text-right">
-                                <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 font-medium">
-                                  {item.combos && item.combos.length > 0 ? 'Total (incl. combo): ' : 'Total: '}
-                                </span>
+                                <span
+                                  className={`${cartType.meta} font-medium text-gray-600 dark:text-gray-300 sm:text-sm`}
+                                >
+                                  <CartItemTotalCaption hasCombos={Boolean(item.combos && item.combos.length > 0)} />
+                                </span>{' '}
                                 <span className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">
                                   {formatPrice(totalItemPrice)}
                                 </span>
@@ -1518,11 +2209,17 @@ export default function CartPage() {
               )}
 
               {/* Regular Items */}
-              {cartItems.filter(item => !item.is_deal_item).length > 0 && (
-                <div>
-                  {cartItems.filter(item => !item.is_deal_item).map((item, index) => {
+              {regularCartItems.length > 0 && (
+                <div
+                  className={
+                    multipleMainCartItems
+                      ? 'space-y-4 overflow-visible rounded-xl border border-gray-200 bg-gray-100 p-2.5 dark:border-gray-700 dark:bg-gray-900/40 sm:p-3 lg:p-4'
+                      : 'overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent sm:dark:bg-transparent'
+                  }
+                >
+                  {regularCartItems.map((item, index) => {
                     // Number sequentially across all main products (continue after deal items)
-                    const dealItemsCount = cartItems.filter(item => item.is_deal_item).length;
+                    const dealItemsCount = dealCartItems.length;
                     const productNumber = dealItemsCount + index + 1;
                     // Use deal price if it's a deal item
                     const itemPrice = item.is_deal_item && item.deal_price 
@@ -1552,12 +2249,15 @@ export default function CartPage() {
                       ? swipeState[item.id].currentX - swipeState[item.id].startX
                       : 0;
                     const swipeOffset = Math.max(-150, Math.min(0, rawSwipeOffset)); // Clamp between -150px and 0
+                    const regularThumbSrc = resolveEntityImageUrl(item.product);
 
                     return (
                       <div
                         id={`cart-item-${item.id}`}
                         key={item.id}
-                        className="relative overflow-hidden mb-4 sm:mb-5"
+                        className={
+                          multipleMainCartItems ? 'relative overflow-hidden' : 'relative overflow-hidden sm:mb-5'
+                        }
                         onTouchStart={(e) => handleTouchStart(e, item.id)}
                         onTouchMove={(e) => handleTouchMove(e, item.id)}
                         onTouchEnd={(e) => handleTouchEnd(e, item.id)}
@@ -1571,9 +2271,23 @@ export default function CartPage() {
                         )}
                         
                         <div
-                          className={`bg-white dark:bg-gray-800 rounded-xl border-l-4 border-blue-500 dark:border-blue-400 border border-gray-200 dark:border-gray-700 p-3 sm:p-4 lg:p-6 transition-all duration-300 ${
-                          isRemoving ? 'opacity-50 scale-95' : 'hover:shadow-lg dark:hover:shadow-xl dark:hover:shadow-black/30 hover:border-blue-300 dark:hover:border-blue-600'
-                        }`}
+                          className={
+                            multipleMainCartItems
+                              ? `rounded-xl border border-gray-300 p-3 shadow-sm transition-all duration-300 dark:border-gray-600 sm:p-4 lg:p-6 ${
+                                  index % 2 === 1
+                                    ? 'bg-gray-50 dark:bg-gray-800/90'
+                                    : 'bg-white dark:bg-gray-800'
+                                } ${
+                                  isRemoving
+                                    ? 'opacity-50 scale-95'
+                                    : 'hover:shadow-md hover:border-gray-400 dark:hover:border-gray-500 dark:hover:shadow-black/20'
+                                }`
+                              : `bg-transparent sm:bg-white sm:dark:bg-gray-800 rounded-none sm:rounded-xl border-0 sm:border sm:border-gray-200 sm:dark:border-gray-700 sm:border-l-4 sm:border-l-gray-200 sm:dark:border-l-gray-600 p-3 sm:p-4 lg:p-6 transition-all duration-300 ${
+                                  isRemoving
+                                    ? 'opacity-50 scale-95'
+                                    : 'sm:hover:shadow-lg sm:dark:hover:shadow-xl sm:dark:hover:shadow-black/30 sm:hover:border-gray-300 sm:dark:hover:border-gray-500'
+                                }`
+                          }
                           style={{
                             transform: `translateX(${swipeOffset}px)`,
                             transition: swipeState[item.id]?.isSwiping ? 'none' : 'transform 0.3s ease-out'
@@ -1582,23 +2296,26 @@ export default function CartPage() {
                           {/* Mobile: Image and Product Info Side by Side */}
                           <div className="flex flex-row gap-2 sm:hidden">
                           {/* Product Image */}
-                            <div className="relative w-20 h-20 bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 rounded-lg overflow-hidden flex-shrink-0">
-                              {/* Product Number Label */}
-                              <div className="absolute top-0 left-0 bg-gradient-to-r from-blue-600 to-blue-500 dark:from-blue-500 dark:to-blue-600 text-white text-[9px] font-bold px-1 py-0.5 rounded-br-md shadow-sm z-10 leading-tight">
-                                Product {productNumber}
+                            <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30">
+                              <div className="absolute left-0 top-0 z-10 rounded-br-md bg-black/45 px-1 py-px text-[9px] font-medium tracking-tight text-white/95 backdrop-blur-[1px] sm:px-1.5 sm:py-0.5 sm:text-[10px]">
+                                Item {productNumber}
                               </div>
-                              <img
-                                src={resolveImageUrl(item.product.image_url)}
-                                alt={item.product.name}
-                                className="w-full h-full object-cover"
-                              />
+                              {regularThumbSrc ? (
+                                <Image
+                                  src={regularThumbSrc}
+                                  alt={item.product.name}
+                                  fill
+                                  className="object-cover"
+                                  sizes="80px"
+                                />
+                              ) : null}
                             </div>
 
                             {/* Product Info - Compact Mobile Layout */}
                           <div className="flex-1 min-w-0">
                               <div className="flex items-start justify-between gap-1.5 mb-1">
                                 <div className="flex-1 min-w-0">
-                                  <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 line-clamp-2 mb-1.5 leading-tight">
+                                  <h3 className={`${cartType.cardTitle} line-clamp-2 mb-1.5 leading-tight`}>
                                   {item.product.name}
                                 </h3>
                                 
@@ -1607,13 +2324,15 @@ export default function CartPage() {
                                     <p className="text-xs font-medium text-gray-700 dark:text-gray-300 leading-tight mt-0.5">
                                       {itemWeight && (
                                         <>
-                                          Weight: <span className="text-pink-600 dark:text-pink-400 font-semibold">{itemWeight}</span>
+                                          Weight:{' '}
+                                          <span className="font-semibold text-gray-800 dark:text-gray-200">{itemWeight}</span>
                                         </>
                                       )}
                                       {itemWeight && item.tier && <span className="mx-1 text-gray-400">•</span>}
                                   {item.tier && (
                                         <>
-                                          Tier: <span className="text-pink-600 dark:text-pink-400 font-semibold">{item.tier}</span>
+                                          Tier:{' '}
+                                          <span className="font-semibold text-gray-800 dark:text-gray-200">{item.tier}</span>
                                         </>
                                       )}
                                     </p>
@@ -1678,8 +2397,8 @@ export default function CartPage() {
                                 {/* Item Total */}
                                 <div className="mt-3 pt-2 border-t border-gray-100 dark:border-gray-700">
                                   <div className="flex items-center justify-between">
-                                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                                      {item.combos && item.combos.length > 0 ? 'Item Total (Product + Combo)' : 'Item Total:'}
+                                    <span className={`${cartType.meta} font-medium text-gray-700 dark:text-gray-300`}>
+                                      <CartItemTotalCaption hasCombos={Boolean(item.combos && item.combos.length > 0)} />
                                     </span>
                                     <div className="flex items-center gap-1.5">
                                       {item.combos && item.combos.length > 0 ? (
@@ -1688,7 +2407,7 @@ export default function CartPage() {
                                             {formatPrice(itemPrice)}
                                           </span>
                                           <span className="text-xs text-gray-400 dark:text-gray-500">+</span>
-                                          <span className="text-sm font-semibold text-purple-600 dark:text-purple-400">
+                                          <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                                             {formatPrice(comboTotal)}
                                           </span>
                                         </>
@@ -1709,13 +2428,15 @@ export default function CartPage() {
                             <div className="sm:hidden mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 w-full">
                               <div className="flex items-center justify-between mb-1.5">
                                 <div className="flex items-center gap-1.5">
-                                  <Sparkles className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-                                  <span className="text-sm font-medium text-purple-600 dark:text-purple-400">Combo Items</span>
+                                  <Sparkles className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
+                                  <span className={`${cartType.subsection} text-gray-600 dark:text-gray-300`}>
+                                    Add-ons
+                                  </span>
                                 </div>
                                 {/* Show More/Less Button - Always show when combo items exist */}
                                 <button
                                   onClick={() => toggleItemExpansion(item.id)}
-                                  className="flex items-center gap-1 text-sm text-pink-600 dark:text-pink-400 hover:text-pink-700 dark:hover:text-pink-300 transition-colors"
+                                  className="flex items-center gap-1 text-sm font-medium text-pink-600 hover:text-pink-700 dark:text-pink-400 dark:hover:text-pink-300"
                                 >
                                   {isExpanded ? (
                                     <>
@@ -1742,64 +2463,62 @@ export default function CartPage() {
                                   
                                   return (
                                   <div
-                                      key={comboId}
-                                    className="flex items-center justify-between gap-2 bg-gray-50 dark:bg-gray-800/60 rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-700"
-                                    >
-                                      {/* Combo Item Info */}
-                                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                                        <Package className="w-4 h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
-                                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                                          {combo.product_name}
+                                    key={comboId}
+                                    className="flex flex-col gap-2 bg-gray-50 dark:bg-gray-800/60 rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-700 items-start"
+                                  >
+                                    {/* Combo Item Title */}
+                                    <div className="flex items-center gap-2 min-w-0 w-full">
+                                      <Package className="w-4 h-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
+                                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap overflow-x-auto no-scrollbar">
+                                        {combo.product_name}
+                                      </span>
+                                    </div>
+
+                                    {/* Controls Row */}
+                                    <div className="flex items-center gap-2 flex-wrap justify-start w-full">
+                                      <div className="flex items-center gap-1 border border-gray-300 dark:border-gray-600 rounded-lg p-1 bg-white dark:bg-gray-700">
+                                        <button
+                                          onClick={() => handleComboQuantityChange(item.id, comboId, combo.quantity - 1)}
+                                          disabled={isRemoving}
+                                          className="w-7 h-7 flex items-center justify-center bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded transition-colors disabled:opacity-50 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
+                                          title="Decrease quantity"
+                                        >
+                                          <Minus className="w-3.5 h-3.5" />
+                                        </button>
+                                        <span className="w-8 text-center text-xs font-semibold text-gray-900 dark:text-gray-100">
+                                          {combo.quantity}
+                                        </span>
+                                        <button
+                                          onClick={() => handleComboQuantityChange(item.id, comboId, combo.quantity + 1)}
+                                          disabled={isRemoving}
+                                          className="w-7 h-7 flex items-center justify-center bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded transition-colors disabled:opacity-50 text-pink-600 dark:text-pink-400 hover:text-pink-700 dark:hover:text-pink-300"
+                                          title="Increase quantity"
+                                        >
+                                          <Plus className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+
+                                      <div className="flex items-center gap-1.5">
+                                        {hasDiscount && (
+                                          <span className="text-xs text-gray-400 dark:text-gray-500 line-through">
+                                            {formatPrice(originalTotal)}
+                                          </span>
+                                        )}
+                                        <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                                          {formatPrice(comboTotal)}
                                         </span>
                                       </div>
 
-                                      {/* Quantity Controls */}
-                                      <div className="flex items-center gap-2">
-                                        <div className="flex items-center gap-1 border border-gray-300 dark:border-gray-600 rounded-lg p-1 bg-white dark:bg-gray-700">
-                                          <button
-                                            onClick={() => handleComboQuantityChange(item.id, comboId, combo.quantity - 1)}
-                                            disabled={isRemoving}
-                                            className="w-7 h-7 flex items-center justify-center bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded transition-colors disabled:opacity-50 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
-                                            title="Decrease quantity"
-                                          >
-                                            <Minus className="w-3.5 h-3.5" />
-                                          </button>
-                                          <span className="w-8 text-center text-xs font-semibold text-gray-900 dark:text-gray-100">
-                                            {combo.quantity}
-                                          </span>
-                                          <button
-                                            onClick={() => handleComboQuantityChange(item.id, comboId, combo.quantity + 1)}
-                                            disabled={isRemoving}
-                                            className="w-7 h-7 flex items-center justify-center bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded transition-colors disabled:opacity-50 text-pink-600 dark:text-pink-400 hover:text-pink-700 dark:hover:text-pink-300"
-                                            title="Increase quantity"
-                                          >
-                                            <Plus className="w-3.5 h-3.5" />
-                                          </button>
-                                        </div>
-
-                                        {/* Price */}
-                                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                                          {hasDiscount && (
-                                            <span className="text-xs text-gray-400 dark:text-gray-500 line-through">
-                                              {formatPrice(originalTotal)}
-                                            </span>
-                                          )}
-                                          <span className="text-sm font-semibold text-purple-600 dark:text-purple-400">
-                                            {formatPrice(comboTotal)}
-                                          </span>
-                                        </div>
-
-                                        {/* Delete Button */}
-                                        <button
-                                          onClick={() => handleRemoveComboItem(item.id, comboId)}
-                                          disabled={isRemoving}
-                                          className="p-1.5 text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
-                                          title="Remove combo item"
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                      </div>
+                                      <button
+                                        onClick={() => handleRemoveComboItem(item.id, comboId)}
+                                        disabled={isRemoving}
+                                        className="p-1.5 text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
+                                        title="Remove combo item"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
                                     </div>
+                                  </div>
                                   );
                                 })}
                               </div>
@@ -1810,16 +2529,19 @@ export default function CartPage() {
                           {/* Desktop: Image and Product Info Container */}
                           <div className="hidden sm:flex sm:flex-row gap-4">
                             {/* Product Image */}
-                            <div className="relative w-24 h-24 bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 rounded-lg overflow-hidden flex-shrink-0">
-                            {/* Product Number Label */}
-                            <div className="absolute top-0 left-0 bg-gradient-to-r from-blue-600 to-blue-500 dark:from-blue-500 dark:to-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-br-md shadow-sm z-10 leading-tight">
-                              Product {productNumber}
+                            <div className="relative h-24 w-24 flex-shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30">
+                            <div className="absolute left-0 top-0 z-10 rounded-br-md bg-black/45 px-1 py-px text-[9px] font-medium tracking-tight text-white/95 backdrop-blur-[1px] sm:px-1.5 sm:py-0.5 sm:text-[10px]">
+                              Item {productNumber}
                             </div>
-                              <img
-                                src={resolveImageUrl(item.product.image_url)}
-                                alt={item.product.name}
-                                className="w-full h-full object-cover"
-                              />
+                              {regularThumbSrc ? (
+                                <Image
+                                  src={regularThumbSrc}
+                                  alt={item.product.name}
+                                  fill
+                                  className="object-cover"
+                                  sizes="96px"
+                                />
+                              ) : null}
                             </div>
 
                             {/* Product Info & Combo Items Container */}
@@ -1830,11 +2552,11 @@ export default function CartPage() {
                                 <div className="hidden sm:block">
                               <div className="flex items-start justify-between gap-2 mb-2">
                                 <div className="flex items-start gap-2 flex-1 min-w-0">
-                                  <div className="p-1.5 sm:p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex-shrink-0">
-                                    <Package className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" />
+                                  <div className="rounded-lg bg-gray-100 p-1.5 dark:bg-gray-700/80 sm:p-2 flex-shrink-0">
+                                    <Package className="h-4 w-4 shrink-0 text-gray-600 dark:text-gray-300 sm:h-5 sm:w-5" />
                                   </div>
                                   <div className="flex-1 min-w-0">
-                                    <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight">
+                                    <h3 className={`${cartType.cardTitleLg} line-clamp-2 leading-tight`}>
                                       {item.product.name}
                                     </h3>
                                     
@@ -1843,13 +2565,15 @@ export default function CartPage() {
                                       <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 mt-1 leading-tight">
                                         {itemWeight && (
                                           <>
-                                            Weight: <span className="text-blue-600 dark:text-blue-400 font-semibold">{itemWeight}</span>
+                                            Weight:{' '}
+                                            <span className="font-semibold text-gray-800 dark:text-gray-200">{itemWeight}</span>
                                           </>
                                         )}
                                         {itemWeight && item.tier && <span className="mx-2 text-gray-400">•</span>}
                                         {item.tier && (
                                           <>
-                                            Tier: <span className="text-blue-600 dark:text-blue-400 font-semibold">{item.tier}</span>
+                                            Tier:{' '}
+                                            <span className="font-semibold text-gray-800 dark:text-gray-200">{item.tier}</span>
                                           </>
                                         )}
                                       </p>
@@ -1858,7 +2582,8 @@ export default function CartPage() {
                                     {/* Flavor - Separate line if available */}
                                     {item.flavor && (
                                       <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-0.5 leading-tight">
-                                        Flavor: <span className="text-blue-600 dark:text-blue-400 font-semibold">{item.flavor.name}</span>
+                                        Flavor:{' '}
+                                        <span className="font-semibold text-gray-800 dark:text-gray-200">{item.flavor.name}</span>
                                       </p>
                                     )}
                                   </div>
@@ -1923,8 +2648,8 @@ export default function CartPage() {
                               {/* Item Total */}
                               <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
                                 <div className="flex items-center justify-between">
-                                  <span className="text-sm sm:text-base text-gray-600 dark:text-gray-400 font-medium">
-                                    {item.combos && item.combos.length > 0 ? 'Item Total (Product + Combo)' : 'Item Total:'}
+                                  <span className={`${cartType.label} text-gray-600 dark:text-gray-400`}>
+                                    <CartItemTotalCaption hasCombos={Boolean(item.combos && item.combos.length > 0)} />
                                   </span>
                                   <div className="flex items-center gap-2">
                                     {item.combos && item.combos.length > 0 ? (
@@ -1933,7 +2658,7 @@ export default function CartPage() {
                                           {formatPrice(itemPrice)}
                                         </span>
                                         <span className="text-sm text-gray-400 dark:text-gray-500">+</span>
-                                        <span className="text-base sm:text-lg font-semibold text-purple-600 dark:text-purple-400">
+                                        <span className="text-base sm:text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                                           {formatPrice(comboTotal)}
                                         </span>
                                       </>
@@ -1953,13 +2678,15 @@ export default function CartPage() {
                                 <div className="hidden sm:block mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 w-full">
                                 <div className="flex items-center justify-between mb-1.5">
                                   <div className="flex items-center gap-1.5">
-                                    <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-600 dark:text-purple-400" />
-                                    <span className="text-sm sm:text-base font-medium text-purple-600 dark:text-purple-400">Combo Items</span>
+                                    <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500 dark:text-gray-400" />
+                                    <span className={`${cartType.subsection} text-gray-600 dark:text-gray-300 sm:text-base`}>
+                                      Add-ons
+                                    </span>
                                   </div>
                                   {/* Show More/Less Button - Always show when combo items exist */}
                                   <button
                                     onClick={() => toggleItemExpansion(item.id)}
-                                    className="flex items-center gap-1 text-sm sm:text-base text-pink-600 dark:text-pink-400 hover:text-pink-700 dark:hover:text-pink-300 transition-colors"
+                                    className="flex items-center gap-1 text-sm font-medium text-pink-600 hover:text-pink-700 dark:text-pink-400 dark:hover:text-pink-300 sm:text-base"
                                   >
                                     {isExpanded ? (
                                       <>
@@ -1987,18 +2714,18 @@ export default function CartPage() {
                                     return (
                                       <div
                                         key={comboId}
-                                        className="flex items-center justify-between gap-2 bg-gray-50 dark:bg-gray-800/60 rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-700"
+                                        className="flex flex-col gap-2 bg-gray-50 dark:bg-gray-800/60 rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-700 items-start"
                                       >
-                                        {/* Combo Item Info */}
-                                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                                          <Package className="w-4 h-4 sm:w-4 sm:h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
-                                          <span className="text-sm sm:text-base font-medium text-gray-900 dark:text-gray-100 truncate">
+                                        {/* Combo Item Title */}
+                                        <div className="flex items-center gap-2 min-w-0 w-full">
+                                          <Package className="w-4 h-4 sm:w-4 sm:h-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
+                                          <span className="text-sm sm:text-base font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap overflow-x-auto no-scrollbar">
                                             {combo.product_name}
                                           </span>
                                         </div>
 
-                                        {/* Quantity Controls */}
-                                        <div className="flex items-center gap-2">
+                                        {/* Controls Row */}
+                                        <div className="flex items-center gap-2 flex-wrap justify-start w-full">
                                           <div className="flex items-center gap-1 border border-gray-300 dark:border-gray-600 rounded-lg p-1 bg-white dark:bg-gray-700">
                                             <button
                                               onClick={() => handleComboQuantityChange(item.id, comboId, combo.quantity - 1)}
@@ -2021,23 +2748,21 @@ export default function CartPage() {
                                             </button>
                                           </div>
 
-                                          {/* Price */}
-                                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                                          <div className="flex items-center gap-1.5">
                                             {hasDiscount && (
                                               <span className="text-xs sm:text-sm text-gray-400 dark:text-gray-500 line-through">
                                                 {formatPrice(originalTotal)}
                                               </span>
                                             )}
-                                            <span className="text-sm sm:text-base font-semibold text-purple-600 dark:text-purple-400">
+                                            <span className="text-sm sm:text-base font-semibold tabular-nums text-gray-900 dark:text-gray-100">
                                               {formatPrice(comboTotal)}
                                             </span>
                                           </div>
 
-                                          {/* Delete Button */}
                                           <button
                                             onClick={() => handleRemoveComboItem(item.id, comboId)}
                                             disabled={isRemoving}
-                                            className="p-1.5 text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
+                                            className="p-1.5 text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
                                             title="Remove combo item"
                                           >
                                             <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -2093,7 +2818,11 @@ export default function CartPage() {
                                 {item.cakeMessage && (
                                         <div className="flex items-center gap-1.5 text-xs sm:text-sm text-gray-600 dark:text-gray-300">
                                           <Gift className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
-                                    <span className="italic">"{item.cakeMessage}"</span>
+                                    <span className="italic">
+                                      {'\u201C'}
+                                      {item.cakeMessage}
+                                      {'\u201D'}
+                                    </span>
                                   </div>
                                 )}
                               </div>
@@ -2146,7 +2875,7 @@ export default function CartPage() {
 
               {/* Deal Unlocked Section */}
               {cartItems.length > 0 && (
-                <div className="mt-5 sm:mt-7">
+                <div className="mt-5 sm:mt-7 border-t border-gray-200/90 dark:border-gray-700/90 pt-4 sm:pt-5">
                   <CartDeals />
                 </div>
               )}
@@ -2156,12 +2885,14 @@ export default function CartPage() {
                 <div className="mt-7 sm:mt-9 pt-6 sm:pt-8 border-t border-gray-200 dark:border-gray-700">
                   <button
                     onClick={() => setIsSavedForLaterOpen(!isSavedForLaterOpen)}
-                    className="flex items-center justify-between w-full mb-3 sm:mb-4"
+                    className="ui-focus-visible mb-3 flex w-full items-center justify-between rounded-lg sm:mb-4"
                   >
                     <div className="flex items-center gap-2">
                       <Package className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 dark:text-gray-300" />
-                      <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">Saved for Later</h2>
-                      <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-300">({savedItems.length} {savedItems.length === 1 ? 'item' : 'items'})</span>
+                      <h2 className={cartType.section}>Saved for Later</h2>
+                      <span className={`${cartType.sectionMuted} shrink-0`}>
+                        ({savedItems.length} {savedItems.length === 1 ? 'item' : 'items'})
+                      </span>
                     </div>
                     {isSavedForLaterOpen ? (
                       <ChevronUp className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 dark:text-gray-300" />
@@ -2193,6 +2924,7 @@ export default function CartPage() {
                         if (item.flavor) savedProductDetails.push(`Flavor: ${item.flavor.name}`);
                         if (item.tier) savedProductDetails.push(`Tier: ${item.tier}`);
                         const savedDetailsText = savedProductDetails.join(' • ');
+                        const collapsedSavedThumbSrc = resolveEntityImageUrl(item.product);
 
                       return (
                         <div
@@ -2203,12 +2935,16 @@ export default function CartPage() {
                         >
                             <div className="flex gap-3 sm:gap-4">
                             {/* Product Image */}
-                              <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 rounded-lg overflow-hidden flex-shrink-0">
-                              <img
-                                src={resolveImageUrl(item.product.image_url)}
-                                alt={item.product.name}
-                                className="w-full h-full object-cover"
-                              />
+                              <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 sm:h-24 sm:w-24">
+                              {collapsedSavedThumbSrc ? (
+                                <Image
+                                  src={collapsedSavedThumbSrc}
+                                  alt={item.product.name}
+                                  fill
+                                  className="object-cover"
+                                  sizes="96px"
+                                />
+                              ) : null}
                             </div>
 
                             {/* Product Info */}
@@ -2219,7 +2955,7 @@ export default function CartPage() {
                                       <Package className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 dark:text-gray-400" />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                      <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 line-clamp-2">
+                                      <h3 className={`${cartType.cardTitle} line-clamp-2 sm:text-lg`}>
                                         {item.product.name}
                                       </h3>
                                       
@@ -2273,7 +3009,9 @@ export default function CartPage() {
                                     )}
                                   </div>
                                     <div className="text-right">
-                                      <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">Total: </span>
+                                      <span className={`${cartType.meta} font-medium text-gray-600 dark:text-gray-300 sm:text-sm`}>
+                                        <CartItemTotalCaption hasCombos={Boolean(item.combos && item.combos.length > 0)} />
+                                      </span>{' '}
                                       <span className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">
                                       {formatPrice(totalItemPrice)}
                                     </span>
@@ -2284,8 +3022,10 @@ export default function CartPage() {
                                   {item.combos && item.combos.length > 0 && (
                                   <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
                                       <div className="flex items-center gap-1.5 mb-1.5">
-                                        <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-600 dark:text-purple-400" />
-                                        <span className="text-xs sm:text-sm font-medium text-purple-600 dark:text-purple-400">Combo Items</span>
+                                        <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500 dark:text-gray-400" />
+                                        <span className={`${cartType.subsection} text-gray-600 dark:text-gray-300 sm:text-sm`}>
+                                          Add-ons
+                                        </span>
                                       </div>
                                       <div className="space-y-1.5">
                                         {item.combos.map((combo, index) => {
@@ -2300,7 +3040,7 @@ export default function CartPage() {
                                             className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/60 rounded-lg px-2 py-1.5 border border-gray-200 dark:border-gray-700"
                                           >
                                               <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                                <Package className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
+                                                <Package className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
                                                 <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                                                 {combo.product_name}
                                               </span>
@@ -2308,11 +3048,11 @@ export default function CartPage() {
                                             </div>
                                               <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
                                                 {hasDiscount && (
-                                                  <span className="text-[10px] sm:text-xs text-gray-400 dark:text-gray-500 line-through">
+                                                  <span className={`${cartType.meta} line-through text-gray-400 dark:text-gray-500 sm:text-xs`}>
                                                     {formatPrice(originalTotal)}
                                                   </span>
                                                 )}
-                                                <span className="text-xs sm:text-sm font-medium text-purple-600 dark:text-purple-400">
+                                                <span className="text-xs sm:text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100">
                                                   {formatPrice(comboTotal)}
                                             </span>
                                           </div>
@@ -2353,23 +3093,23 @@ export default function CartPage() {
 
             {/* RIGHT SECTION: Summary Box (30% equivalent) */}
             <div className="lg:sticky lg:top-24 h-fit lg:min-w-0 lg:max-w-full">
-              <div className="bg-white dark:bg-gray-800 rounded-xl border-l-4 border-pink-500 dark:border-pink-400 border border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-xl dark:shadow-black/30 p-4 sm:p-5 lg:p-6 space-y-3 sm:space-y-4 lg:min-w-0 lg:max-w-full">
+              <div className="space-y-3 rounded-xl border border-gray-200 border-l-4 border-l-pink-500 bg-white p-4 shadow-sm dark:border-gray-700 dark:border-l-pink-400 dark:bg-gray-800 dark:shadow-md dark:shadow-black/20 sm:space-y-4 sm:p-5 lg:max-w-full lg:min-w-0 lg:p-6">
                 {/* Header with Icon */}
                 <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
                   <div className="p-1.5 rounded-lg bg-pink-100 dark:bg-pink-900/30">
                     <ShoppingBag className="w-4 h-4 text-pink-600 dark:text-pink-400" />
                   </div>
-                  <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">Order Summary</h2>
+                  <h2 className={cartType.section}>Order summary</h2>
                 </div>
 
                 {/* Free Delivery Progress Indicator */}
                 {!isFreeDeliveryEligible && subtotal > 0 && (
                   <div className="bg-gradient-to-r from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20 rounded-lg p-3 sm:p-4 border border-pink-200 dark:border-pink-800">
                     <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-                      <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200">
-                        Free Delivery Progress
+                      <span className={`${cartType.metaStrong} sm:text-sm text-gray-700 dark:text-gray-200`}>
+                        Free delivery progress
                       </span>
-                      <span className="text-xs sm:text-sm font-bold text-pink-600 dark:text-pink-400">
+                      <span className={`${cartType.metaStrong} sm:text-sm text-pink-600 dark:text-pink-400`}>
                         {formatPrice(amountToFreeDelivery)} away
                       </span>
                     </div>
@@ -2379,318 +3119,92 @@ export default function CartPage() {
                         style={{ width: `${freeDeliveryProgress}%` }}
                       />
                     </div>
-                    <p className="text-[11px] text-gray-600 dark:text-gray-300 mt-1">
+                    <p className={`${cartType.meta} mt-1 text-gray-600 dark:text-gray-300`}>
                       Add {formatPrice(amountToFreeDelivery)} more to unlock free delivery!
                     </p>
                   </div>
                 )}
 
                 {isFreeDeliveryEligible && (
-                  <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 sm:p-4 border border-green-200 dark:border-green-800">
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 sm:p-4 dark:border-gray-600 dark:bg-gray-800/50">
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 dark:text-green-400 flex-shrink-0" />
-                      <span className="text-xs sm:text-sm font-semibold text-green-700 dark:text-green-300">
-                        🎉 You've unlocked Free Delivery!
+                      <CheckCircle className="h-4 w-4 shrink-0 text-pink-500 dark:text-pink-400 sm:h-5 sm:w-5" />
+                      <span className={`${cartType.bodyStrong} text-gray-800 dark:text-gray-100 sm:text-sm`}>
+                        {"You've unlocked free delivery"}
                       </span>
                     </div>
                   </div>
                 )}
 
                 {/* Price Breakdown */}
-                <div className="space-y-2 pt-2 border-t-2 border-gray-200 dark:border-gray-700">
-                  <div className="flex justify-between items-center py-1">
-                    <span className="text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300">Subtotal ({regularItemsCount} {regularItemsCount === 1 ? 'item' : 'items'})</span>
-                    <span className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">{formatPrice(subtotal)}</span>
+                <div className="space-y-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                  <div className="flex justify-between items-center gap-3 py-1">
+                    <span className={cartType.summaryRow}>
+                      Subtotal ({regularItemsCount} {regularItemsCount === 1 ? 'item' : 'items'})
+                    </span>
+                    <span className={`${cartType.summaryValue} ${cartType.numeric}`}>{formatPrice(subtotal)}</span>
                   </div>
 
                   {/* Deal Price - Separate line for deal items */}
                   {dealItemsTotal > 0 && (
-                    <div className="flex justify-between items-center py-1">
-                      <span className="flex items-center gap-1.5 text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300">
-                        <Gift className="w-4 h-4 text-pink-600 dark:text-pink-400" />
-                        <span>Deal Price</span>
+                    <div className="flex justify-between items-center gap-3 py-1">
+                      <span className={`flex items-center gap-1.5 ${cartType.summaryRow}`}>
+                        <Gift className="h-4 w-4 shrink-0 text-pink-500 dark:text-pink-400" />
+                        <span>Deal price</span>
                       </span>
-                      <span className="text-sm sm:text-base font-semibold text-green-600 dark:text-green-400">{formatPrice(dealItemsTotal)}</span>
+                      <span className={`${cartType.summaryValue} ${cartType.numeric}`}>
+                        {formatPrice(dealItemsTotal)}
+                      </span>
                     </div>
                   )}
 
                   {/* Promo Discount */}
                   {appliedPromo && (
-                    <div className="flex items-center justify-between text-green-700 dark:text-green-400 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg p-2 border border-green-200 dark:border-green-800">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 dark:bg-green-400"></div>
-                        <span className="text-sm sm:text-base font-semibold">
-                          {appliedPromo.code} (-{appliedPromo.discount}%)
+                    <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 p-2 dark:border-gray-600 dark:bg-gray-800/60">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-pink-500 dark:bg-pink-400" />
+                        <span className={`${cartType.bodyStrong} truncate sm:text-base`}>
+                          {appliedPromo.code} applied
                         </span>
                       </div>
-                      <span className="text-sm sm:text-base font-bold">-{formatPrice(promoDiscount)}</span>
+                      <span
+                        className={`${cartType.bodyStrong} shrink-0 sm:text-base ${cartType.numeric} text-pink-600 dark:text-pink-400`}
+                      >
+                        -{formatPrice(promoDiscount)}
+                      </span>
                     </div>
                   )}
 
                   {/* Delivery Charge */}
-                  <div className="flex justify-between items-center py-1">
-                    <span className="text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300">Delivery Charge</span>
-                    <span className="text-sm sm:text-base font-semibold">
+                  <div className="flex justify-between items-center gap-3 py-1">
+                    <span className={cartType.summaryRow}>Delivery</span>
+                    <span className={`${cartType.summaryValue} ${cartType.numeric}`}>
                       {isFreeDeliveryEligible ? (
-                        <span className="text-green-600 dark:text-green-400 font-bold">FREE</span>
+                        <span className="font-semibold text-pink-600 dark:text-pink-400">Free</span>
                       ) : (
-                        <span className="text-gray-900 dark:text-gray-100">{formatPrice(deliveryCharge)}</span>
+                        <span>{formatPrice(deliveryCharge)}</span>
                       )}
                     </span>
                   </div>
 
-                  <div className="border-t-2 border-pink-200 dark:border-pink-800 pt-2.5 mt-2.5 bg-gradient-to-r from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20 rounded-lg p-3 -mx-1">
-                    <div className="flex justify-between items-center">
-                      <span className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">Total</span>
-                      <span className="text-xl sm:text-2xl font-extrabold text-pink-600 dark:text-pink-400">
+                  <div className="-mx-1 mt-2.5 rounded-lg border border-pink-200/90 bg-gradient-to-r from-pink-50 to-rose-50 p-3 pt-2.5 dark:border-pink-800/80 dark:from-pink-900/25 dark:to-rose-900/20">
+                    <div className="flex justify-between items-center gap-3">
+                      <span className={cartType.summaryTotalLabel}>Total</span>
+                      <span className={`${cartType.summaryTotalValue} ${cartType.numeric}`}>
                         {formatPrice(total)}
                       </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Promo Code Section */}
-                <div className="space-y-2 sm:space-y-2.5">
-                  <div className="flex items-center gap-2">
-                    <Tag className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 dark:text-gray-300" />
-                    <span className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">Promo Code</span>
-                  </div>
-
-                  {appliedPromo ? (
-                    <div className={`bg-green-50 dark:bg-green-900/20 border-2 border-green-300 dark:border-green-700 rounded-lg p-2.5 sm:p-3 transition-all ${showSuccessAnimation ? 'animate-pulse scale-105' : ''}`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 sm:gap-2">
-                          <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 dark:text-green-400 flex-shrink-0" />
-                          <div>
-                            <p className="text-xs sm:text-sm font-semibold text-green-700 dark:text-green-300">
-                              {appliedPromo.code} Applied 🎉
-                            </p>
-                            <p className="text-xs text-green-600 dark:text-green-400">
-                              You saved {formatPrice(promoDiscount)}!
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={handleRemovePromo}
-                          className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 flex-shrink-0 transition-colors"
-                          title="Remove promo"
-                        >
-                          <X className="w-4 h-4 sm:w-5 sm:h-5" />
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="relative">
-                        <div className="flex items-stretch gap-2 sm:gap-2.5">
-                          <div className="flex-[0.75] relative group">
-                            {/* Input with modern styling */}
-                            <div className={`relative overflow-hidden h-full transition-all duration-300 ${
-                              promoValidationState === 'valid' 
-                                ? 'ring-2 ring-green-500 dark:ring-green-600 ring-offset-1 dark:ring-offset-gray-800' 
-                                : promoValidationState === 'invalid'
-                                ? 'ring-2 ring-red-500 dark:ring-red-600 ring-offset-1 dark:ring-offset-gray-800'
-                                : 'ring-1 ring-gray-200 dark:ring-gray-700 group-hover:ring-pink-300 dark:group-hover:ring-pink-700'
-                            }`}>
-                        <input
-                          type="text"
-                          value={promoCode}
-                          onChange={(e) => {
-                            setPromoCode(e.target.value.toUpperCase());
-                            setPromoError('');
-                          }}
-                                placeholder="Enter code"
-                                className={`w-full h-full py-3 sm:py-2.5 text-sm sm:text-sm font-medium border-0 bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-0 placeholder:text-gray-400 dark:placeholder:text-gray-500 transition-all shadow-sm ${
-                                  promoCode.trim().length === 0 
-                                    ? 'pl-10 sm:pl-10 pr-10 sm:pr-10' 
-                                    : 'pl-10 sm:pl-10 pr-12 sm:pr-12'
-                                } ${
-                                  promoValidationState === 'valid' 
-                                    ? 'text-green-700 dark:text-green-300' 
-                                    : promoValidationState === 'invalid'
-                                    ? 'text-red-700 dark:text-red-300'
-                                    : ''
-                                }`}
-                              />
-                              {/* Tag icon on left - always visible */}
-                              <div className="absolute left-3 sm:left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10">
-                                <Tag className={`w-4 h-4 sm:w-4 sm:h-4 ${
-                                  promoCode.trim().length === 0
-                                    ? 'text-gray-400 dark:text-gray-500'
-                                    : promoValidationState === 'valid' 
-                                    ? 'text-green-500 dark:text-green-400' 
-                                    : promoValidationState === 'invalid'
-                                    ? 'text-red-500 dark:text-red-400'
-                                    : 'text-pink-500 dark:text-pink-400'
-                                }`} />
-                              </div>
-                              {/* Right side: Clear button (when text exists) or Validation Icon */}
-                              {promoCode.trim().length > 0 && (
-                                <div className="absolute right-3 sm:right-3 top-1/2 -translate-y-1/2 z-20">
-                                  {promoValidationState === 'validating' ? (
-                                    <div className="w-4 h-4 sm:w-4 sm:h-4 border-2 border-pink-500 border-t-transparent rounded-full animate-spin pointer-events-none" />
-                                  ) : (
-                                    // Clear button - always clickable when there's text (even when valid)
-                                    <button
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        handleClearPromoCode();
-                                      }}
-                                      onMouseDown={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                      }}
-                                      className={`flex items-center justify-center w-6 h-6 sm:w-6 sm:h-6 rounded-full transition-colors cursor-pointer ${
-                                        promoValidationState === 'invalid'
-                                          ? 'bg-red-500 dark:bg-red-600 hover:bg-red-600 dark:hover:bg-red-700'
-                                          : promoValidationState === 'valid'
-                                          ? 'bg-green-500 dark:bg-green-600 hover:bg-green-600 dark:hover:bg-green-700'
-                                          : 'bg-gray-400 dark:bg-gray-600 hover:bg-gray-500 dark:hover:bg-gray-700'
-                                      }`}
-                                      title="Clear promo code"
-                                      type="button"
-                                      aria-label="Clear promo code"
-                                    >
-                                      <X className="w-4 h-4 text-white" />
-                                    </button>
-                                  )}
-                                    </div>
-                                  )}
-                            </div>
-                          </div>
-                          {/* Modern Apply Button */}
-                        <button
-                          onClick={handleApplyPromo}
-                            disabled={!promoCode.trim() || isApplyingPromo || promoValidationState === 'invalid'}
-                            className={`relative flex-[0.25] h-full px-4 sm:px-5 py-3 sm:py-2.5 text-sm sm:text-base font-semibold transition-all duration-300 transform active:scale-95 disabled:active:scale-100 shadow-lg disabled:shadow-sm flex items-center justify-center ${
-                              promoValidationState === 'valid'
-                                ? 'bg-gradient-to-r from-green-500 to-emerald-600 dark:from-green-600 dark:to-emerald-700 text-white hover:from-green-600 hover:to-emerald-700 dark:hover:from-green-700 dark:hover:to-emerald-800 shadow-green-500/30 dark:shadow-green-600/30'
-                                : 'bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 shadow-pink-500/30 dark:shadow-pink-600/30'
-                            } disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none`}
-                          >
-                            {isApplyingPromo ? (
-                              <span>Applying...</span>
-                            ) : (
-                              <span>Apply</span>
-                            )}
-                            {/* Shine effect on hover */}
-                            <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-500 -translate-x-full hover:translate-x-full"></span>
-                        </button>
-                        </div>
-                        {/* Discount Preview with modern design */}
-                        {previewDiscount && previewDiscount > 0 && promoValidationState === 'valid' && (
-                          <div className="mt-2.5 sm:mt-2 p-2.5 sm:p-2 bg-gradient-to-r from-green-50 via-emerald-50 to-green-50 dark:from-green-900/30 dark:via-emerald-900/20 dark:to-green-900/30 border border-green-200 dark:border-green-700 rounded-lg sm:rounded-md shadow-sm">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs sm:text-sm text-green-700 dark:text-green-300 font-semibold flex items-center gap-1.5">
-                                <Sparkles className="w-3.5 h-3.5" />
-                                You'll save:
-                              </span>
-                              <span className="text-base sm:text-lg font-bold text-green-600 dark:text-green-400 bg-white dark:bg-gray-800 px-2 py-0.5 rounded-md">
-                                {formatPrice(previewDiscount)}
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      {promoError && (
-                        <div className="flex items-center justify-between gap-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg sm:rounded-md">
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <X className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
-                          <p className="text-xs sm:text-sm text-red-600 dark:text-red-400 font-medium">{promoError}</p>
-                          </div>
-                          <button
-                            onClick={handleClearPromoCode}
-                            className="flex-shrink-0 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30 rounded p-1 transition-colors"
-                            title="Clear and try another code"
-                            type="button"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Suggested Promos - Enhanced with One-Click Apply */}
-                  {!appliedPromo && suggestedPromos.length > 0 && (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm sm:text-base font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
-                          <Sparkles className="w-3.5 h-3.5 text-pink-600 dark:text-pink-400" />
-                          Best for You
-                        </span>
-                        <button
-                          onClick={() => setIsSuggestedPromosOpen(!isSuggestedPromosOpen)}
-                          className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-                        >
-                          {isSuggestedPromosOpen ? 'Hide' : 'Show'}
-                        </button>
-                      </div>
-                      {isSuggestedPromosOpen && (
-                        <div className="space-y-2">
-                          {suggestedPromos.slice(0, 3).map((promo) => {
-                            // Calculate potential discount for preview
-                            const calculatePreviewDiscount = () => {
-                              if (promo.discount_type === 'percentage') {
-                                const discount = (subtotal * promo.discount_value) / 100;
-                                return promo.max_discount_amount ? Math.min(discount, promo.max_discount_amount) : discount;
-                              }
-                              return promo.discount_value || 0;
-                            };
-                            const previewSavings = calculatePreviewDiscount();
-
-                            return (
-                          <button
-                            key={promo.id || promo.code}
-                            onClick={() => handleSuggestedPromo(promo)}
-                            disabled={isApplyingPromo}
-                                className="w-full text-left px-3 sm:px-4 py-2.5 sm:py-3 bg-gradient-to-r from-pink-50 to-rose-50 dark:from-pink-900/20 dark:to-rose-900/20 hover:from-pink-100 hover:to-rose-100 dark:hover:from-pink-900/30 dark:hover:to-rose-900/30 border border-pink-200 dark:border-pink-700 hover:border-pink-300 dark:hover:border-pink-600 rounded-lg transition-all group disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
-                          >
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <span className="text-sm sm:text-base font-bold text-pink-600 dark:text-pink-400">
-                                  {promo.code}
-                                      </span>
-                                      {previewSavings > 0 && (
-                                        <span className="text-xs sm:text-sm font-semibold text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded">
-                                          Save {formatPrice(previewSavings)}
-                                        </span>
-                                      )}
-                                    </div>
-                                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 line-clamp-1">
-                                      {promo.description || 'Apply this code for instant savings!'}
-                                    </p>
-                              </div>
-                                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                                    {promo.discount_type === 'percentage' ? (
-                                      <span className="text-base sm:text-lg font-bold text-pink-600 dark:text-pink-400">
-                                        {promo.discount_value}% OFF
-                                      </span>
-                                    ) : (
-                                      <span className="text-base sm:text-lg font-bold text-pink-600 dark:text-pink-400">
-                                        ₹{promo.discount_value} OFF
-                                      </span>
-                                    )}
-                                    <ChevronRight className="w-4 h-4 text-pink-600 dark:text-pink-400 group-hover:translate-x-1 transition-transform" />
-                                  </div>
-                            </div>
-                          </button>
-                            );
-                          })}
-                      </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                {/* Promo actions are handled in the top savings section to avoid duplicate entry points. */}
 
                 {/* Checkout Button - Hidden on mobile, shown on desktop */}
                 <button
                   onClick={handleCheckout}
-                  className="hidden lg:block w-full py-3 sm:py-4 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white rounded-lg hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all duration-200 font-semibold text-base sm:text-lg shadow-lg dark:shadow-xl dark:shadow-black/30 hover:shadow-xl transform hover:scale-[1.02]"
+                  className="ui-focus-visible hidden min-h-[48px] w-full rounded-lg bg-gradient-to-r from-pink-600 to-rose-600 py-2 text-base font-semibold text-white shadow-lg transition-all duration-200 hover:scale-[1.02] hover:from-pink-700 hover:to-rose-700 hover:shadow-xl dark:from-pink-700 dark:to-rose-700 dark:shadow-xl dark:shadow-black/30 dark:hover:from-pink-600 dark:hover:to-rose-600 sm:text-lg lg:block"
                 >
-                  PROCEED TO CHECKOUT
+                  Proceed to checkout
                 </button>
 
                 {/* Security Badge - Hidden on mobile, shown on desktop */}
@@ -2702,126 +3216,233 @@ export default function CartPage() {
               </div>
 
               {/* You May Also Like Section - Collapsible */}
-              <div className="mt-4 sm:mt-6 mb-12 lg:mb-0 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-xl dark:shadow-black/20 p-4 sm:p-6 lg:overflow-hidden lg:min-w-0 lg:max-w-full lg:w-full">
+              <div className="mt-8 sm:mt-10 mb-0 bg-gradient-to-br from-pink-50/80 to-rose-50/60 dark:from-pink-900/10 dark:to-rose-900/10 rounded-xl border border-pink-200/60 dark:border-pink-800/50 shadow-md dark:shadow-xl dark:shadow-black/20 p-4 sm:p-6 lg:overflow-hidden lg:min-w-0 lg:max-w-full lg:w-full">
                 <button
                   onClick={() => setIsYouMayAlsoLikeOpen(!isYouMayAlsoLikeOpen)}
-                  className="flex items-center justify-between w-full mb-2 sm:mb-4"
+                  className="ui-focus-visible group/header mb-2 flex w-full items-center justify-between rounded-lg sm:mb-4"
                 >
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-pink-600 dark:text-pink-400" />
-                    <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">You May Also Like</h3>
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 rounded-lg bg-pink-100 dark:bg-pink-900/40">
+                      <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-pink-600 dark:text-pink-400" />
+                    </div>
+                    <h3 className={cartType.section}>You may also like</h3>
                 </div>
                   {isYouMayAlsoLikeOpen ? (
-                    <ChevronUp className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                    <ChevronUp className="w-4 h-4 text-pink-500 dark:text-pink-400" />
                   ) : (
-                    <ChevronDown className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                    <ChevronDown className="w-4 h-4 text-pink-500 dark:text-pink-400" />
                   )}
                 </button>
                 {isYouMayAlsoLikeOpen && (
                   <>
-                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 mb-3 sm:mb-4">
+                    <p className={`${cartType.body} mb-4 text-gray-700 dark:text-gray-300 sm:mb-5`}>
                       Add these popular items to complete your order
                     </p>
                     
-                    {suggestedProductsLoading ? (
+                    {suggestedSectionsLoading ? (
                       <div className="text-center py-6 sm:py-8">
                         <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-pink-600"></div>
-                        <p className="text-xs sm:text-sm text-gray-400 dark:text-gray-500 mt-2">Loading suggestions...</p>
+                        <p className={`${cartType.meta} mt-2 sm:text-sm`}>Loading suggestions...</p>
                       </div>
-                    ) : suggestedProducts.length === 0 ? (
+                    ) : (suggestedSections.addOns.length === 0 && suggestedSections.gift.length === 0 && suggestedSections.smallTreats.length === 0) ? (
                       <div className="text-center py-6 sm:py-8 text-gray-400 dark:text-gray-400">
                         <Package className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 opacity-50" />
-                        <p className="text-xs sm:text-sm">No suggestions available at the moment</p>
+                        <p className={`${cartType.meta} sm:text-sm`}>No suggestions available at the moment</p>
                       </div>
                     ) : (
-                      <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0 w-full lg:max-w-full lg:min-w-0">
-                        <div className="flex gap-3 sm:gap-4 lg:gap-4 pb-2 lg:min-w-0">
-                          {suggestedProducts.map((product) => {
-                            const productPrice = product.discounted_price || product.base_price || 0;
-                            const originalPrice = product.base_price;
-                            const hasDiscount = product.discounted_price && product.discounted_price < originalPrice;
-                            const productWeight = product.base_weight || product.variants?.[0]?.weight || null;
-                            
-                            return (
-                              <div
-                                key={product.id}
-                                className="relative flex-shrink-0 w-[140px] sm:w-[160px] lg:w-[170px] bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm hover:shadow-lg dark:hover:shadow-xl dark:hover:shadow-black/30 transition-all duration-300 hover:border-pink-300 dark:hover:border-pink-600 group"
-                              >
-                                {/* Discount Badge - Positioned at card's top-right corner */}
-                                {hasDiscount && (
-                                  <div className="absolute top-0 right-0 bg-gradient-to-r from-red-500 to-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-tr-xl rounded-bl-md shadow-md z-10">
-                                    {Math.round(((originalPrice - product.discounted_price) / originalPrice) * 100)}% OFF
-                                  </div>
-                                )}
-                                
-                                {/* Product Image */}
-                                <div 
-                                  className="relative w-full h-[140px] sm:h-[160px] lg:h-[180px] bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 cursor-pointer overflow-hidden"
-                                  onClick={() => router.push(`/product/${product.slug || product.id}`)}
-                                >
-                                  <img
-                                    src={resolveImageUrl(product.image_url)}
-                                    alt={product.name}
-                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                  />
-                                </div>
-                                
-                                {/* Product Info */}
-                                <div className="p-2.5 sm:p-3 lg:p-3 space-y-2">
-                                  {/* Product Name */}
-                                  <h4 
-                                    className="text-xs sm:text-sm lg:text-sm font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 cursor-pointer hover:text-pink-600 dark:hover:text-pink-400 transition-colors leading-tight"
-                                    onClick={() => router.push(`/product/${product.slug || product.id}`)}
-                                  >
-                                    {product.name}
-                                  </h4>
-                                  
-                                  {/* Weight */}
-                                  {productWeight && (
-                                    <div className="flex items-center gap-1">
-                                      <Package className="w-3 h-3 text-gray-500 dark:text-gray-400" />
-                                      <span className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 font-medium">
-                                        {productWeight}
-                                      </span>
-                                    </div>
-                                  )}
-                                  
-                                  {/* Price */}
-                                  <div className="flex items-baseline gap-1.5">
-                                    <span className="text-sm lg:text-base font-bold text-pink-600 dark:text-pink-400">
-                                      {formatPrice(productPrice)}
-                                    </span>
-                                    {hasDiscount && (
-                                      <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 line-through">
-                                        {formatPrice(originalPrice)}
-                                      </span>
-                                    )}
-                                  </div>
-                                  
-                                  {/* Add to Cart Button */}
-                                  <button
-                                    onClick={() => {
-                                      addToCart({
-                                        product: product,
-                                        quantity: 1,
-                                        variant: null,
-                                        flavor: null,
-                                        tier: null,
-                                        combos: [],
-                                        deliverySlot: null,
-                                        cakeMessage: ''
-                                      });
-                                      // Note: addToCart already shows a success toast, so we don't need to show another one
-                                    }}
-                                    className="w-full py-2 sm:py-2 lg:py-2 border-2 border-pink-500 dark:border-pink-600 text-pink-600 dark:text-pink-400 text-xs sm:text-sm lg:text-sm font-semibold rounded-lg hover:bg-pink-50 dark:hover:bg-pink-900/20 hover:border-pink-600 dark:hover:border-pink-500 transition-all duration-200 active:scale-95"
-                                  >
-                                    Add to Cart
-                                  </button>
-                                </div>
+                      <div className="space-y-6 sm:space-y-7">
+                        {/* Section 1: Make Your Cake Extra Special - Add-ons */}
+                        {suggestedSections.addOns.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="p-1 rounded-md bg-amber-100 dark:bg-amber-800/40">
+                                <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
                               </div>
-                            );
-                          })}
-                        </div>
+                              <h4 className={cartType.upsellSectionTitle}>Make your cake extra special</h4>
+                            </div>
+                            <p className="text-xs text-amber-800/80 dark:text-amber-200/80 mb-0.5">Candles, balloons, toppers</p>
+                            <p className={`${cartType.upsellBlurb} mb-3`}>Make the moment memorable—add to your cake in one tap.</p>
+                            <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
+                              <div className="flex gap-3 sm:gap-4 pb-2">
+                                {suggestedSections.addOns.map((item) => {
+                                  const price = item.discounted_price ?? item.price ?? 0;
+                                  const firstCakeItem = cartItems.find(i => !i.is_deal_item);
+                                    const handleAddAddOn = () => {
+                                    if (!firstCakeItem) {
+                                      showInfo('Add a cake first', 'Add a cake to your cart to include add-ons like candles, balloons & toppers.');
+                                      return;
+                                    }
+                                    const newCombo = {
+                                      id: Date.now(),
+                                      add_on_product_id: item.id,
+                                      product_id: item.id,
+                                      product_name: item.name || 'Product',
+                                      category_name: item.category_name || '',
+                                      price: item.price ?? 0,
+                                      discounted_price: item.discounted_price ?? null,
+                                      discount_percentage: item.discount_percentage ?? 0,
+                                      quantity: 1,
+                                      image_url: item.image_url || null
+                                    };
+                                    const existingCombos = firstCakeItem.combos || [];
+                                    const existingIndex = existingCombos.findIndex(c => (c.add_on_product_id === item.id || c.product_id === item.id));
+                                    const updatedCombos = existingIndex >= 0
+                                      ? existingCombos.map((c, i) => i === existingIndex ? { ...c, quantity: (c.quantity || 1) + 1 } : c)
+                                      : [...existingCombos, newCombo];
+                                    updateCartItemCombos(firstCakeItem.id, updatedCombos);
+                                    showSuccess('Added', `${item.name} added to your cake.`);
+                                  };
+                                  const addOnThumbSrc = resolveEntityImageUrl(item);
+                                  return (
+                                    <div key={item.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] bg-white dark:bg-gray-800 rounded-xl border border-amber-200/70 dark:border-amber-600/40 overflow-hidden shadow-md hover:shadow-lg hover:border-amber-300 dark:hover:border-amber-500/60 transition-all duration-200 group">
+                                      <div className="relative h-[90px] w-full overflow-hidden rounded-t-xl bg-amber-50/80 dark:bg-amber-900/20 sm:h-[100px]">
+                                        {addOnThumbSrc ? (
+                                          <Image
+                                            src={addOnThumbSrc}
+                                            alt={item.name}
+                                            fill
+                                            className="object-contain p-2 transition-transform duration-200 group-hover:scale-105"
+                                            sizes="148px"
+                                          />
+                                        ) : null}
+                                      </div>
+                                      <div className="p-2 space-y-1">
+                                        <h4 className={cartType.upsellCardTitle}>{item.name}</h4>
+                                        <p className="text-xs font-bold text-amber-700 dark:text-amber-400">{formatPrice(price)}</p>
+                                        <button onClick={handleAddAddOn} className={`w-full rounded-lg border-2 border-amber-500 py-1.5 font-semibold text-amber-700 transition-colors hover:border-amber-600 hover:bg-amber-100 active:scale-[0.98] dark:border-amber-500 dark:bg-amber-900/20 dark:text-amber-300 dark:hover:bg-amber-800/30 ${cartType.metaStrong}`}>
+                                          + Include
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Section 2: Complete Your Gift - Flowers, chocolates, dry fruits */}
+                        {suggestedSections.gift.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="p-1 rounded-md bg-emerald-100 dark:bg-emerald-800/40">
+                                <Gift className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                              </div>
+                              <h4 className={cartType.upsellSectionTitle}>Complete your gift</h4>
+                            </div>
+                            <p className="text-xs text-emerald-800/80 dark:text-emerald-200/80 mb-0.5">Flowers, chocolates, teddy, dry fruits</p>
+                            <p className={`${cartType.upsellBlurb} mb-3`}>Pair with your cake for a complete, gift-ready surprise.</p>
+                            <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
+                              <div className="flex gap-3 sm:gap-4 pb-2">
+                                {suggestedSections.gift.map((product) => {
+                                  const productPrice = product.discounted_price || product.base_price || 0;
+                                  const originalPrice = product.base_price;
+                                  const hasDiscount = product.discounted_price && product.discounted_price < originalPrice;
+                                  const productWeight = product.base_weight || product.variants?.[0]?.weight || null;
+                                  const giftThumbSrc = resolveEntityImageUrl(product);
+                                  return (
+                                    <div key={product.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] lg:w-[160px] bg-white dark:bg-gray-800 rounded-xl border border-emerald-200/70 dark:border-emerald-600/40 overflow-hidden shadow-md hover:shadow-lg hover:border-emerald-300 dark:hover:border-emerald-500/60 transition-all duration-200 group">
+                                      {hasDiscount && (
+                                        <div className={`absolute right-0 top-0 z-10 rounded-bl-md bg-rose-500 px-1.5 py-0.5 text-white ${cartType.cornerPromoBadge}`}>
+                                          {Math.round(((originalPrice - product.discounted_price) / originalPrice) * 100)}% OFF
+                                        </div>
+                                      )}
+                                      <div className="relative h-[110px] w-full cursor-pointer overflow-hidden rounded-t-xl bg-emerald-50/70 dark:bg-emerald-900/20 sm:h-[120px]" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
+                                        {giftThumbSrc ? (
+                                          <Image
+                                            src={giftThumbSrc}
+                                            alt={product.name}
+                                            fill
+                                            className="object-cover transition-transform duration-200 group-hover:scale-105"
+                                            sizes="160px"
+                                          />
+                                        ) : null}
+                                      </div>
+                                      <div className="p-2 space-y-1">
+                                        <h4 className={`${cartType.upsellCardTitle} cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400`} onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
+                                        {productWeight && (
+                                          <div className="flex items-center gap-1">
+                                            <Package className="w-3 h-3 text-emerald-500 dark:text-emerald-400" />
+                                            <span className={cartType.meta}>{productWeight}</span>
+                                          </div>
+                                        )}
+                                        <div className="flex items-baseline gap-1.5 flex-wrap">
+                                          <span className="text-xs font-bold text-pink-600 dark:text-pink-400">{formatPrice(productPrice)}</span>
+                                          {hasDiscount && <span className={`${cartType.meta} line-through text-gray-400`}>{formatPrice(originalPrice)}</span>}
+                                        </div>
+                                        <button onClick={() => addToCart({ product, quantity: 1, variant: null, flavor: null, tier: null, combos: [], deliverySlot: null, cakeMessage: '' })} className={`w-full rounded-lg border-2 border-emerald-500 py-1.5 font-semibold text-emerald-700 transition-colors hover:border-emerald-600 hover:bg-emerald-100 active:scale-[0.98] dark:border-emerald-500 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-800/30 ${cartType.metaStrong}`}>
+                                          + Add
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Section 3: Small Treats for Guests */}
+                        {suggestedSections.smallTreats.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="p-1 rounded-md bg-rose-100 dark:bg-rose-800/40">
+                                <Package className="w-4 h-4 text-rose-600 dark:text-rose-400 flex-shrink-0" />
+                              </div>
+                              <h4 className={cartType.upsellSectionTitle}>Small treats for guests</h4>
+                            </div>
+                            <p className="text-xs text-rose-800/80 dark:text-rose-200/80 mb-0.5">Brownies, pastries, mini desserts</p>
+                            <p className={`${cartType.upsellBlurb} mb-3`}>Light bites everyone will love—easy to add.</p>
+                            <div className="overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
+                              <div className="flex gap-3 sm:gap-4 pb-2">
+                                {suggestedSections.smallTreats.map((product) => {
+                                  const productPrice = product.discounted_price || product.base_price || 0;
+                                  const originalPrice = product.base_price;
+                                  const hasDiscount = product.discounted_price && product.discounted_price < originalPrice;
+                                  const productWeight = product.base_weight || product.variants?.[0]?.weight || null;
+                                  const treatThumbSrc = resolveEntityImageUrl(product);
+                                  return (
+                                    <div key={product.id} className="relative flex-shrink-0 w-[130px] sm:w-[148px] lg:w-[160px] bg-white dark:bg-gray-800 rounded-xl border border-rose-200/70 dark:border-rose-600/40 overflow-hidden shadow-md hover:shadow-lg hover:border-rose-300 dark:hover:border-rose-500/60 transition-all duration-200 group">
+                                      {hasDiscount && (
+                                        <div className={`absolute right-0 top-0 z-10 rounded-bl-md bg-rose-500 px-1.5 py-0.5 text-white ${cartType.cornerPromoBadge}`}>
+                                          {Math.round(((originalPrice - product.discounted_price) / originalPrice) * 100)}% OFF
+                                        </div>
+                                      )}
+                                      <div className="relative h-[110px] w-full cursor-pointer overflow-hidden rounded-t-xl bg-rose-50/70 dark:bg-rose-900/20 sm:h-[120px]" onClick={() => router.push(`/product/${product.slug || product.id}`)}>
+                                        {treatThumbSrc ? (
+                                          <Image
+                                            src={treatThumbSrc}
+                                            alt={product.name}
+                                            fill
+                                            className="object-cover transition-transform duration-200 group-hover:scale-105"
+                                            sizes="160px"
+                                          />
+                                        ) : null}
+                                      </div>
+                                      <div className="p-2 space-y-1">
+                                        <h4 className={`${cartType.upsellCardTitle} cursor-pointer hover:text-rose-600 dark:hover:text-rose-400`} onClick={() => router.push(`/product/${product.slug || product.id}`)}>{product.name}</h4>
+                                        {productWeight && (
+                                          <div className="flex items-center gap-1">
+                                            <Package className="w-3 h-3 text-rose-500 dark:text-rose-400" />
+                                            <span className={cartType.meta}>{productWeight}</span>
+                                          </div>
+                                        )}
+                                        <div className="flex items-baseline gap-1.5 flex-wrap">
+                                          <span className="text-xs font-bold text-pink-600 dark:text-pink-400">{formatPrice(productPrice)}</span>
+                                          {hasDiscount && <span className={`${cartType.meta} line-through text-gray-400`}>{formatPrice(originalPrice)}</span>}
+                                        </div>
+                                        <button onClick={() => addToCart({ product, quantity: 1, variant: null, flavor: null, tier: null, combos: [], deliverySlot: null, cakeMessage: '' })} className={`w-full rounded-lg border-2 border-rose-500 py-1.5 font-semibold text-rose-700 transition-colors hover:border-rose-600 hover:bg-rose-100 active:scale-[0.98] dark:border-rose-500 dark:bg-rose-900/20 dark:text-rose-300 dark:hover:bg-rose-800/30 ${cartType.metaStrong}`}>
+                                          + Add Extra
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
                       </div>
                     )}
                   </>
@@ -2832,41 +3453,80 @@ export default function CartPage() {
         )}
       </div>
 
-      {/* Mobile Sticky Checkout Bar */}
+      {/* Mobile Sticky Delivery Slot Summary */}
+      {mounted && isInitialized && cartItems.length > 0 && (() => {
+        // Get common delivery slot from cart items (non-deal items only)
+        const regularItems = cartItems.filter(item => !item.is_deal_item && item.deliverySlot);
+        const commonSlot = regularItems.length > 0 ? regularItems[0].deliverySlot : null;
+        
+        // Check if all regular items have the same slot
+        const allSameSlot = regularItems.length > 0 && regularItems.every(item => {
+          const slot1 = commonSlot;
+          const slot2 = item.deliverySlot;
+          const date1 = slot1?.date || slot1?.deliveryDate;
+          const date2 = slot2?.date || slot2?.deliveryDate;
+          const time1 = slot1?.time || slot1?.slot?.startTime;
+          const time2 = slot2?.time || slot2?.slot?.startTime;
+          return date1 === date2 && time1 === time2;
+        });
+
+        return commonSlot && allSameSlot ? (
+          <div className="fixed bottom-[8.5rem] left-0 right-0 z-39 border-t border-gray-200 bg-gray-50/95 dark:border-gray-600 dark:bg-gray-800/95 lg:hidden">
+            <div className="mx-auto max-w-7xl px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <Clock className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400" />
+                  <span className="truncate text-xs text-gray-700 dark:text-gray-300 sm:text-sm">
+                    <span className="font-semibold text-gray-800 dark:text-gray-200">Delivery:</span>{' '}
+                    {formatDeliveryDate(commonSlot.date || commonSlot.deliveryDate)} • {formatTimeSlot(commonSlot)}
+                  </span>
+                </div>
+                <button
+                  onClick={() => router.push('/checkout')}
+                  className="shrink-0 text-xs font-semibold text-pink-600 underline underline-offset-2 hover:text-pink-700 dark:text-pink-400 dark:hover:text-pink-300"
+                >
+                  Change
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null;
+      })()}
+
+      {/* Mobile Sticky Checkout Bar - compact height; action button matches PDP (52px) */}
       {mounted && isInitialized && cartItems.length > 0 && (
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-2xl dark:shadow-black/50 z-40">
+        <div className="lg:hidden fixed left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg dark:shadow-black/40 z-40 bottom-0">
           <div className="max-w-7xl mx-auto px-2 py-1.5">
             {/* Total Box and Checkout Button Row */}
-            <div className="flex items-center gap-1.5 mb-1">
-              {/* Total Box - 20vw */}
-              <div className="w-[20vw] min-w-[70px] bg-gray-50 dark:bg-gray-700/50 rounded-lg px-1.5 py-1.5 border border-pink-300 dark:border-pink-500/50 h-[56px] flex items-center">
-                <div className="flex flex-col w-full items-center text-center">
-                  <p className="text-sm font-bold text-pink-600 dark:text-pink-400 leading-tight mb-0.5">{formatPrice(total)}</p>
-                  <span className="text-[9px] text-gray-500 dark:text-gray-400 leading-tight">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="flex h-[48px] min-w-[86px] w-[28vw] shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 dark:border-gray-600 dark:bg-gray-800/80">
+                <div className="flex flex-col items-center justify-center text-center leading-tight">
+                  <p className={`text-[13px] font-semibold tabular-nums text-gray-900 dark:text-gray-100`}>
+                    {formatPrice(total)}
+                  </p>
+                  <span className={`${cartType.meta} font-medium text-gray-600 dark:text-gray-300`}>
                     {cartSummary.totalItems} {cartSummary.totalItems === 1 ? 'item' : 'items'}
                   </span>
                 </div>
               </div>
-              
-              {/* Checkout Button - 80vw */}
               <button
                 onClick={handleCheckout}
-                className="flex-1 w-[80vw] h-[56px] bg-gradient-to-r from-pink-600 to-rose-600 dark:from-pink-700 dark:to-rose-700 text-white hover:from-pink-700 hover:to-rose-700 dark:hover:from-pink-600 dark:hover:to-rose-600 transition-all font-bold text-base shadow-lg dark:shadow-xl dark:shadow-black/30 active:scale-95 flex items-center justify-center gap-2"
+                className="ui-focus-visible flex h-[48px] min-h-[48px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-pink-600 to-rose-600 py-1.5 text-[13px] font-bold text-white shadow-lg transition-all hover:from-pink-700 hover:to-rose-700 active:scale-[0.98] dark:from-pink-700 dark:to-rose-700 dark:shadow-xl dark:shadow-black/30 dark:hover:from-pink-600 dark:hover:to-rose-600"
               >
-                <span>PROCEED TO CHECKOUT</span>
-                <ChevronRight className="w-5 h-5" />
+                <span>Proceed to checkout</span>
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
-            
-            {/* Free Delivery Message & Security Badge - Inline */}
-            <div className="flex items-center justify-center gap-1.5">
-            {!isFreeDeliveryEligible && (
-                <p className="text-[9px] text-gray-500 dark:text-gray-400">
-                Add {formatPrice(amountToFreeDelivery)} more for free delivery
-              </p>
-            )}
-              <p className="text-[8px] text-gray-400 dark:text-gray-500">
-                🔒 Secure checkout
+            {/* Helper line — readable minimum size on small screens */}
+            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 px-0.5 pb-0.5 text-center leading-snug">
+              {!isFreeDeliveryEligible && (
+                <p className={`${cartType.meta} text-gray-500 dark:text-gray-400 sm:text-sm`}>
+                  Add {formatPrice(amountToFreeDelivery)} more for free delivery
+                </p>
+              )}
+              <p className={`flex items-center justify-center gap-1 ${cartType.meta} text-gray-400 dark:text-gray-500 sm:text-sm`}>
+                <Lock className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
+                <span>Secure checkout</span>
               </p>
             </div>
           </div>
@@ -2974,6 +3634,11 @@ export default function CartPage() {
         <Footer />
       </div>
 
+      {/* Mobile Footer (Home, Wishlist, Cart, etc.) - show only when cart is empty after mount to avoid hydration mismatch */}
+      <div className="lg:hidden">
+        {mounted && cartItems.length === 0 && <MobileFooter />}
+      </div>
+
       {/* Duplicate Products Validation Modal */}
       {showDuplicateModal && duplicateGroups.length > 0 && (
         <div className="fixed inset-0 bg-black/50 dark:bg-black/70 z-50 flex items-center justify-center p-4">
@@ -3003,24 +3668,30 @@ export default function CartPage() {
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
               {duplicateGroups.map((group, groupIndex) => (
                 <div key={groupIndex} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
-                  <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
-                    <Package className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <h3 className="mb-3 flex items-center gap-2 font-semibold text-gray-900 dark:text-gray-100">
+                    <Package className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                     {group.productName}
                   </h3>
                   <div className="space-y-3">
-                    {group.items.map((item, itemIndex) => (
+                    {group.items.map((item, itemIndex) => {
+                      const dupThumbSrc = resolveEntityImageUrl(item.product);
+                      return (
                       <div key={item.id} className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-600 relative group">
                         <div className="flex items-start gap-3">
-                          <div className="w-12 h-12 rounded-lg overflow-hidden bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30 flex-shrink-0">
-                            <img
-                              src={resolveImageUrl(item.product?.image_url)}
-                              alt={item.product?.name}
-                              className="w-full h-full object-cover"
-                            />
+                          <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30">
+                            {dupThumbSrc ? (
+                              <Image
+                                src={dupThumbSrc}
+                                alt={item.product?.name || 'Product'}
+                                fill
+                                className="object-cover"
+                                sizes="48px"
+                              />
+                            ) : null}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-2">
-                              <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2.5 py-1 rounded-md border border-blue-200 dark:border-blue-700">
+                              <span className="rounded-md border border-gray-200 bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700 dark:border-gray-600 dark:bg-gray-700/80 dark:text-gray-200">
                                 {getDescriptiveLabel(item, groupIndex, itemIndex)}
                               </span>
                             </div>
@@ -3035,7 +3706,7 @@ export default function CartPage() {
                               )}
                               {item.combos && item.combos.length > 0 && (
                                 <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-                                  <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                                  <Sparkles className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
                                   <span>{item.combos.length} add-on{item.combos.length > 1 ? 's' : ''}</span>
                                 </div>
                               )}
@@ -3177,7 +3848,8 @@ export default function CartPage() {
                           <Trash2 className="w-4 h-4 sm:w-4 sm:h-4" />
                         </button>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
                     <p className="text-xs text-gray-600 dark:text-gray-400">
@@ -3221,6 +3893,17 @@ export default function CartPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmModal.open}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmLabel={confirmModal.confirmLabel}
+        cancelLabel={confirmModal.cancelLabel}
+        variant={confirmModal.variant}
+        onConfirm={handleConfirmModalConfirm}
+        onCancel={closeConfirmModal}
+      />
     </div>
   );
 }

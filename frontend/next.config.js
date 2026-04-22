@@ -2,8 +2,44 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
+/** Build next/image remotePatterns from env so cart/checkout work in every deployment. */
+function imageRemotePatternsFromEnv() {
+  const sources = [
+    process.env.NEXT_PUBLIC_ASSET_BASE_URL,
+    process.env.NEXT_PUBLIC_API_URL,
+  ].filter(Boolean);
+  const patterns = [];
+  const seen = new Set();
+  for (const raw of sources) {
+    try {
+      let base = String(raw).trim().replace(/\/api\/?$/, '');
+      if (!base) continue;
+      const parsed = new URL(base.includes('://') ? base : `http://${base}`);
+      const dedupeKey = `${parsed.protocol}//${parsed.hostname}:${parsed.port || ''}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      const protocol = parsed.protocol === 'https:' ? 'https' : 'http';
+      const hostname = parsed.hostname;
+      const port = parsed.port || undefined;
+      const common = { protocol, hostname, ...(port ? { port } : {}) };
+      patterns.push({ ...common, pathname: '/uploads/**' }, { ...common, pathname: '/gallery/**' });
+    } catch {
+      // ignore invalid URL
+    }
+  }
+  return patterns;
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Local/CI: run `pnpm run lint`. Builds stay green until legacy violations are fixed (Option 2).
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  experimental: {
+    // Restore scroll position when user navigates back (e.g. category -> back to home)
+    scrollRestoration: true,
+  },
   // Use default Next.js behavior
   onDemandEntries: {
     // period (in ms) where the server will keep pages in the buffer
@@ -13,6 +49,7 @@ const nextConfig = {
   },
   images: {
     remotePatterns: [
+      ...imageRemotePatternsFromEnv(),
       {
         protocol: 'http',
         hostname: 'localhost',

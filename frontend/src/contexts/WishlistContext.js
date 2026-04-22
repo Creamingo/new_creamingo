@@ -47,6 +47,24 @@ export function WishlistProvider({ children }) {
           const productIds = new Set((response.items || []).map(item => item.product_id));
           setIsInWishlist(productIds);
         }
+
+        // After login: add any product that was pending (user clicked wishlist while logged out)
+        const pendingId = typeof window !== 'undefined' ? sessionStorage.getItem('pending_wishlist_add') : null;
+        if (pendingId) {
+          sessionStorage.removeItem('pending_wishlist_add');
+          try {
+            const addResponse = await wishlistApi.addToWishlist(pendingId);
+            if (addResponse.success) {
+              setIsInWishlist(prev => new Set([...prev, pendingId]));
+              const updatedResponse = await wishlistApi.getWishlist();
+              if (updatedResponse.success) setWishlistItems(updatedResponse.items || []);
+              const toast = getToast();
+              if (toast) setTimeout(() => toast.showSuccess('Added to Wishlist', 'Product has been added to your wishlist.'), 0);
+            }
+          } catch (err) {
+            console.error('Error adding pending wishlist item:', err);
+          }
+        }
       } catch (error) {
         console.error('Error loading wishlist:', error);
         setWishlistItems([]);
@@ -72,12 +90,7 @@ export function WishlistProvider({ children }) {
    */
   const addToWishlist = useCallback(async (productId) => {
     if (!isAuthenticated) {
-      const toast = getToast();
-      if (toast) {
-        setTimeout(() => {
-          toast.showError('Login Required', 'Please login to add items to your wishlist.');
-        }, 0);
-      }
+      // Caller should open auth modal and set sessionStorage 'pending_wishlist_add'; no toast here
       return false;
     }
 

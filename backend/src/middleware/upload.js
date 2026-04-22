@@ -62,6 +62,17 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
+// Document filter (images + PDF) for vendor docs
+const fileFilterDocuments = (req, file, cb) => {
+  const allowedImageTypes = /jpeg|jpg|png|gif|webp/;
+  const allowedDoc = /pdf/;
+  const allowedTypes = new RegExp(`(${allowedImageTypes.source}|${allowedDoc.source})`);
+  const ext = path.extname(file.originalname).toLowerCase().replace(/^\./, '');
+  const mimetypeOk = file.mimetype === 'application/pdf' || /^image\//.test(file.mimetype);
+  if (allowedTypes.test(ext) && mimetypeOk) return cb(null, true);
+  cb(new Error('Only images (JPEG, PNG, GIF, WebP) and PDF are allowed.'));
+};
+
 // Configure multer
 const upload = multer({
   storage: storage,
@@ -72,9 +83,35 @@ const upload = multer({
   fileFilter: fileFilter
 });
 
+const storageDocuments = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const type = 'vendor-docs';
+    const targetDir = getGalleryPath(type);
+    ensureDirExists(targetDir);
+    cb(null, targetDir);
+  },
+  filename: (req, file, cb) => {
+    const extension = path.extname(file.originalname);
+    const prefix = sanitizeSegment('vendor-doc') || 'vendor-doc';
+    const hash = randomHash();
+    cb(null, `${prefix}-${hash}${extension}`);
+  }
+});
+
+const uploadDocuments = multer({
+  storage: storageDocuments,
+  limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE) || 10 * 1024 * 1024 },
+  fileFilter: fileFilterDocuments
+});
+
 // Middleware for single file upload
 const uploadSingle = (fieldName = 'image') => {
   return upload.single(fieldName);
+};
+
+// Middleware for single document upload (vendor app - images + PDF)
+const uploadSingleDocument = (fieldName = 'document') => {
+  return uploadDocuments.single(fieldName);
 };
 
 // Middleware for multiple files upload
@@ -110,7 +147,7 @@ const handleUploadError = (error, req, res, next) => {
     }
   }
   
-  if (error.message.includes('Only image and video files')) {
+  if (error.message && (error.message.includes('Only image and video files') || error.message.includes('Only images'))) {
     return res.status(400).json({
       success: false,
       message: error.message
@@ -124,5 +161,6 @@ module.exports = {
   uploadSingle,
   uploadMultiple,
   uploadFields,
+  uploadSingleDocument,
   handleUploadError
 };

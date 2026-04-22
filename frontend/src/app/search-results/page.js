@@ -9,7 +9,7 @@ import LocationBar from '../../components/LocationBar';
 import ListingProductCard from '../../components/ListingProductCard';
 import productApi from '../../api/productApi';
 import { useWishlist } from '../../contexts/WishlistContext';
-import { resolveImageUrl } from '../../utils/imageUrl';
+import { toListingProductCardShape } from '../../utils/listingProductTransform';
 
 const SearchResultsContent = () => {
   const searchParams = useSearchParams();
@@ -48,20 +48,9 @@ const SearchResultsContent = () => {
 
         // Transform API response to match frontend expected format
         const products = searchResults.data?.products || searchResults.products || [];
-        const transformedProducts = products.map(product => ({
-          id: product.id,
-          name: product.name,
-          slug: product.slug, // Include the slug field
-          image: resolveImageUrl(product.image_url || product.image),
-          originalPrice: product.base_price || product.originalPrice,
-          discountedPrice: product.discounted_price || product.discountedPrice,
-          rating: product.rating || 4.5,
-          reviews: product.reviews || Math.floor(Math.random() * 100) + 10,
-          category: product.category_name || product.category,
-          subcategory: product.subcategory_name || product.subcategory,
-          isTopProduct: product.is_top_product === 1 || product.isTopProduct,
-          discount: product.discount_percent || (product.discounted_price && product.base_price ? Math.round(((product.base_price - product.discounted_price) / product.base_price) * 100) : 0)
-        }));
+        const transformedProducts = products.map((product) =>
+          toListingProductCardShape(product)
+        );
 
         setProducts(transformedProducts);
       } catch (err) {

@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState, useEffect } from 'react';
 import { Button } from './Button';
 
 interface FileUploadProps {
@@ -11,7 +11,11 @@ interface FileUploadProps {
   helperText?: string;
   className?: string;
   disabled?: boolean;
+  /** When editing, show this image above the upload box so preview is visible without scrolling */
+  existingImageUrl?: string;
 }
+
+const isImageAccept = (accept: string) => /image\/\*|image\//i.test(accept);
 
 export const FileUpload: React.FC<FileUploadProps> = ({
   label,
@@ -22,10 +26,33 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   files,
   helperText,
   className = '',
-  disabled = false
+  disabled = false,
+  existingImageUrl
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // Create object URLs for image previews (same order as files); revoke on cleanup or when files change
+  useEffect(() => {
+    if (!isImageAccept(accept) || files.length === 0) {
+      setPreviewUrls((prev) => {
+        prev.forEach((url) => url && URL.revokeObjectURL(url));
+        return [];
+      });
+      return;
+    }
+    const urls = files.map((f) =>
+      f.type.startsWith('image/') ? URL.createObjectURL(f) : ''
+    );
+    setPreviewUrls((prev) => {
+      prev.forEach((url) => url && URL.revokeObjectURL(url));
+      return urls;
+    });
+    return () => {
+      urls.forEach((url) => url && URL.revokeObjectURL(url));
+    };
+  }, [accept, files]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -69,12 +96,64 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  const showImagePreviews = isImageAccept(accept) && (existingImageUrl || files.length > 0);
+
   return (
     <div className={`w-full ${className}`}>
       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
         {label}
       </label>
-      
+
+      {/* Preview above upload box so it's visible without scrolling */}
+      {showImagePreviews && (
+        <div className="mb-4 space-y-3">
+          {existingImageUrl && files.length === 0 && (
+            <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+              <img
+                src={existingImageUrl}
+                alt="Current"
+                className="w-20 h-20 object-cover rounded border border-gray-200 dark:border-gray-600"
+              />
+              <span className="text-sm text-gray-500 dark:text-gray-400 pt-2">Current image</span>
+            </div>
+          )}
+          {files.length > 0 && (
+            <div className="flex flex-wrap gap-3">
+              {files.map((file, index) => (
+                <div
+                  key={index}
+                  className="flex flex-col items-start p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
+                >
+                  {previewUrls[index] ? (
+                    <img
+                      src={previewUrls[index]}
+                      alt={file.name}
+                      className="w-20 h-20 object-cover rounded border border-gray-200 dark:border-gray-600"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 bg-gray-200 dark:bg-gray-600 rounded flex items-center justify-center">
+                      <span className="text-xs text-gray-500">Preview</span>
+                    </div>
+                  )}
+                  <p className="text-xs font-medium text-gray-900 dark:text-white mt-1 truncate max-w-[120px]">{file.name}</p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onFileRemove(file);
+                    }}
+                    className="mt-1 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 text-xs"
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div
         className={`
           relative border-2 border-dashed rounded-lg p-6 text-center transition-colors
@@ -121,7 +200,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         </div>
       </div>
 
-      {files.length > 0 && (
+      {files.length > 0 && !isImageAccept(accept) && (
         <div className="mt-4 space-y-2">
           {files.map((file, index) => (
             <div key={index} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">

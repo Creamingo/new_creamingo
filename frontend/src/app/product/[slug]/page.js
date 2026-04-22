@@ -14,14 +14,18 @@ import ProductCombos from './components/ProductCombos';
 import ProductTabs from './components/ProductTabs';
 import CustomerReviews from './components/CustomerReviews';
 import RelatedProducts from './components/RelatedProducts';
-import StickyCartBar from './components/StickyCartBar';
 import LoadingSpinner from '../../../components/ui/LoadingSpinner';
 import ErrorMessage from '../../../components/ui/ErrorMessage';
 import ProductSkeleton from './components/ProductSkeleton';
 import ScrollToTop from './components/ScrollToTop';
+import ShareBottomSheet from './components/ShareBottomSheet';
 import { generateDynamicTitle } from '../../../utils/dynamicTitle';
 import { useCart } from '../../../contexts/CartContext';
 import { useWishlist } from '../../../contexts/WishlistContext';
+import { useCustomerAuth } from '../../../contexts/CustomerAuthContext';
+import { useAuthModal } from '../../../contexts/AuthModalContext';
+import { useToast } from '../../../contexts/ToastContext';
+import { shareProduct } from '../../../utils/shareProduct';
 
 export default function ProductPage() {
   const params = useParams();
@@ -30,6 +34,9 @@ export default function ProductPage() {
   const { slug } = params;
   const { addToCart, getItemCount } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
+  const { isAuthenticated } = useCustomerAuth();
+  const { openAuthModal } = useAuthModal();
+  const { showSuccess, showError } = useToast();
   
   const [product, setProduct] = useState(null);
   const [relatedProducts, setRelatedProducts] = useState([]);
@@ -42,6 +49,8 @@ export default function ProductPage() {
   const [subcategoryContext, setSubcategoryContext] = useState(null);
   const [displayTitle, setDisplayTitle] = useState(null);
   const [selectedTier, setSelectedTier] = useState(null);
+  const [mobileShareOpen, setMobileShareOpen] = useState(false);
+  const [pdpReviewOverlayOpen, setPdpReviewOverlayOpen] = useState(false);
 
   // Add data attribute to body for product page specific styles
   // Must be called before any conditional returns to follow Rules of Hooks
@@ -178,9 +187,26 @@ export default function ProductPage() {
     });
   };
 
-  const handleShare = (platform) => {
-    // TODO: Implement sharing functionality
-    console.log('Share on:', platform, product);
+  const handleShare = async (platform) => {
+    if (!product) return;
+    try {
+      const result = await shareProduct(product, platform);
+      if (result.cancelled) return;
+      if (!result.ok) {
+        showError('Could not share', 'Copy the link from the address bar or try again.');
+        return;
+      }
+      if (result.method === 'clipboard') {
+        showSuccess('Link copied', 'Product link copied to clipboard');
+      } else if (result.method === 'clipboard-instagram') {
+        showSuccess('Link copied', 'Paste it in Instagram to share');
+      }
+      // method === 'share': native sheet is enough feedback
+      // whatsapp: new tab opened — optional feedback skipped to avoid noise
+    } catch (err) {
+      console.error('Share error:', err);
+      showError('Share failed', err?.message || 'Please try again');
+    }
   };
 
   if (loading) {
@@ -298,8 +324,16 @@ export default function ProductPage() {
               product={product}
               selectedVariant={selectedVariant}
               isFavorite={product ? isInWishlist(product.id) : false}
-              onFavoriteToggle={() => product && toggleWishlist(product.id)}
-              onQuickShare={() => handleShare('copy')}
+              onFavoriteToggle={() => {
+                if (!product) return;
+                if (!isAuthenticated) {
+                  if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('pending_wishlist_add', String(product.id));
+                  openAuthModal();
+                  return;
+                }
+                toggleWishlist(product.id);
+              }}
+              onQuickShare={() => setMobileShareOpen(true)}
             />
           </div>
 
@@ -322,6 +356,7 @@ export default function ProductPage() {
                 displayTitle={displayTitle}
                 selectedTier={selectedTier}
                 onTierChange={setSelectedTier}
+                hideMobileStickyCTA={pdpReviewOverlayOpen}
               />
 
 
@@ -341,7 +376,10 @@ export default function ProductPage() {
 
         {/* Customer Reviews Section */}
         <div className="mt-10 sm:mt-12">
-          <CustomerReviews productId={product.id} />
+          <CustomerReviews
+            productId={product.id}
+            onPdpReviewOverlayChange={setPdpReviewOverlayOpen}
+          />
         </div>
 
         {/* Related Products */}
@@ -363,6 +401,11 @@ export default function ProductPage() {
       {/* Scroll to Top Button */}
       <ScrollToTop />
 
+      <ShareBottomSheet
+        open={mobileShareOpen}
+        onClose={() => setMobileShareOpen(false)}
+        product={product}
+      />
     </div>
   );
 }

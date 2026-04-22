@@ -733,6 +733,7 @@ id INT PRIMARY KEY AUTO_INCREMENT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     deal_title VARCHAR(200) NOT NULL,
     product_id INT NOT NULL,
+    variant_id INT NULL,
     threshold_amount DECIMAL(10,2) NOT NULL,
     deal_price DECIMAL(10,2) DEFAULT 1.00,
     max_quantity_per_order INT DEFAULT 1,
@@ -742,6 +743,7 @@ id INT PRIMARY KEY AUTO_INCREMENT
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    FOREIGN KEY (variant_id) REFERENCES product_variants(id) ON DELETE SET NULL,
     UNIQUE(product_id, threshold_amount
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 )
